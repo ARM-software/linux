@@ -4487,12 +4487,16 @@ static int __init hmp_cpu_mask_setup(void)
  * tweaking suit particular needs.
  *
  * hmp_up_prio: Only up migrate task with high priority (<hmp_up_prio)
+ * hmp_next_up_threshold: Delay before next up migration (1024 ~= 1 ms)
+ * hmp_next_down_threshold: Delay before next down migration (1024 ~= 1 ms)
  */
 unsigned int hmp_up_threshold = 512;
 unsigned int hmp_down_threshold = 256;
 #ifdef CONFIG_SCHED_HMP_PRIO_FILTER
 unsigned int hmp_up_prio = NICE_TO_PRIO(CONFIG_SCHED_HMP_PRIO_FILTER_VAL);
 #endif
+unsigned int hmp_next_up_threshold = 4096;
+unsigned int hmp_next_down_threshold = 4096;
 
 static unsigned int hmp_up_migration(int cpu, struct sched_entity *se);
 static unsigned int hmp_down_migration(int cpu, struct sched_entity *se);
@@ -4554,6 +4558,23 @@ static inline unsigned int hmp_select_slower_cpu(struct task_struct *tsk,
 	return cpumask_any_and(&hmp_slower_domain(cpu)->cpus,
 				tsk_cpus_allowed(tsk));
 }
+
+static inline void hmp_next_up_delay(struct sched_entity *se, int cpu)
+{
+	struct cfs_rq *cfs_rq = &cpu_rq(cpu)->cfs;
+
+	se->avg.hmp_last_up_migration = cfs_rq_clock_task(cfs_rq);
+	se->avg.hmp_last_down_migration = 0;
+}
+
+static inline void hmp_next_down_delay(struct sched_entity *se, int cpu)
+{
+	struct cfs_rq *cfs_rq = &cpu_rq(cpu)->cfs;
+
+	se->avg.hmp_last_down_migration = cfs_rq_clock_task(cfs_rq);
+	se->avg.hmp_last_up_migration = 0;
+}
+
 #endif /* CONFIG_SCHED_HMP */
 
 /*
@@ -4653,11 +4674,13 @@ unlock:
 #ifdef CONFIG_SCHED_HMP
 	if (hmp_up_migration(prev_cpu, &p->se)) {
 		new_cpu = hmp_select_faster_cpu(p, prev_cpu);
+		hmp_next_up_delay(&p->se, new_cpu);
 		trace_sched_hmp_migrate(p, new_cpu, 0);
 		return new_cpu;
 	}
 	if (hmp_down_migration(prev_cpu, &p->se)) {
 		new_cpu = hmp_select_slower_cpu(p, prev_cpu);
+		hmp_next_down_delay(&p->se, new_cpu);
 		trace_sched_hmp_migrate(p, new_cpu, 0);
 		return new_cpu;
 	}
@@ -7353,6 +7376,8 @@ static void nohz_idle_balance(struct rq *this_rq, enum cpu_idle_type idle) { }
 static unsigned int hmp_up_migration(int cpu, struct sched_entity *se)
 {
 	struct task_struct *p = task_of(se);
+	struct cfs_rq *cfs_rq = &cpu_rq(cpu)->cfs;
+	u64 now;
 
 	if (hmp_cpu_is_fastest(cpu))
 		return 0;
@@ -7362,6 +7387,12 @@ static unsigned int hmp_up_migration(int cpu, struct sched_entity *se)
 	if (p->prio >= hmp_up_prio)
 		return 0;
 #endif
+
+	/* Let the task load settle before doing another up migration */
+	now = cfs_rq_clock_task(cfs_rq);
+	if (((now - se->avg.hmp_last_up_migration) >> 10)
+					< hmp_next_up_threshold)
+		return 0;
 
 	if (cpumask_intersects(&hmp_faster_domain(cpu)->cpus,
 					tsk_cpus_allowed(p))
@@ -7375,6 +7406,8 @@ static unsigned int hmp_up_migration(int cpu, struct sched_entity *se)
 static unsigned int hmp_down_migration(int cpu, struct sched_entity *se)
 {
 	struct task_struct *p = task_of(se);
+	struct cfs_rq *cfs_rq = &cpu_rq(cpu)->cfs;
+	u64 now;
 
 	if (hmp_cpu_is_slowest(cpu))
 		return 0;
@@ -7384,6 +7417,12 @@ static unsigned int hmp_down_migration(int cpu, struct sched_entity *se)
 	if (p->prio >= hmp_up_prio)
 		return 1;
 #endif
+
+	/* Let the task load settle before doing another down migration */
+	now = cfs_rq_clock_task(cfs_rq);
+	if (((now - se->avg.hmp_last_down_migration) >> 10)
+					< hmp_next_down_threshold)
+		return 0;
 
 	if (cpumask_intersects(&hmp_slower_domain(cpu)->cpus,
 					tsk_cpus_allowed(p))
@@ -7575,6 +7614,7 @@ static void hmp_force_up_migration(int this_cpu)
 				target->migrate_task = p;
 				force = 1;
 				trace_sched_hmp_migrate(p, target->push_cpu, 1);
+				hmp_next_up_delay(&p->se, target->push_cpu);
 			}
 		}
 		raw_spin_unlock_irqrestore(&target->lock, flags);
