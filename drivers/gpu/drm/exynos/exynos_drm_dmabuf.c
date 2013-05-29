@@ -165,7 +165,31 @@ static void exynos_gem_dmabuf_kunmap(struct dma_buf *dma_buf,
 static int exynos_gem_dmabuf_mmap(struct dma_buf *dma_buf,
 	struct vm_area_struct *vma)
 {
-	return -ENOTTY;
+	struct exynos_drm_gem_obj *exynos_gem_obj = dma_buf->priv;
+	struct exynos_drm_gem_buf *buffer = exynos_gem_obj->buffer;
+	unsigned long uaddr = vma->vm_start;
+	int ret;
+
+	if (exynos_gem_obj->flags & EXYNOS_BO_NONCONTIG) {
+		unsigned long i = 0;
+		struct scatterlist *sgl;
+
+		if (!buffer->sgt)
+			return -EINVAL;
+		sgl = buffer->sgt->sgl;
+
+		while (i < buffer->sgt->nents) {
+			ret = vm_insert_page(vma, uaddr, sg_page(sgl));
+			if (ret) {
+				DRM_ERROR("failed to remap user space.\n");
+				return ret;
+			}
+			sgl = sg_next(sgl);
+			uaddr += PAGE_SIZE;
+			i++;
+		}
+	}
+	return 0;
 }
 
 static struct dma_buf_ops exynos_dmabuf_ops = {
