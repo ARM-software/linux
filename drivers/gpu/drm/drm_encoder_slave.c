@@ -25,6 +25,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/i2c.h>
 
 #include <drm/drm_encoder_slave.h>
 
@@ -61,7 +62,10 @@ int drm_i2c_encoder_init(struct drm_device *dev,
 
 	request_module("%s%s", I2C_MODULE_PREFIX, info->type);
 
-	client = i2c_new_device(adap, info);
+	if (info->of_node)
+		client = of_find_i2c_device_by_node(info->of_node);
+	else
+		client = i2c_new_device(adap, info);
 	if (!client) {
 		err = -ENOMEM;
 		goto fail;
