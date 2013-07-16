@@ -138,7 +138,7 @@ static struct drm_driver driver = {
 	.gem_free_object = cirrus_gem_free_object,
 	.dumb_create = cirrus_dumb_create,
 	.dumb_map_offset = cirrus_dumb_mmap_offset,
-	.dumb_destroy = cirrus_dumb_destroy,
+	.dumb_destroy = drm_gem_dumb_destroy,
 };
 
 static const struct dev_pm_ops cirrus_pm_ops = {
