@@ -1329,9 +1329,14 @@ static int i915_load_modeset_init(struct drm_device *dev)
 
 	/* Always safe in the mode setting case. */
 	/* FIXME: do pre/post-mode set stuff in core KMS code */
+<<<<<<< HEAD
 	dev->vblank_disable_allowed = 1;
 	if (INTEL_INFO(dev)->num_pipes == 0) {
 		dev_priv->mm.suspended = 0;
+=======
+	dev->vblank_disable_allowed = true;
+	if (INTEL_INFO(dev)->num_pipes == 0)
+>>>>>>> ba0bf12... drm: Make vblank_disable_allowed bool
 		return 0;
 	}
 
