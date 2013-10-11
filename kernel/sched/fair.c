@@ -2556,6 +2556,7 @@ static inline void update_rq_runnable_avg(struct rq *rq, int runnable)
 	__update_tg_runnable_avg(&rq->avg, &rq->cfs);
 	trace_sched_rq_runnable_ratio(cpu_of(rq), rq->avg.load_avg_ratio);
 	trace_sched_rq_runnable_load(cpu_of(rq), rq->cfs.runnable_load_avg);
+	trace_sched_rq_nr_running(cpu_of(rq), rq->nr_running, rq->nr_iowait.counter);
 }
 #else /* CONFIG_FAIR_GROUP_SCHED */
 static inline void __update_cfs_rq_tg_load_contrib(struct cfs_rq *cfs_rq,
@@ -5109,25 +5110,37 @@ static inline unsigned int hmp_offload_down(int cpu, struct sched_entity *se)
 
 	/* Is there an idle CPU in the current domain */
 	min_usage = hmp_domain_min_load(hmp_cpu_domain(cpu), NULL);
-	if (min_usage == 0)
+	if (min_usage == 0) {
+		trace_sched_hmp_offload_abort(cpu, min_usage, "load");
 		return NR_CPUS;
+	}
 
 	/* Is the task alone on the cpu? */
-	if (cpu_rq(cpu)->cfs.h_nr_running < 2)
+	if (cpu_rq(cpu)->cfs.h_nr_running < 2) {
+		trace_sched_hmp_offload_abort(cpu,
+			cpu_rq(cpu)->cfs.h_nr_running, "nr_running");
 		return NR_CPUS;
+	}
 
 	/* Is the task actually starving? */
 	/* >=25% ratio running/runnable = starving */
-	if (hmp_task_starvation(se) > 768)
+	if (hmp_task_starvation(se) > 768) {
+		trace_sched_hmp_offload_abort(cpu, hmp_task_starvation(se),
+			"starvation");
 		return NR_CPUS;
+	}
 
 	/* Does the slower domain have any idle CPUs? */
 	min_usage = hmp_domain_min_load(hmp_slower_domain(cpu), &dest_cpu);
-	if (min_usage > 0)
+	if (min_usage > 0) {
+		trace_sched_hmp_offload_abort(cpu, min_usage, "slowdomain");
 		return NR_CPUS;
+	}
 
-	if (cpumask_test_cpu(dest_cpu, &hmp_slower_domain(cpu)->cpus))
+	if (cpumask_test_cpu(dest_cpu, &hmp_slower_domain(cpu)->cpus)) {
+		trace_sched_hmp_offload_succeed(cpu, dest_cpu);
 		return dest_cpu;
+	}
 
 	return NR_CPUS;
 }
@@ -5260,13 +5273,13 @@ unlock:
 #ifdef CONFIG_SCHED_HMP
 	if (hmp_up_migration(prev_cpu, &new_cpu, &p->se)) {
 		hmp_next_up_delay(&p->se, new_cpu);
-		trace_sched_hmp_migrate(p, new_cpu, 0);
+		trace_sched_hmp_migrate(p, new_cpu, HMP_MIGRATE_WAKEUP);
 		return new_cpu;
 	}
 	if (hmp_down_migration(prev_cpu, &p->se)) {
 		new_cpu = hmp_select_slower_cpu(p, prev_cpu);
 		hmp_next_down_delay(&p->se, new_cpu);
-		trace_sched_hmp_migrate(p, new_cpu, 0);
+		trace_sched_hmp_migrate(p, new_cpu, HMP_MIGRATE_WAKEUP);
 		return new_cpu;
 	}
 	/* Make sure that the task stays in its previous hmp domain */
@@ -8321,7 +8334,7 @@ static void hmp_force_up_migration(int this_cpu)
 				target->push_cpu = target_cpu;
 				target->migrate_task = p;
 				force = 1;
-				trace_sched_hmp_migrate(p, target->push_cpu, 1);
+				trace_sched_hmp_migrate(p, target->push_cpu, HMP_MIGRATE_FORCE);
 				hmp_next_up_delay(&p->se, target->push_cpu);
 			}
 		}
@@ -8337,7 +8350,7 @@ static void hmp_force_up_migration(int this_cpu)
 				target->active_balance = 1;
 				target->migrate_task = p;
 				force = 1;
-				trace_sched_hmp_migrate(p, target->push_cpu, 2);
+				trace_sched_hmp_migrate(p, target->push_cpu, HMP_MIGRATE_OFFLOAD);
 				hmp_next_down_delay(&p->se, target->push_cpu);
 			}
 		}
@@ -8417,7 +8430,7 @@ static unsigned int hmp_idle_pull(int this_cpu)
 		target->push_cpu = this_cpu;
 		target->migrate_task = p;
 		force = 1;
-		trace_sched_hmp_migrate(p, target->push_cpu, 3);
+		trace_sched_hmp_migrate(p, target->push_cpu, HMP_MIGRATE_IDLE_PULL);
 		hmp_next_up_delay(&p->se, target->push_cpu);
 	}
 	raw_spin_unlock_irqrestore(&target->lock, flags);
