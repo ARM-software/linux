@@ -25,6 +25,7 @@
 #include "exynos_drm_iommu.h"
 #define IOCTL_GET_FB_DMA_BUF _IOWR('m',0xF9, __u32 )
 #include <linux/dma-buf.h>
+#define NUM_BUFFERS 3
 
 #define MAX_CONNECTOR		4
 #define PREFERRED_BPP		32
@@ -128,11 +129,11 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	struct fb_info *fbi = helper->fbdev;
 	struct drm_device *dev = helper->dev;
 	struct exynos_drm_gem_buf *buffer;
-	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3);
+	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3) * NUM_BUFFERS;
 	unsigned long offset;
 
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->depth);
-	drm_fb_helper_fill_var(fbi, helper, fb->width, fb->height); 
+	drm_fb_helper_fill_var(fbi, helper, fb->width, fb->height / NUM_BUFFERS);
 
 	/* RGB formats use only one buffer */
 	buffer = exynos_drm_fb_buffer(fb, 0);
@@ -192,7 +193,7 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 			sizes->surface_bpp);
 
 	mode_cmd.width = sizes->surface_width;
-	mode_cmd.height = sizes->surface_height;
+	mode_cmd.height = sizes->surface_height * NUM_BUFFERS;
 	mode_cmd.pitches[0] = sizes->surface_width * (sizes->surface_bpp >> 3);
 	mode_cmd.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
 							  sizes->surface_depth);
