@@ -2195,6 +2195,7 @@ static u32 __compute_runnable_contrib(u64 n)
 	return contrib + runnable_avg_yN_sum[n];
 }
 
+#ifdef CONFIG_SCHED_HMP
 #define HMP_VARIABLE_SCALE_SHIFT 16ULL
 struct hmp_global_attr {
 	struct attribute attr;
@@ -2276,6 +2277,7 @@ struct cpufreq_extents {
 
 static struct cpufreq_extents freq_scale[CONFIG_NR_CPUS];
 #endif /* CONFIG_HMP_FREQUENCY_INVARIANT_SCALE */
+#endif /* CONFIG_SCHED_HMP */
 
 /* We can represent the historical contribution to runnable average as the
  * coefficients of a geometric series.  To do this we sub-divide our runnable
@@ -2321,8 +2323,9 @@ static __always_inline int __update_entity_runnable_avg(u64 now,
 #endif /* CONFIG_HMP_FREQUENCY_INVARIANT_SCALE */
 
 	delta = now - sa->last_runnable_update;
-
+#ifdef CONFIG_SCHED_HMP
 	delta = hmp_variable_scale_convert(delta);
+#endif
 	/*
 	 * This should only happen when time goes backwards, which it
 	 * unfortunately does during sched clock init when we swap over to TSC.
