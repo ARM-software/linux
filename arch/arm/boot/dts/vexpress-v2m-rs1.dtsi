@@ -201,7 +201,7 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 
-				dvi-transmitter@39 {
+				dvi_i2c_slave: dvi-transmitter@39 {
 					compatible = "sil,sii9022-tpi", "sil,sii9022";
 					reg = <0x39>;
 				};
