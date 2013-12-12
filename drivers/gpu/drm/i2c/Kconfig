@@ -11,6 +11,13 @@ config DRM_I2C_CH7006
 	  This driver is currently only useful if you're also using
 	  the nouveau driver.
 
+config DRM_I2C_SII9022
+	tristate "Silicon Image SiI9022 HDMI transmitter"
+	default m if DRM_HDLCD
+	help
+	  Support for SiI9022 HDMI transmitter, used on the
+	  ARM Versatile Express motherboards.
+
 config DRM_I2C_SIL164
 	tristate "Silicon Image sil164 TMDS transmitter"
 	default m if DRM_NOUVEAU
