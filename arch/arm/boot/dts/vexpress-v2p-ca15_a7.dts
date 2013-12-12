@@ -86,6 +86,7 @@
 		compatible = "arm,hdlcd";
 		reg = <0 0x2b000000 0 0x1000>;
 		interrupts = <0 85 4>;
+		i2c-slave = <&dvi_i2c_slave>;
 		clocks = <&oscclk5>;
 		clock-names = "pxlclk";
 	};
