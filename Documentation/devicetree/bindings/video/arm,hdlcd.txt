@@ -1,0 +1,115 @@
+ARM HDLCD
+
+This is a driver for a display controller found on several development
+platforms produced by ARM Ltd and in more modern of its' Fast Models.
+The HDLCD is an RGB streamer that reads the data from a framebuffer
+and sends it to a single digital encoder (DVI or HDMI).
+
+Required properties:
+  - compatible: "arm,hdlcd"
+  - reg: Physical base address and length of the controller's registers.
+    If a second pair of address and length values is present this specifies
+    the presence of a DMA coherent memory area that the HDLCD can use as
+    framebuffer instead of normal CMA memory.
+  - interrupts: One interrupt used by the display controller to notify the
+    interrupt controller when any of the interrupt sources programmed in
+    the interrupt mask register have activated.
+  - clocks: A list of phandle + clock-specifier pairs, one for each
+    entry in 'clock-names'.
+  - clock-names: A list of clock names. For HDLD it should contain:
+      - "pxlclk" for the clock feeding the output PLL of the controller.
+
+Optional nodes:
+  - port: The HDLCD connection to an encoder chip. The connection is modeled
+    using the OF graph bindings specified in Documentation/devicetree/bindings/graph.txt.
+    If no port node is specified then the driver will assume that it is
+    running an emulated device.
+  - display-timings: If the HDLCD is emulated by the Fast Model, place the
+    videomode(s) of the desired resolution(s) here. If multiple videomodes
+    are being used, a 'native-mode' property should be used to indicate the
+    preferred/default resolution. Refer to
+    Documentation/devicetree/bindings/video/display-timing.txt for details.
+
+
+Example:
+
+/ {
+	...
+
+	/* Emulated device */
+	hdlcd@7ff60000 {
+		compatible = "arm,hdlcd";
+		reg = <0 0x7ff60000 0 0x1000>;
+		interrupts = <GIC_SPI 35 IRQ_TYPE_LEVEL_HIGH>;
+
+		display-timings {
+			native-mode = <&timing0>;
+			timing0: timing@0 {
+				/* 1024 x 768 framebufer, standard VGA timings */
+				clock-frequency = <65000>;
+				hactive = <1024>;
+				vactive = <768>;
+				hfront-porch = <24>;
+				hback-porch = <160>;
+				hsync-len = <136>;
+				vfront-porch = <3>;
+				vback-porch = <29>;
+				vsync-len = <6>;
+			};
+		};
+	};
+
+	/* Physical device */
+	hdlcd@2b000000 {
+		compatible = "arm,hdlcd";
+		reg = <0 0x2b000000 0 0x1000>;
+		interrupts = <GIC_SPI 85 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&oscclk5>;
+		clock-names = "pxlclk";
+		port {
+			hdlcd_output: endpoint@0 {
+				remote-endpoint = <&tda998x_1_input>;
+			};
+		};
+	};
+
+	/* HDMI I2C bus */
+	i2c@7ffa0000 {
+		compatible = "snps,designware-i2c";
+		reg = <0x0 0x7ffa0000 0x0 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		interrupts = <GIC_SPI 104 IRQ_TYPE_LEVEL_HIGH>;
+		clock-frequency = <400000>;
+		i2c-sda-hold-time-ns = <500>;
+		clocks = <&soc_smc50mhz>;
+
+		hdmi-transmitter@70 {
+			compatible = "nxp,tda998x";
+			reg = <0x70>;
+			video-ports = <0x234501>;
+			port@0 {
+				tda998x_1_input: endpoint {
+					remote-endpoint = <&hdlcd_output>;
+				};
+
+				tda998x_1_output: endpoint {
+					remote-endpoint = <&hdmi_1_port>;
+				};
+			};
+		};
+
+	};
+
+	hdmi1: connector@1 {
+		compatible = "hdmi-connector";
+		type = "a";
+		port {
+			hdmi_1_port: endpoint {
+				remote-endpoint = <&tda998x_1_output>;
+			};
+		};
+	};
+
+	...
+};
