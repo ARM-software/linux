@@ -1664,13 +1664,8 @@ drm_mode_std(struct drm_connector *connector, struct edid *edid,
 	}
 
 	/* check whether it can be found in default mode table */
-	if (drm_monitor_supports_rb(edid)) {
-		mode = drm_mode_find_dmt(dev, hsize, vsize, vrefresh_rate,
-					 true);
-		if (mode)
-			return mode;
-	}
-	mode = drm_mode_find_dmt(dev, hsize, vsize, vrefresh_rate, false);
+	mode = drm_mode_find_dmt(dev, hsize, vsize, vrefresh_rate,
+				drm_monitor_supports_rb(edid));
 	if (mode)
 		return mode;
 
