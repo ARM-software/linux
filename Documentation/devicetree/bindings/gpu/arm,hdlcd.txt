@@ -1,0 +1,64 @@
+ARM HDLCD
+
+This is a driver for a display controller found on several development
+platforms produced by ARM Ltd and in more modern of its' Fast Models.
+The HDLCD is an RGB streamer that reads the data from a framebuffer
+and sends it to a single HDMI transmitter.
+
+Required properties:
+- compatible: "arm,hdlcd"
+- reg: Physical base address and length of the controller's registers.
+- interrupts: One interrupt used by the controller to multiplex all
+  the sources programmed in the interrupt mask register.
+- clocks: A list of phandle + clock-specifier pairs, one for each entry
+  in clock-names.
+- clock-names: A list of clock names. For HDLD it should containt:
+   * "pxlclk" for the clock feeding the output PLL of the controller.
+
+Optional properties:
+- i2c-slave: If the HDLCD is connected to an HDMI transmitter that is
+  reacheable via i2c, then use the phandle of the DDC slave here.
+
+Optional children:
+- display-timings: If the HDLCD is emulated by the Fast Model, place the
+  videomode(s) of the desired resolution(s) here. If multiple videomodes
+  are being used, a 'native-mode' property should be used to indicate the
+  preferred/default resolution. Refer to
+  Documentation/devicetree/bindings/video/display-timing.txt for details.
+
+
+Example:
+
+/ {
+	...
+
+	hdlcd@2b000000 {
+		compatible = "arm,hdlcd";
+		reg = <0 0x2b000000 0 0x1000>;
+		interrupts = <0 85 4>;
+		i2c-slave = <&dvi_i2c_slave>;
+		clocks = <&oscclk5>;
+		clock-names = "pxlclk";
+	};
+
+	/* DVI I2C bus */
+	v2m_i2c_dvi: i2c@160000 {
+		compatible = "arm,versatile-i2c";
+		reg = <0x160000 0x1000>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		dvi_i2c_slave: dvi-transmitter@39 {
+			compatible = "sil,sii9022-tpi", "sil,sii9022";
+			reg = <0x39>;
+		};
+
+		dvi-transmitter@60 {
+			compatible = "sil,sii9022-cpi", "sil,sii9022";
+			reg = <0x60>;
+		};
+	};
+
+	...
+};
