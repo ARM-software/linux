@@ -3186,8 +3186,11 @@ static void __setscheduler(struct rq *rq, struct task_struct *p,
 		p->sched_class = &rt_sched_class;
 #ifdef CONFIG_SCHED_HMP
 		if (!cpumask_empty(&hmp_slow_cpu_mask))
-			if (cpumask_equal(&p->cpus_allowed, cpu_all_mask))
+			if (cpumask_equal(&p->cpus_allowed, cpu_all_mask)) {
+				p->nr_cpus_allowed =
+					cpumask_weight(&hmp_slow_cpu_mask);
 				do_set_cpus_allowed(p, &hmp_slow_cpu_mask);
+			}
 #endif
 	}
 	else
