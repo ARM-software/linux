@@ -919,10 +919,78 @@ static int exynos_dp_check_mode(struct exynos_drm_display *display,
 	return 0;
 }
 
+static void exynos_dp_phy_init(struct exynos_dp_device *dp)
+{
+	if (dp->phy) {
+		phy_power_on(dp->phy);
+	} else if (dp->phy_addr) {
+		u32 reg;
+
+		reg = __raw_readl(dp->phy_addr);
+		reg |= dp->enable_mask;
+		__raw_writel(reg, dp->phy_addr);
+	}
+}
+
+static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
+{
+	if (dp->phy) {
+		phy_power_off(dp->phy);
+	} else if (dp->phy_addr) {
+		u32 reg;
+
+		reg = __raw_readl(dp->phy_addr);
+		reg &= ~(dp->enable_mask);
+		__raw_writel(reg, dp->phy_addr);
+	}
+}
+
+static void exynos_dp_poweron(struct exynos_dp_device *dp)
+{
+	if (dp->dpms_mode == DRM_MODE_DPMS_ON)
+		return;
+
+	clk_prepare_enable(dp->clock);
+	exynos_dp_phy_init(dp);
+	exynos_dp_init_dp(dp);
+	enable_irq(dp->irq);
+}
+
+static void exynos_dp_poweroff(struct exynos_dp_device *dp)
+{
+	if (dp->dpms_mode != DRM_MODE_DPMS_ON)
+		return;
+
+	disable_irq(dp->irq);
+	flush_work(&dp->hotplug_work);
+	exynos_dp_phy_exit(dp);
+	clk_disable_unprepare(dp->clock);
+}
+
+static void exynos_dp_dpms(struct exynos_drm_display *display, int mode)
+{
+	struct exynos_dp_device *dp = display->ctx;
+
+	switch (mode) {
+	case DRM_MODE_DPMS_ON:
+		exynos_dp_poweron(dp);
+		break;
+	case DRM_MODE_DPMS_STANDBY:
+	case DRM_MODE_DPMS_SUSPEND:
+	case DRM_MODE_DPMS_OFF:
+		exynos_dp_poweroff(dp);
+		break;
+	default:
+		break;
+	};
+	dp->dpms_mode = mode;
+}
+
 static struct exynos_drm_display_ops exynos_dp_display_ops = {
 	.is_connected = exynos_dp_display_is_connected,
 	.get_panel = exynos_dp_get_panel,
 	.check_mode = exynos_dp_check_mode,
+	.dpms = exynos_dp_dpms,
 };
 
 static struct exynos_drm_display exynos_dp_display = {
@@ -1126,6 +1194,7 @@ static int exynos_dp_probe(struct platform_device *pdev)
 	}
 
 	dp->dev = &pdev->dev;
+	dp->dpms_mode = DRM_MODE_DPMS_OFF;
 
 	if (pdev->dev.of_node) {
 		pdata = exynos_dp_dt_parse_pdata(&pdev->dev);
@@ -1187,10 +1256,11 @@ static int exynos_dp_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to request irq\n");
 		return ret;
 	}
-
-	platform_set_drvdata(pdev, dp);
+	disable_irq(dp->irq);
 
 	exynos_dp_display.ctx = dp;
+
+	platform_set_drvdata(pdev, &exynos_dp_display);
 	exynos_drm_display_register(&exynos_dp_display);
 
 	return 0;
@@ -1200,9 +1270,6 @@ static int exynos_dp_remove(struct platform_device *pdev)
 {
 	struct exynos_dp_platdata *pdata = pdev->dev.platform_data;
 	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
-
-	exynos_drm_display_unregister(&exynos_dp_display);
-
 	flush_work(&dp->hotplug_work);
 
 	if (pdev->dev.of_node) {
@@ -1214,7 +1281,6 @@ static int exynos_dp_remove(struct platform_device *pdev)
 	}
 
 	clk_disable_unprepare(dp->clock);
-
 
 	return 0;
 }

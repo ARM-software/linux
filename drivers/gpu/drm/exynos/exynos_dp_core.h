@@ -42,6 +42,10 @@ struct exynos_dp_device {
 	struct video_info	*video_info;
 	struct link_train	link_train;
 	struct work_struct	hotplug_work;
+	struct phy		*phy;
+	int			dpms_mode;
+
+	struct exynos_drm_panel_info panel;
 };
 
 /* exynos_dp_reg.c */
