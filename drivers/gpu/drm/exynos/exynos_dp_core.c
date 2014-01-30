@@ -21,7 +21,13 @@
 #include <linux/of.h>
 
 #include <video/exynos_dp.h>
+#include <linux/phy/phy.h>
+#include <video/of_display_timing.h>
+#include <video/of_videomode.h>
 
+#include <drm/drmP.h>
+
+#include "exynos_drm_drv.h"
 #include "exynos_dp_core.h"
 
 static int exynos_dp_init_dp(struct exynos_dp_device *dp)
@@ -897,6 +903,35 @@ static void exynos_dp_hotplug(struct work_struct *work)
 #ifdef CONFIG_OF
 static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
 {
+	return true;
+}
+
+static void *exynos_dp_get_panel(struct exynos_drm_display *display)
+{
+	struct exynos_dp_device *dp = display->ctx;
+
+	return &dp->panel;
+}
+
+static int exynos_dp_check_mode(struct exynos_drm_display *display,
+			struct drm_display_mode *mode)
+{
+	return 0;
+}
+
+static struct exynos_drm_display_ops exynos_dp_display_ops = {
+	.is_connected = exynos_dp_display_is_connected,
+	.get_panel = exynos_dp_get_panel,
+	.check_mode = exynos_dp_check_mode,
+};
+
+static struct exynos_drm_display exynos_dp_display = {
+	.type = EXYNOS_DISPLAY_TYPE_LCD,
+	.ops = &exynos_dp_display_ops,
+};
+
+static struct video_info *exynos_dp_dt_parse_pdata(struct device *dev)
+{
 	struct device_node *dp_node = dev->of_node;
 	struct exynos_dp_platdata *pd;
 	struct video_info *dp_video_config;
@@ -1001,6 +1036,19 @@ err:
 	return ret;
 }
 
+static int exynos_dp_dt_parse_panel(struct exynos_dp_device *dp)
+{
+	int ret;
+
+	ret = of_get_videomode(dp->dev->of_node, &dp->panel.vm,
+			OF_USE_NATIVE_MODE);
+	if (ret) {
+		DRM_ERROR("failed: of_get_videomode() : %d\n", ret);
+		return ret;
+	}
+	return 0;
+}
+
 static void exynos_dp_phy_init(struct exynos_dp_device *dp)
 {
 	u32 reg;
@@ -1040,6 +1088,28 @@ static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
 }
 #endif /* CONFIG_OF */
 
+void exynos_dp_poweron(struct exynos_dp_device *dp)
+{
+	exynos_dp_phy_init(dp);
+
+	clk_prepare_enable(dp->clock);
+
+	exynos_dp_init_dp(dp);
+
+	enable_irq(dp->irq);
+}
+
+void exynos_dp_poweroff(struct exynos_dp_device *dp)
+{
+	disable_irq(dp->irq);
+
+	flush_work(&dp->hotplug_work);
+
+	exynos_dp_phy_exit(dp);
+
+	clk_disable_unprepare(dp->clock);
+}
+
 static int exynos_dp_probe(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -1072,6 +1142,10 @@ static int exynos_dp_probe(struct platform_device *pdev)
 			return -EINVAL;
 		}
 	}
+
+	ret = exynos_dp_dt_parse_panel(dp);
+	if (ret)
+		return ret;
 
 	dp->clock = devm_clk_get(&pdev->dev, "dp");
 	if (IS_ERR(dp->clock)) {
@@ -1116,6 +1190,9 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dp);
 
+	exynos_dp_display.ctx = dp;
+	exynos_drm_display_register(&exynos_dp_display);
+
 	return 0;
 }
 
@@ -1123,6 +1200,8 @@ static int exynos_dp_remove(struct platform_device *pdev)
 {
 	struct exynos_dp_platdata *pdata = pdev->dev.platform_data;
 	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
+
+	exynos_drm_display_unregister(&exynos_dp_display);
 
 	flush_work(&dp->hotplug_work);
 
@@ -1196,7 +1275,7 @@ static const struct of_device_id exynos_dp_match[] = {
 };
 MODULE_DEVICE_TABLE(of, exynos_dp_match);
 
-static struct platform_driver exynos_dp_driver = {
+struct platform_driver dp_driver = {
 	.probe		= exynos_dp_probe,
 	.remove		= exynos_dp_remove,
 	.driver		= {
@@ -1206,8 +1285,6 @@ static struct platform_driver exynos_dp_driver = {
 		.of_match_table = of_match_ptr(exynos_dp_match),
 	},
 };
-
-module_platform_driver(exynos_dp_driver);
 
 MODULE_AUTHOR("Jingoo Han <jg1.han@samsung.com>");
 MODULE_DESCRIPTION("Samsung SoC DP Driver");
