@@ -30,9 +30,9 @@
 struct dma_map_ops *dma_ops;
 EXPORT_SYMBOL(dma_ops);
 
-static void *arm64_swiotlb_alloc_coherent(struct device *dev, size_t size,
-					  dma_addr_t *dma_handle, gfp_t flags,
-					  struct dma_attrs *attrs)
+static void *__dma_alloc_coherent(struct device *dev, size_t size,
+				  dma_addr_t *dma_handle, gfp_t flags,
+				  struct dma_attrs *attrs)
 {
 	if (dev == NULL) {
 		WARN_ONCE(1, "Use an actual device structure for DMA allocation\n");
@@ -58,9 +58,9 @@ static void *arm64_swiotlb_alloc_coherent(struct device *dev, size_t size,
 	}
 }
 
-static void arm64_swiotlb_free_coherent(struct device *dev, size_t size,
-					void *vaddr, dma_addr_t dma_handle,
-					struct dma_attrs *attrs)
+static void __dma_free_coherent(struct device *dev, size_t size,
+				void *vaddr, dma_addr_t dma_handle,
+				struct dma_attrs *attrs)
 {
 	if (dev == NULL) {
 		WARN_ONCE(1, "Use an actual device structure for DMA allocation\n");
@@ -78,9 +78,9 @@ static void arm64_swiotlb_free_coherent(struct device *dev, size_t size,
 	}
 }
 
-static struct dma_map_ops arm64_swiotlb_dma_ops = {
-	.alloc = arm64_swiotlb_alloc_coherent,
-	.free = arm64_swiotlb_free_coherent,
+static struct dma_map_ops coherent_swiotlb_dma_ops = {
+	.alloc = __dma_alloc_coherent,
+	.free = __dma_free_coherent,
 	.map_page = swiotlb_map_page,
 	.unmap_page = swiotlb_unmap_page,
 	.map_sg = swiotlb_map_sg_attrs,
@@ -99,7 +99,7 @@ static int __init swiotlb_late_init(void)
 {
 	size_t swiotlb_size = min(SZ_64M, MAX_ORDER_NR_PAGES << PAGE_SHIFT);
 
-	dma_ops = &arm64_swiotlb_dma_ops;
+	dma_ops = &coherent_swiotlb_dma_ops;
 
 	return swiotlb_late_init_with_default_size(swiotlb_size);
 }
