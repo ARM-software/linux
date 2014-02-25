@@ -1207,11 +1207,8 @@ static inline dma_addr_t __alloc_iova(struct dma_iommu_mapping *mapping,
 	if (order > CONFIG_ARM_DMA_IOMMU_ALIGNMENT)
 		order = CONFIG_ARM_DMA_IOMMU_ALIGNMENT;
 
-	count = ((PAGE_ALIGN(size) >> PAGE_SHIFT) +
-		 (1 << mapping->order) - 1) >> mapping->order;
-
-	if (order > mapping->order)
-		align = (1 << (order - mapping->order)) - 1;
+	count = PAGE_ALIGN(size) >> PAGE_SHIFT;
+	align = (1 << order) - 1;
 
 	spin_lock_irqsave(&mapping->lock, flags);
 	start = bitmap_find_next_zero_area(mapping->bitmap, mapping->bits, 0,
@@ -1224,7 +1221,11 @@ static inline dma_addr_t __alloc_iova(struct dma_iommu_mapping *mapping,
 	bitmap_set(mapping->bitmap, start, count);
 	spin_unlock_irqrestore(&mapping->lock, flags);
 
-	return mapping->base + (start << (mapping->order + PAGE_SHIFT));
+
+	iova = mapping->base + (mapping->size * i);
+	iova += start << PAGE_SHIFT;
+
+	return iova;
 }
 
 static inline void __free_iova(struct dma_iommu_mapping *mapping,
@@ -1235,6 +1236,30 @@ static inline void __free_iova(struct dma_iommu_mapping *mapping,
 	unsigned int count = ((size >> PAGE_SHIFT) +
 			      (1 << mapping->order) - 1) >> mapping->order;
 	unsigned long flags;
+
+	dma_addr_t bitmap_base;
+	u32 bitmap_index;
+
+	if (!size)
+		return;
+
+	bitmap_index = (u32) (addr - mapping->base) / (u32) mapping->size;
+	BUG_ON(addr < mapping->base || bitmap_index > mapping->extensions);
+
+	bitmap_base = mapping->base + mapping->size * bitmap_index;
+
+	start = (addr - bitmap_base) >>	PAGE_SHIFT;
+
+	if (addr + size > bitmap_base + mapping->size) {
+		/*
+		 * The address range to be freed reaches into the iova
+		 * range of the next bitmap. This should not happen as
+		 * we don't allow this in __alloc_iova (at the
+		 * moment).
+		 */
+		BUG();
+	} else
+		count = size >> PAGE_SHIFT;
 
 	spin_lock_irqsave(&mapping->lock, flags);
 	bitmap_clear(mapping->bitmap, start, count);
@@ -1965,8 +1990,7 @@ struct dma_map_ops iommu_coherent_ops = {
  * arm_iommu_create_mapping
  * @bus: pointer to the bus holding the client device (for IOMMU calls)
  * @base: start address of the valid IO address space
- * @size: size of the valid IO address space
- * @order: accuracy of the IO addresses allocations
+ * @size: maximum size of the valid IO address space
  *
  * Creates a mapping structure which holds information about used/unused
  * IO address ranges, which is required to perform memory allocation and
@@ -1976,28 +2000,43 @@ struct dma_map_ops iommu_coherent_ops = {
  * arm_iommu_attach_device function.
  */
 struct dma_iommu_mapping *
-arm_iommu_create_mapping(struct bus_type *bus, dma_addr_t base, size_t size,
-			 int order)
+arm_iommu_create_mapping(struct bus_type *bus, dma_addr_t base, size_t size)
 {
-	unsigned int count = size >> (PAGE_SHIFT + order);
-	unsigned int bitmap_size = BITS_TO_LONGS(count) * sizeof(long);
+
+	unsigned int bits = size >> PAGE_SHIFT;
+	unsigned int bitmap_size = BITS_TO_LONGS(bits) * sizeof(long);
 	struct dma_iommu_mapping *mapping;
+	int extensions = 1;
 	int err = -ENOMEM;
 
-	if (!count)
+	if (!bitmap_size)
 		return ERR_PTR(-EINVAL);
+
+	if (bitmap_size > PAGE_SIZE) {
+		extensions = bitmap_size / PAGE_SIZE;
+		bitmap_size = PAGE_SIZE;
+	}
 
 	mapping = kzalloc(sizeof(struct dma_iommu_mapping), GFP_KERNEL);
 	if (!mapping)
 		goto err;
 
-	mapping->bitmap = kzalloc(bitmap_size, GFP_KERNEL);
-	if (!mapping->bitmap)
+	mapping->bitmap_size = bitmap_size;
+	mapping->bitmaps = kzalloc(extensions * sizeof(unsigned long *),
+				GFP_KERNEL);
+	if (!mapping->bitmaps)
 		goto err2;
 
+	mapping->bitmaps[0] = kzalloc(bitmap_size, GFP_KERNEL);
+	if (!mapping->bitmaps[0])
+		goto err3;
+
+	mapping->nr_bitmaps = 1;
+	mapping->extensions = extensions;
 	mapping->base = base;
+	mapping->size = bitmap_size << PAGE_SHIFT;
 	mapping->bits = BITS_PER_BYTE * bitmap_size;
-	mapping->order = order;
+
 	spin_lock_init(&mapping->lock);
 
 	mapping->domain = iommu_domain_alloc(bus);
