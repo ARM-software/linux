@@ -14,6 +14,7 @@
 #include "exynos_drm_dmabuf.h"
 #include "exynos_drm_drv.h"
 #include "exynos_drm_gem.h"
+#include "exynos_drm_iommu.h"
 
 #include <linux/dma-buf.h>
 
@@ -167,29 +168,13 @@ static int exynos_gem_dmabuf_mmap(struct dma_buf *dma_buf,
 {
 	struct exynos_drm_gem_obj *exynos_gem_obj = dma_buf->priv;
 	struct exynos_drm_gem_buf *buffer = exynos_gem_obj->buffer;
-	unsigned long uaddr = vma->vm_start;
-	int ret;
+	struct drm_gem_object *obj = &exynos_gem_obj->base;
+	struct drm_device *drm_dev = obj->dev;
+	void *cookie = is_drm_iommu_supported(drm_dev) ?
+			buffer->pages : buffer->kvaddr;
 
-	if (exynos_gem_obj->flags & EXYNOS_BO_NONCONTIG) {
-		unsigned long i = 0;
-		struct scatterlist *sgl;
-
-		if (!buffer->sgt)
-			return -EINVAL;
-		sgl = buffer->sgt->sgl;
-
-		while (i < buffer->sgt->nents) {
-			ret = vm_insert_page(vma, uaddr, sg_page(sgl));
-			if (ret) {
-				DRM_ERROR("failed to remap user space.\n");
-				return ret;
-			}
-			sgl = sg_next(sgl);
-			uaddr += PAGE_SIZE;
-			i++;
-		}
-	}
-	return 0;
+	return dma_mmap_attrs(drm_dev->dev, vma, cookie, buffer->dma_addr,
+			buffer->size, &buffer->dma_attrs);
 }
 
 static struct dma_buf_ops exynos_dmabuf_ops = {
