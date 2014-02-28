@@ -1,0 +1,57 @@
+PLDA XpressRICH3-AXI PCIe controller.
+
+These bindings describe the host controller as implemented on ARM's Juno
+platforms. Because IP integration has added additional registers to the
+original IP it is expected that other vendors will have different bindings
+if not different drivers.
+
+Required properties:
+- compatible: Should be "arm,pcie-xr3" to identify the controller
+- device_type: Must be "pci"
+- reg: A list of physical base addresses and lengths. There must be 3
+  entries:
+     - PLDA's XpressRICH3-AXI configuration registers
+     - ARM's reset registers
+     - Configuration space (ECAM compliant)
+- bus-range: Range of bus numbers associated with this controller
+- linux,pci-domain: PCI domain number (ACPI's segment) associated with
+  this controller.
+- #address-cells: Address representation for root ports (must be 3),
+  in accordance with the ePAPR specification.
+- #size-cells: Size representation for root ports (must be 2)
+- ranges: Describes the translation of addresses for standard PCI
+  regions. Please consult the standard device tree bindings for PCI
+  host bridges on how to encode the ranges.
+- #interrupt-cells: Size representation for legacy interrupts (must be 1)
+- interrupt-map-mask and
+- interrupt-map: Standard PCI IRQ mapping properties. Please refer to the
+  standard PCI bus binding document for a more detailed explanation
+
+Optional properties:
+- msi-parent: Handle to an MSI controller that will be used to request
+  allocation of MSI interrupts.
+
+Example:
+
+	pcie-controller@30000000 {
+		compatible = "arm,pcie-xr3";
+		device_type = "pci";
+		reg = <0 0x7ff30000 0 0x1000		/* XR3 config registers */
+		       0 0x7ff20000 0 0x10000		/* XR3 reset registers */
+		       0 0x40000000 0 0x10000000>;	/* ECAM config space */
+		bus-range = <0 255>;
+		linux,pci-domain = <0>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		ranges = <0x01000000 0x00 0x5ff00000 0x00 0x5ff00000 0x0 0x00100000
+			  0x02000000 0x00 0x50000000 0x00 0x50000000 0x0 0x0f000000
+		          0x42000000 0x40 0x00000000 0x40 0x00000000 0x0 0x80000000
+			  0x02000000 0x40 0x80000000 0x40 0x80000000 0x0 0x80000000>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0 0 0 7>;
+		interrupt-map = <0 0 0 1 &gic 0 0 0 136 4
+			         0 0 0 2 &gic 0 0 0 137 4
+				 0 0 0 3 &gic 0 0 0 138 4
+				 0 0 0 4 &gic 0 0 0 139 4>;
+		msi-parent = <&v2m_0>;
+	};
