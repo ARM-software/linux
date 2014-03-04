@@ -282,7 +282,7 @@ void drm_gem_cma_describe(struct drm_gem_cma_object *cma_obj, struct seq_file *m
 
 	off = drm_vma_node_start(&obj->vma_node);
 
-	seq_printf(m, "%2d (%2d) %08llx %pad %p %d",
+	seq_printf(m, "%2d (%2d) %08llx %pad %p %zd",
 			obj->name, obj->refcount.refcount.counter,
 			off, &cma_obj->paddr, cma_obj->vaddr, obj->size);
 
