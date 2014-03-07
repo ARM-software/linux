@@ -7835,6 +7835,7 @@ static inline int find_new_ilb(void)
 
 #ifdef CONFIG_SCHED_HMP
 	int ilb_needed = 1;
+	int call_cpu = smp_processor_id();
 
 	/* restrict nohz balancing to occur in the same hmp domain */
 	ilb = cpumask_first_and(nohz.idle_cpus_mask,
