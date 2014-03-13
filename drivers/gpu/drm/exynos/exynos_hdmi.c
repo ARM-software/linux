@@ -52,12 +52,13 @@
 /* AVI header and aspect ratio */
 #define HDMI_AVI_VERSION		0x02
 #define HDMI_AVI_LENGTH		0x0D
-#define AVI_PIC_ASPECT_RATIO_16_9	(2 << 4)
-#define AVI_SAME_AS_PIC_ASPECT_RATIO	8
 
 /* AUI header info */
 #define HDMI_AUI_VERSION	0x01
 #define HDMI_AUI_LENGTH	0x0A
+#define AVI_SAME_AS_PIC_ASPECT_RATIO 0x8
+#define AVI_4_3_CENTER_RATIO	0x9
+#define AVI_16_9_CENTER_RATIO	0xa
 
 /* HDMI infoframe to configure HDMI out packet header, AUI and AVI */
 enum HDMI_PACKET_TYPE {
@@ -174,6 +175,7 @@ struct hdmi_v14_conf {
 struct hdmi_conf_regs {
 	int pixel_clock;
 	int cea_video_id;
+	enum hdmi_picture_aspect aspect_ratio;
 	union {
 		struct hdmi_v13_conf v13_conf;
 		struct hdmi_v14_conf v14_conf;
@@ -731,7 +733,6 @@ static void hdmi_reg_infoframe(struct hdmi_context *hdata,
 {
 	u32 hdr_sum;
 	u8 chksum;
-	u32 aspect_ratio;
 	u32 mod;
 	u32 vic;
 
@@ -758,10 +759,28 @@ static void hdmi_reg_infoframe(struct hdmi_context *hdata,
 			AVI_ACTIVE_FORMAT_VALID |
 			AVI_UNDERSCANNED_DISPLAY_VALID);
 
-		aspect_ratio = AVI_PIC_ASPECT_RATIO_16_9;
-
-		hdmi_reg_writeb(hdata, HDMI_AVI_BYTE(2), aspect_ratio |
-				AVI_SAME_AS_PIC_ASPECT_RATIO);
+		/*
+		 * Set the aspect ratio as per the mode, mentioned in
+		 * Table 9 AVI InfoFrame Data Byte 2 of CEA-861-D Standard
+		 */
+		switch (hdata->mode_conf.aspect_ratio) {
+		case HDMI_PICTURE_ASPECT_4_3:
+			hdmi_reg_writeb(hdata, HDMI_AVI_BYTE(2),
+					hdata->mode_conf.aspect_ratio |
+					AVI_4_3_CENTER_RATIO);
+			break;
+		case HDMI_PICTURE_ASPECT_16_9:
+			hdmi_reg_writeb(hdata, HDMI_AVI_BYTE(2),
+					hdata->mode_conf.aspect_ratio |
+					AVI_16_9_CENTER_RATIO);
+			break;
+		case HDMI_PICTURE_ASPECT_NONE:
+		default:
+			hdmi_reg_writeb(hdata, HDMI_AVI_BYTE(2),
+					hdata->mode_conf.aspect_ratio |
+					AVI_SAME_AS_PIC_ASPECT_RATIO);
+			break;
+		}
 
 		vic = hdata->mode_conf.cea_video_id;
 		hdmi_reg_writeb(hdata, HDMI_AVI_BYTE(4), vic);
@@ -1480,6 +1499,7 @@ static void hdmi_v13_mode_set(struct hdmi_context *hdata,
 	hdata->mode_conf.cea_video_id =
 		drm_match_cea_mode((struct drm_display_mode *)m);
 	hdata->mode_conf.pixel_clock = m->clock * 1000;
+	hdata->mode_conf.aspect_ratio = m->picture_aspect_ratio;
 
 	hdmi_set_reg(core->h_blank, 2, m->htotal - m->hdisplay);
 	hdmi_set_reg(core->h_v_line, 3, (m->htotal << 12) | m->vtotal);
@@ -1576,6 +1596,7 @@ static void hdmi_v14_mode_set(struct hdmi_context *hdata,
 	hdata->mode_conf.cea_video_id =
 		drm_match_cea_mode((struct drm_display_mode *)m);
 	hdata->mode_conf.pixel_clock = m->clock * 1000;
+	hdata->mode_conf.aspect_ratio = m->picture_aspect_ratio;
 
 	hdmi_set_reg(core->h_blank, 2, m->htotal - m->hdisplay);
 	hdmi_set_reg(core->v_line, 2, m->vtotal);
