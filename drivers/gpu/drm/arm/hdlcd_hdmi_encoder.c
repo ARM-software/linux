@@ -38,6 +38,7 @@
 #include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_encoder_slave.h>
+#include <drm/i2c/tda998x.h>
 #include <video/display_timing.h>
 #include <video/of_display_timing.h>
 #include <video/videomode.h>
@@ -140,6 +141,15 @@ static struct drm_encoder_helper_funcs hdlcd_encoder_helper_funcs = {
 	.detect		= drm_i2c_encoder_detect,
 };
 
+static struct tda998x_encoder_params tda998x_params = {
+	.swap_a = 2,
+	.swap_b = 3,
+	.swap_c = 4,
+	.swap_d = 5,
+	.swap_e = 0,
+	.swap_f = 1,
+};
+
 int hdlcd_create_digital_connector(struct drm_device *dev,
 				struct hdlcd_drm_private *hdlcd)
 {
@@ -170,6 +180,9 @@ int hdlcd_create_digital_connector(struct drm_device *dev,
 		dev_err(dev->dev, "failed to get a module alias for node %s\n",
 			node->full_name);
 	}
+
+	/* Hack: this needs to be specified in the device tree */
+	i2c_info.platform_data = &tda998x_params;
 
 	err = drm_i2c_encoder_init(dev, slave, NULL, &i2c_info);
 	of_node_put(node);
