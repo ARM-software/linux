@@ -278,6 +278,9 @@ int mbox_send_message(struct mbox_chan *chan, void *mssg)
 	if (!chan || !chan->cl)
 		return -EINVAL;
 
+	if (chan->cl->tx_block)
+		init_completion(&chan->tx_complete);
+
 	t = _add_to_rbuf(chan, mssg);
 	if (t < 0) {
 		pr_err("Try increasing MBOX_TX_QUEUE_LEN\n");
@@ -291,7 +294,6 @@ int mbox_send_message(struct mbox_chan *chan, void *mssg)
 
 	if (chan->cl->tx_block && chan->active_req) {
 		int ret;
-		init_completion(&chan->tx_complete);
 		ret = wait_for_completion_timeout(&chan->tx_complete,
 			chan->cl->tx_tout);
 		if (ret == 0) {
