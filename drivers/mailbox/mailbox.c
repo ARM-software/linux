@@ -584,7 +584,8 @@ void mbox_controller_unregister(struct mbox_controller *mbox)
 	list_for_each_entry(chan, &con->channels, node)
 		mbox_free_channel(chan);
 
-	del_timer_sync(&con->poll);
+	if (mbox->txdone_poll)
+		del_timer_sync(&con->poll);
 
 	kfree(con);
 }
