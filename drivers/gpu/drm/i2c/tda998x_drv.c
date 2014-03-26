@@ -1151,6 +1151,8 @@ tda998x_encoder_init(struct i2c_client *client,
 
 	priv->current_page = 0xff;
 	priv->cec = i2c_new_dummy(client->adapter, 0x34);
+	if (!priv->cec)
+		priv->cec = i2c_new_dummy(client->adapter, 0x35);
 	if (!priv->cec) {
 		kfree(priv);
 		return -ENODEV;
