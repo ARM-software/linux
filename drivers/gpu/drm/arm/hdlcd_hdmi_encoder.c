@@ -113,10 +113,6 @@ static int hdlcd_hdmi_con_mode_valid(struct drm_connector *connector,
 {
 	struct drm_encoder_slave *slave = hdlcd_get_slave_encoder(connector);
 
-	/* Hack: restrict resolution to 800x600 */
-	if (mode->hdisplay != 800 && mode->vdisplay != 600)
-		return MODE_BAD;
-
 	if (slave && slave->slave_funcs)
 		return slave->slave_funcs->mode_valid(connector->encoder, mode);
 
