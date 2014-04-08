@@ -161,7 +161,8 @@ void __init arm64_memblock_init(void)
 		memblock_reserve(base, size);
 	}
 
-	dma_contiguous_reserve(0);
+	/* restrict CMA to 4GB address space */
+	dma_contiguous_reserve(0xffffffff);
 
 	memblock_allow_resize();
 	memblock_dump_all();
