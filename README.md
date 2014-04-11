@@ -1,6 +1,6 @@
 ### 1.  Release details
 *  Product Release Status
-      - 0.1-Juno
+      - 0.2-Juno
 *  Linux Kernel BSP
       - The Linux Kernel BSP contains the upstream version 3.14-rc6 of the 
         Linux kernel modified to support the Juno development board.
@@ -8,13 +8,18 @@
       - Linux kernel configures the Juno Compute System and a limited set
         of peripherals on the Juno development board.
 *  New features
-      - This is the first release of the BSP
+      - HDLCD resolution limits have been lifted, native monitor resolution is automatically selected.
+      - Access to the full 8GB RAM
+      - Both HDMI outputs are enabled.
 *  Limitations
       - PCI Express is not enabled
-      - HDLCD resolution is limited to 800x600 to work around some memory bandwidth limitations that are still being investigated.
+      - Only USB 2.0 is supported at the moment. Keyboards that report themselves as USB 1.x devices will not work.
       - No support for MALI graphics chip
 *  Issues resolved since last release
-      - None
+      - HDLCD limitations lifted
+      - Enabled both HDMI outputs
+      - Framebuffer will get allocated in the first 4GB of address space
+      - Full access to RAM enabled.
 *  Test cases and results
       - This release does not contain any test cases or example code other
           than those already present in the upstream version of the kernel.
@@ -40,6 +45,11 @@ $ make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- mrproper
 
     ```
 $ make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
+    ```
+
+*   If you plan to use the kernel with an Android software stack, then instead of the previous command use
+    ```
+$ make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- android_defconfig
     ```
 
 *   Kernel compilation. This step needs to be repeated after changes in the kernel source code.
