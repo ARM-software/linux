@@ -2,6 +2,7 @@
 
 obj-$(CONFIG_MAILBOX)		+= mailbox.o
 
+obj-$(CONFIG_ARM_MHU_MBOX)	+= arm_mhu.o
 obj-$(CONFIG_PL320_MBOX)	+= pl320.o
 
 obj-$(CONFIG_OMAP_MBOX)		+= omap-mailbox.o
