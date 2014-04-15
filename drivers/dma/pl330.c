@@ -2759,8 +2759,13 @@ pl330_prep_dma_memcpy(struct dma_chan *chan, dma_addr_t dst,
 	/* Select max possible burst size */
 	burst = pi->pcfg.data_bus_width / 8;
 
+	/*
+	 * Make sure we use a burst size that aligns with all the memcpy
+	 * parameters because our DMA programming algorithm doesn't cope with
+	 * transfers which straddle an entry in the DMA device's MFIFO.
+	 */
 	while (burst > 1) {
-		if (!(len % burst))
+		if (!((src | dst | len) % burst))
 			break;
 		burst /= 2;
 	}
@@ -2768,6 +2773,13 @@ pl330_prep_dma_memcpy(struct dma_chan *chan, dma_addr_t dst,
 	desc->rqcfg.brst_size = 0;
 	while (burst != (1 << desc->rqcfg.brst_size))
 		desc->rqcfg.brst_size++;
+
+	/*
+	 * If burst size is smaller than bus width then make sure we only
+	 * transfer one at a time to avoid a burst stradling an MFIFO entry.
+	 */
+	if (desc->rqcfg.brst_size * 8 < pi->pcfg.data_bus_width)
+		desc->rqcfg.brst_len = 1;
 
 	desc->rqcfg.brst_len = get_burst_len(desc, len);
 
