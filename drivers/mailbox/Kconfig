@@ -6,6 +6,20 @@ menuconfig MAILBOX
 	  signals. Say Y if your platform supports hardware mailboxes.
 
 if MAILBOX
+config ARM_MHU_MBOX
+	bool "ARM Message Handling Unit (MHU) Mailbox"
+	help
+	  This driver provides support for inter-processor communication
+	  between System Control Processor (SCP) with Cortex-M3 processor
+	  and Application Processors (AP) on some ARM based systems with
+	  MHU peripheral.
+
+	  SCP controls most of the power managament on the Application
+	  Processors. It offers control and management of: the core/cluster
+	  power states, various power domain DVFS including the core/cluster,
+	  certain system clocks configuration, thermal sensors and many
+	  others.
+
 config PL320_MBOX
 	bool "ARM PL320 Mailbox"
 	depends on ARM_AMBA
