@@ -2182,7 +2182,8 @@ static int hdmi_probe(struct platform_device *pdev)
 	return 0;
 
 err_hdmiphy:
-	put_device(&hdata->hdmiphy_port->dev);
+	if (hdata->hdmiphy_port)
+		put_device(&hdata->hdmiphy_port->dev);
 err_ddc:
 	put_device(&hdata->ddc_adpt->dev);
 	return ret;
