@@ -162,7 +162,7 @@ void __init arm64_memblock_init(void)
 	}
 
 	early_init_fdt_scan_reserved_mem();
-	dma_contiguous_reserve(0);
+	dma_contiguous_reserve(0xffffffff);
 
 	memblock_allow_resize();
 	memblock_dump_all();

@@ -39,6 +39,16 @@ config COMMON_CLK_VERSATILE
 	  - RealView PB1176, EB, PB11MP and PBX
 	  - Versatile Express
 
+config COMMON_CLK_SCPI
+        bool "Clock driver controlled via SCPI interface"
+        depends on ARM_SCPI_PROTOCOL
+        ---help---
+          This driver provides support for clocks that are controlled
+          by firmware that implements the SCPI interface.
+
+	  This driver uses SCPI Message Protocol to interact with the
+	  firware providing all the clock controls.
+
 config COMMON_CLK_MAX77686
 	tristate "Clock driver for Maxim 77686 MFD"
 	depends on MFD_MAX77686
