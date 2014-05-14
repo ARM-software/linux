@@ -402,6 +402,92 @@
 		clock-names = "otg";
 	};
 
+	system-profiler@2b200000 {
+		compatible = "arm,system-profiler";
+		reg = <0x0 0x2b200000 0 0x100000>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		interrupts = <GIC_SPI 49 4>;
+
+		monitor@0 {
+			type = "axi";
+			reg = <0>;
+			target = "cpu-cluster:cortex-a57";
+		};
+
+		monitor@1 {
+			type = "axi";
+			reg = <1>;
+			target = "cpu-cluster:cortex-a53";
+		};
+
+		monitor@2 {
+			type = "axi";
+			reg = <2>;
+			target = "gpu:mali-t6xx";
+		};
+
+		monitor@3 {
+			type = "axi";
+			reg = <3>;
+			target = "link:cci-slave-s1";
+		};
+
+		monitor@4 {
+			type = "axi";
+			reg = <4>;
+			target = "link:cci-to-pcie";
+		};
+
+		monitor@5 {
+			type = "axi";
+			reg = <5>;
+			target = "link:pcie-to-cci";
+		};
+
+		monitor@6 {
+			type = "axi";
+			reg = <6>;
+			target = "system-peripheral";
+		};
+
+		monitor@7 {
+			type = "axi";
+			reg = <7>;
+			target = "dram:s1";
+		};
+
+		monitor@8 {
+			type = "axi";
+			reg = <8>;
+			target = "dram:s2";
+		};
+
+		monitor@9 {
+			type = "axi";
+			reg = <9>;
+			target = "dram:s3";
+		};
+
+		monitor@a {
+			type = "axi";
+			reg = <0xa>;
+			target = "dram:s4";
+		};
+
+		monitor@b {
+			type = "cci";
+			reg = <0xb>;
+		};
+
+		monitor@c {
+			type = "memory";
+			reg = <0xc>;
+		};
+	};
+
 	i2c@0x7ffa0000 {
 		#address-cells = <1>;
 		#size-cells = <0>;
