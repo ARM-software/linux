@@ -41,4 +41,26 @@ config ARM_CCI
 	help
 	  Driver supporting the CCI cache coherent interconnect for ARM
 	  platforms.
+
+config ARM_SYSTEM_PROFILER
+	tristate "ARM System Profiler support"
+	depends on ARM || ARM64
+	depends on OF && DEBUG_FS
+	help
+	  Some ARM-based platforms contain a System Profiler component that can
+	  provide profiling data about bus, interconnect and memory traffic
+	  flowing through the system.  This can be useful for system tuning and
+	  identifying performance bottlenecks.
+
+	  Say Y or M here to provide support for obtaining profiling
+	  information using the System Profiler.
+
+	  If unsure, say N.
+
+	  Note: For this to be anything more than a toy, you should also enable
+	  ftrace (try ENABLE_DEFAULT_TRACERS).  This enables reporting of each
+	  data capture via trace events.  Without this, you can still capture
+	  data manually, but you will need to poll from userspace: reliability
+	  and precision will suffer and overheads will be very high.
+
 endmenu

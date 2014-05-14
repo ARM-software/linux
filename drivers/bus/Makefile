@@ -10,3 +10,5 @@ obj-$(CONFIG_OMAP_OCP2SCP)	+= omap-ocp2scp.o
 obj-$(CONFIG_OMAP_INTERCONNECT)	+= omap_l3_smx.o omap_l3_noc.o
 # CCI cache coherent interconnect for ARM platforms
 obj-$(CONFIG_ARM_CCI)		+= arm-cci.o
+# ARM System Profiler
+obj-$(CONFIG_ARM_SYSTEM_PROFILER)	+= arm-system-profiler.o

@@ -1,0 +1,179 @@
+=======================================
+ARM System Profiler binding description
+=======================================
+
+The ARM system profiler is a generic interface to special-purpose performance
+monitors that can provide profiling data about bus, interconnect and memory
+traffic flowing through the system.
+
+
+Node: system-profiler
+
+	Description: describes a single system profiler instance
+
+	Node name must be "system-profiler".
+
+system-profiler node properties:
+
+	- compatible
+		Usage: required
+
+		Value type: <string>
+
+		Definition: must be set to
+			    "arm,system-profiler"
+
+	- reg
+		Usage: required
+
+		Value type: <prop-encoded-array>
+
+		Definition: A standard property.  Specifies base physical
+			    address and size of the system profiler register
+			    block, including the monitor registers.
+
+	- ranges
+		Usage: required
+
+		Value type: <prop-encoded-array>
+
+		Definition: A standard property.  Specifies how the system
+			profiler register space maps onto the parent bus.  This
+			mapping must place the start of the first monitor
+			register block (monitor 0) at address 0 in the system
+			profiler address space.
+
+	- #address-cells
+		Usage: required unless #address-cells inherited from the parent
+			has value <1>.
+
+		Value: <1>
+
+		Specifies the number of cells used to represent the ID of each
+		monitor.
+
+	- #size-cells
+		Usage: required
+
+		Value: <0>
+
+		No size cells are associated with a monitor ID.
+
+	- interrupts
+		Usage: recommended
+
+		Value type: <prop-encoded-array> containing a single interrupt
+			    specifier
+
+		Definition: A standard property.  specifier for the system
+			    profiler interrupt.
+
+			    The system profiler can do software driven capture
+			    without an interrupt connected, but if the
+			    interrupt is available in the hardware it should be
+			    described here in order to enable interrupt-driven
+			    capture.
+
+system-profiler node children:
+
+	- monitor
+		Usage: A monitor node must be present for each usable monitor
+			connected to the system profiler
+
+			A monitor node must not be present for any monitor that
+			is not present in the hardware or not connected to
+			anything.
+
+		Placement: must be a child of a system-profiler node.
+
+		Name: must be "monitor".
+
+monitor node:
+
+	- reg
+		Usage: required
+
+		Value type: <cell>
+
+		Definition: The ID of the monitor.
+
+	- type
+		Usage: required.
+
+		Value type: <string>
+
+		Definition: Identifies the monitor type.  Must be one of the
+			following:
+
+			"axi"		- AXI Bus Monitor (ABM)
+			"cci"		- CCI Performance Monitor (CPM)
+			"memory"	- Memory Performance Monitor (MPM)
+
+	- target
+		Usage: optional
+
+		Value type: <string>
+
+		Definition: Free-form string describing what the monitor
+			is connected to.
+
+			Recommended when there are multiple monitors of the
+			same type, since it makes it easier for a user to
+			identify each monitor does.
+
+
+Example:
+
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	system-profiler@46400000 {
+		compatible = "arm,system-profiler";
+		reg = <0x0 0x46400000 0 0x100000>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		interrupts = <GIC_SPI 27 4>;
+
+		monitor@0 {
+			type = "axi";
+			reg = <0>;
+			target = "cpu-cluster:cortex-a57";
+		};
+
+		monitor@2 {
+			type = "axi";
+			reg = <1>;
+			target = "gpu:mali-t6xx";
+		};
+
+		monitor@3 {
+			type = "axi";
+			reg = <3>;
+			target = "link:cci-slave-s1";
+		};
+
+		monitor@4 {
+			type = "axi";
+			reg = <4>;
+			target = "link:cci-to-pcie";
+		};
+
+		monitor@7 {
+			type = "axi";
+			reg = <7>;
+			target = "dram:s1";
+		};
+
+		monitor@b {
+			type = "cci";
+			reg = <0xb>;
+		};
+
+		monitor@c {
+			type = "memory";
+			reg = <0xc>;
+		};
+	};
