@@ -184,6 +184,13 @@
 		};
 	};
 
+	cci {
+		compatible = "arm,cci-400";
+		reg = <0 0x2c090000 0 0x1000>;
+
+		// ToDo: Add slave port descriptions
+	};
+
 	pmu {
 		compatible = "arm,armv8-pmuv3";
 		interrupts = <0 18 4>,
