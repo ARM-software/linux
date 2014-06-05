@@ -128,8 +128,10 @@ static irqreturn_t mbox_handler(int irq, void *p)
 
 	if (status && irq == chan->rx_irq) {
 		struct mhu_data_buf *data = chan->data;
-		if (!data)
+		if (!data) {
+			writel(~0, ctlr->mbox_base + RX_CLEAR(idx));
 			return IRQ_NONE;	/* spurious */
+		}
 		if (data->rx_buf)
 			memcpy(data->rx_buf,
 			       ctlr->payload_base + RX_PAYLOAD(idx),
@@ -163,8 +165,10 @@ static int mhu_send_data(struct mbox_link *link, void *msg)
 static int mhu_startup(struct mbox_link *link, void *ignored)
 {
 	struct mhu_chan *chan = to_mhu_chan(link);
+	struct mhu_ctlr *ctlr = chan->ctlr;
 
 	chan->data = NULL;
+	writel(~0, ctlr->mbox_base + RX_CLEAR(chan->index));
 	return request_threaded_irq(chan->rx_irq, NULL, mbox_handler,
 				    IRQF_ONESHOT, link->link_name, link);
 }
@@ -172,8 +176,10 @@ static int mhu_startup(struct mbox_link *link, void *ignored)
 static void mhu_shutdown(struct mbox_link *link)
 {
 	struct mhu_chan *chan = to_mhu_chan(link);
+	struct mhu_ctlr *ctlr = chan->ctlr;
 
 	chan->data = NULL;
+	writel(~0, ctlr->mbox_base + RX_CLEAR(chan->index));
 	free_irq(chan->rx_irq, link);
 }
 
