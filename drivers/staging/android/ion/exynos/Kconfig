@@ -1,0 +1,56 @@
+config ION_EXYNOS_OF
+	depends on OF
+	bool "Setup ION with Device Tree"
+	default n
+
+menu "Region definitions of exynos-contig-heap"
+	depends on !ION_EXYNOS_OF
+config ION_EXYNOS_SIZE_COMMON
+	int "Size in kilobytes of common pool of exynos-contig-heap"
+	default 0
+
+config ION_EXYNOS_SIZE_MFC_SH
+	int "Size in kilobytes of mfc_sh region"
+	default 0
+
+config ION_EXYNOS_SIZE_MSGBOX_SH
+	int "Size in kilobytes of msgbox_sh region"
+	default 0
+
+config ION_EXYNOS_SIZE_FIMD_VIDEO
+	int "Size in kilobytes of fimd_video region"
+	default 0
+
+config ION_EXYNOS_SIZE_GSC
+	int "Size in kilobytes of gsc region"
+	default 0
+
+config ION_EXYNOS_SIZE_MFC_OUTPUT
+	int "Size in kilobytes of mfc_output region"
+	default 0
+
+config ION_EXYNOS_SIZE_MFC_INPUT
+	int "Size in kilobytes of mfc_input region"
+	default 0
+
+config ION_EXYNOS_SIZE_MFC_FW
+	int "Size in kilobytes of mfc_fw region"
+	default 0
+
+config ION_EXYNOS_SIZE_SECTBL
+	int "Size in kilobytes of sectbl region"
+	default 0
+
+config ION_EXYNOS_SIZE_G2D_WFD
+	int "Size in kilobytes of g2d_wfd region"
+	default 0
+
+config ION_EXYNOS_SIZE_VIDEO
+	int "Size in kilobytes of video region"
+	default 0
+
+config ION_EXYNOS_SIZE_MFC_NFWVIDEO
+	int "Size in kilobytes of mfc_nfw region"
+	default 0
+endmenu
+

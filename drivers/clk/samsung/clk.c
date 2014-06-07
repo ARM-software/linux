@@ -58,6 +58,18 @@ void __init samsung_clk_init(struct device_node *np, void __iomem *base,
 		unsigned long nr_soc_rdump)
 {
 	reg_base = base;
+	if (!np)
+		return;
+
+#ifdef CONFIG_OF
+	clk_table = kzalloc(sizeof(struct clk *) * nr_clks, GFP_KERNEL);
+	if (!clk_table)
+		panic("could not allocate clock lookup table\n");
+
+	clk_data.clks = clk_table;
+	clk_data.clk_num = nr_clks;
+	of_clk_add_provider(np, of_clk_src_onecell_get, &clk_data);
+#endif
 
 #ifdef CONFIG_PM_SLEEP
 	if (rdump && nr_rdump) {
@@ -78,19 +90,6 @@ void __init samsung_clk_init(struct device_node *np, void __iomem *base,
 		register_syscore_ops(&samsung_clk_syscore_ops);
 	}
 #endif
-
-	clk_table = kzalloc(sizeof(struct clk *) * nr_clks, GFP_KERNEL);
-	if (!clk_table)
-		panic("could not allocate clock lookup table\n");
-
-	if (!np)
-		return;
-
-#ifdef CONFIG_OF
-	clk_data.clks = clk_table;
-	clk_data.clk_num = nr_clks;
-	of_clk_add_provider(np, of_clk_src_onecell_get, &clk_data);
-#endif
 }
 
 /* add a clock instance to the clock lookup table used for dt based lookup */
@@ -98,39 +97,6 @@ void samsung_clk_add_lookup(struct clk *clk, unsigned int id)
 {
 	if (clk_table && id)
 		clk_table[id] = clk;
-}
-
-/* register a list of aliases */
-void __init samsung_clk_register_alias(struct samsung_clock_alias *list,
-					unsigned int nr_clk)
-{
-	struct clk *clk;
-	unsigned int idx, ret;
-
-	if (!clk_table) {
-		pr_err("%s: clock table missing\n", __func__);
-		return;
-	}
-
-	for (idx = 0; idx < nr_clk; idx++, list++) {
-		if (!list->id) {
-			pr_err("%s: clock id missing for index %d\n", __func__,
-				idx);
-			continue;
-		}
-
-		clk = clk_table[list->id];
-		if (!clk) {
-			pr_err("%s: failed to find clock %d\n", __func__,
-				list->id);
-			continue;
-		}
-
-		ret = clk_register_clkdev(clk, list->alias, list->dev_name);
-		if (ret)
-			pr_err("%s: failed to register lookup %s\n",
-					__func__, list->alias);
-	}
 }
 
 /* register a list of fixed clocks */
@@ -190,9 +156,16 @@ void __init samsung_clk_register_mux(struct samsung_mux_clock *list,
 	unsigned int idx, ret;
 
 	for (idx = 0; idx < nr_clk; idx++, list++) {
+		#if defined (CONFIG_SOC_EXYNOS5430_REV_1)
+		clk = clk_register_mux(NULL, list->name, list->parent_names,
+			list->num_parents, list->flags, reg_base + list->offset,
+			list->shift, list->width, list->mux_flags, &lock,
+			reg_base + list -> stat_offset, list->stat_shift, list->stat_width);
+		#else
 		clk = clk_register_mux(NULL, list->name, list->parent_names,
 			list->num_parents, list->flags, reg_base + list->offset,
 			list->shift, list->width, list->mux_flags, &lock);
+		#endif
 		if (IS_ERR(clk)) {
 			pr_err("%s: failed to register clock %s\n", __func__,
 				list->name);
@@ -220,17 +193,9 @@ void __init samsung_clk_register_div(struct samsung_div_clock *list,
 	unsigned int idx, ret;
 
 	for (idx = 0; idx < nr_clk; idx++, list++) {
-		if (list->table)
-			clk = clk_register_divider_table(NULL, list->name,
-					list->parent_name, list->flags,
-					reg_base + list->offset, list->shift,
-					list->width, list->div_flags,
-					list->table, &lock);
-		else
-			clk = clk_register_divider(NULL, list->name,
-					list->parent_name, list->flags,
-					reg_base + list->offset, list->shift,
-					list->width, list->div_flags, &lock);
+		clk = clk_register_divider(NULL, list->name, list->parent_name,
+			list->flags, reg_base + list->offset, list->shift,
+			list->width, list->div_flags, &lock);
 		if (IS_ERR(clk)) {
 			pr_err("%s: failed to register clock %s\n", __func__,
 				list->name);
@@ -250,6 +215,115 @@ void __init samsung_clk_register_div(struct samsung_div_clock *list,
 	}
 }
 
+struct exynos_clk_gate {
+	struct clk_hw hw;
+	void __iomem	*reg;
+	unsigned long	set_bit;
+	u8	bit_idx;
+	u8	flags;
+	spinlock_t	*lock;
+};
+
+#define to_clk_gate(_hw) container_of(_hw, struct exynos_clk_gate, hw)
+
+static void exynos_clk_gate_endisable(struct clk_hw *hw, int enable)
+{
+	struct exynos_clk_gate *gate = to_clk_gate(hw);
+	int set = gate->flags & CLK_GATE_SET_TO_DISABLE ? 1 : 0;
+	unsigned long flags = 0;
+	u32 reg;
+
+	set ^= enable;
+
+	if (gate->lock)
+		spin_lock_irqsave(gate->lock, flags);
+
+	reg = readl(gate->reg);
+
+	if (set)
+		reg |= gate->set_bit;
+	else
+		reg &= ~(gate->set_bit);
+
+	writel(reg, gate->reg);
+
+	if (gate->lock)
+		spin_unlock_irqrestore(gate->lock, flags);
+}
+
+static int exynos5_clk_gate_enable(struct clk_hw *hw)
+{
+	exynos_clk_gate_endisable(hw, 1);
+
+	return 0;
+}
+
+static void exynos5_clk_gate_disable(struct clk_hw *hw)
+{
+	exynos_clk_gate_endisable(hw, 0);
+}
+
+static int exynos5_clk_gate_is_enabled(struct clk_hw *hw)
+{
+	u32 reg;
+	struct exynos_clk_gate *gate = to_clk_gate(hw);
+
+	reg = readl(gate->reg);
+
+	/* if a set bit disables this clk, flip it before masking */
+	if (gate->flags & CLK_GATE_SET_TO_DISABLE)
+		reg ^= BIT(gate->bit_idx);
+
+	reg &= BIT(gate->bit_idx);
+
+	return reg ? 1 : 0;
+}
+
+const struct clk_ops exynos5_clk_gate_ops = {
+	.enable = exynos5_clk_gate_enable,
+	.disable = exynos5_clk_gate_disable,
+	.is_enabled = exynos5_clk_gate_is_enabled,
+};
+EXPORT_SYMBOL_GPL(exynos5_clk_gate_ops);
+
+struct clk *exynos_clk_register_gate(struct device *dev, const char *name,
+		const char *parent_name, unsigned long flags,
+		void __iomem *reg, u8 bit_idx,
+		u8 clk_gate_flags, spinlock_t *lock, unsigned long set_bit)
+{
+	struct exynos_clk_gate *gate;
+	struct clk *clk;
+	struct clk_init_data init;
+
+	/* allocate the gate */
+	gate = kzalloc(sizeof(struct exynos_clk_gate), GFP_KERNEL);
+	if (!gate) {
+		pr_err("%s: could not allocate gated clk\n", __func__);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	init.name = name;
+	init.ops = &exynos5_clk_gate_ops;
+	init.flags = flags | CLK_IS_BASIC;
+	init.parent_names = (parent_name ? &parent_name: NULL);
+	init.num_parents = (parent_name ? 1 : 0);
+
+	/* struct clk_gate assignments */
+	gate->reg = reg;
+	gate->bit_idx = bit_idx;
+	gate->flags = clk_gate_flags;
+	gate->lock = lock;
+	gate->hw.init = &init;
+	gate->set_bit = set_bit;
+
+	clk = clk_register(dev, &gate->hw);
+
+	if (IS_ERR(clk))
+		kfree(gate);
+
+	return clk;
+}
+
 /* register a list of gate clocks */
 void __init samsung_clk_register_gate(struct samsung_gate_clock *list,
 						unsigned int nr_clk)
@@ -258,9 +332,15 @@ void __init samsung_clk_register_gate(struct samsung_gate_clock *list,
 	unsigned int idx, ret;
 
 	for (idx = 0; idx < nr_clk; idx++, list++) {
-		clk = clk_register_gate(NULL, list->name, list->parent_name,
-				list->flags, reg_base + list->offset,
-				list->bit_idx, list->gate_flags, &lock);
+		if (list->flags & CLK_GATE_MULTI_BIT_SET)
+			clk = exynos_clk_register_gate(NULL, list->name, list->parent_name,
+					list->flags, reg_base + list->offset,
+					list->bit_idx, list->gate_flags, &lock, list->set_bit);
+		else
+			clk = clk_register_gate(NULL, list->name, list->parent_name,
+					list->flags, reg_base + list->offset,
+					list->bit_idx, list->gate_flags, &lock);
+
 		if (IS_ERR(clk)) {
 			pr_err("%s: failed to register clock %s\n", __func__,
 				list->name);
@@ -284,7 +364,6 @@ void __init samsung_clk_register_gate(struct samsung_gate_clock *list,
  * obtain the clock speed of all external fixed clock sources from device
  * tree and register it
  */
-#ifdef CONFIG_OF
 void __init samsung_clk_of_register_fixed_ext(
 			struct samsung_fixed_rate_clock *fixed_rate_clk,
 			unsigned int nr_fixed_rate_clk,
@@ -301,7 +380,6 @@ void __init samsung_clk_of_register_fixed_ext(
 	}
 	samsung_clk_register_fixed_rate(fixed_rate_clk, nr_fixed_rate_clk);
 }
-#endif
 
 /* utility function to get the rate of a specified clock */
 unsigned long _get_rate(const char *clk_name)
@@ -317,4 +395,67 @@ unsigned long _get_rate(const char *clk_name)
 	rate = clk_get_rate(clk);
 	clk_put(clk);
 	return rate;
+}
+
+/* utility function to set parent with names */
+int exynos_set_parent(const char *child, const char *parent)
+{
+	struct clk *p;
+	struct clk *c;
+
+	p= __clk_lookup(parent);
+	if (IS_ERR(p)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, parent);
+		return -EINVAL;
+	}
+
+	c= __clk_lookup(child);
+	if (IS_ERR(c)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, child);
+		return -EINVAL;
+	}
+
+	return clk_set_parent(c, p);
+}
+
+/* utility function to get parent name with name */
+struct clk *exynos_get_parent(const char *child)
+{
+	struct clk *c;
+
+	c = __clk_lookup(child);
+	if (IS_ERR(c)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, child);
+		return NULL;
+	}
+
+	return clk_get_parent(c);
+}
+
+/* utility function to set rate with name */
+int exynos_set_rate(const char *conid, unsigned int rate)
+{
+	struct clk *target;
+
+	target = __clk_lookup(conid);
+	if (IS_ERR(target)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, conid);
+		return -EINVAL;
+	}
+
+	return clk_set_rate(target, rate);
+}
+
+/* utility function to get rate with name */
+unsigned int  exynos_get_rate(const char *conid)
+{
+	struct clk *target;
+
+	target = __clk_lookup(conid);
+	if (IS_ERR(target)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, conid);
+		return -EINVAL;
+	}
+
+	return clk_get_rate(target);
 }

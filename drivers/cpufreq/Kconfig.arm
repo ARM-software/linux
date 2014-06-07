@@ -18,9 +18,18 @@ config ARM_DT_BL_CPUFREQ
 config ARM_EXYNOS_CPUFREQ
 	bool "SAMSUNG EXYNOS SoCs"
 	depends on ARCH_EXYNOS
-	default y
 	help
 	  This adds the CPUFreq driver common part for Samsung
+	  EXYNOS SoCs.
+
+	  If in doubt, say N.
+
+config ARM_EXYNOS_MP_CPUFREQ
+	bool "SAMSUNG EXYNOS SoCs for MP"
+	depends on ARCH_EXYNOS
+	depends on SCHED_HMP
+	help
+	  This adds the MP CPUFreq driver common part for Samsung
 	  EXYNOS SoCs.
 
 	  If in doubt, say N.
@@ -41,6 +50,18 @@ config ARM_EXYNOS5250_CPUFREQ
 	def_bool SOC_EXYNOS5250
 	help
 	  This adds the CPUFreq driver for Samsung EXYNOS5250
+	  SoC.
+
+config ARM_EXYNOS5430_CPUFREQ
+	def_bool SOC_EXYNOS5430
+	help
+	  This adds the CPUFreq driver for Samsung EXYNOS5430
+	  SoC.
+
+config ARM_EXYNOS5422_CPUFREQ
+	def_bool SOC_EXYNOS5422
+	help
+	  This adds the CPUFreq driver for Samsung EXYNOS5422
 	  SoC.
 
 config ARM_EXYNOS5440_CPUFREQ

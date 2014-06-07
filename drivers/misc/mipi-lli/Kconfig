@@ -1,0 +1,25 @@
+#
+# MIPI LLI
+#
+
+menuconfig MIPI_LLI
+	tristate "MIPI LLI"
+	default n
+	help
+	  It is for supporting MIPI LLI driver.
+
+if MIPI_LLI
+config EXYNOS_MIPI_LLI
+	bool "Enable Exynos MIPI LLI"
+	default y
+	help
+	  Enable MIPI LLI via Shared Memory.
+
+config EXYNOS_MIPI_LLI_MPHY
+	bool "Enable Exynos MIPI LLI MPHY"
+	default y
+	depends on EXYNOS_MIPI_LLI
+	help
+	  Enable M-PHY for MIPI-LLI
+
+endif # MIPI_LLI

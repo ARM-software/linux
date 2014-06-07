@@ -1,0 +1,83 @@
+menuconfig DECON
+	bool "Samsung Display Enhancement Controller(DECON)"
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select S5P_DEV_MIPI_DSIM0
+	depends on FB
+
+config DECON_FB
+	bool "Samsung DECON Framebuffer driver"
+	depends on DECON
+	default y
+
+config DECON_MIC
+	bool "Samsung MIC driver"
+	depends on DECON_FB
+	default n
+
+config FB_I80_COMMAND_MODE
+	bool "DECON FB I80 MODE"
+	depends on DECON_FB
+	default n
+
+choice
+	prompt "I80 Trigger Mode"
+	depends on FB_I80_COMMAND_MODE
+
+	config FB_I80_HW_TRIGGER
+	bool "I80 Hardware Trigger Mode"
+
+	config FB_I80_SW_TRIGGER
+	bool "I80 Software Trigger Mode"
+
+endchoice
+
+config FB_HIBERNATION_DISPLAY
+	bool "FB Hibernation Display MODE"
+	depends on FB_I80_COMMAND_MODE
+	default n
+
+config FB_HIBERNATION_DISPLAY_CLOCK_GATING
+	bool "Support clock-gating"
+	depends on FB_HIBERNATION_DISPLAY
+	default y
+
+config FB_HIBERNATION_DISPLAY_POWER_GATING
+	bool "Support power-gating"
+	depends on FB_HIBERNATION_DISPLAY_CLOCK_GATING
+	default n
+
+config FB_HIBERNATION_DISPLAY_POWER_GATING_DEEPSTOP
+	bool "Support power-gating with deep-stop"
+	depends on FB_HIBERNATION_DISPLAY_POWER_GATING
+	default n
+
+config DECON_DISPLAY
+	bool "Samsung DECON DISPLAY driver"
+	depends on DECON
+	default y
+
+config DECON_MIPI_DSI
+	bool "Samsung DECON MIPI-DSI driver"
+	depends on DECON
+	default n
+
+config DECON_LCD
+	depends on DECON
+	bool "Select LCD panel driver"
+
+config DECON_LCD_S6E8AA0
+	depends on DECON_LCD && DECON_MIPI_DSI
+	tristate "S6E8AA0 AMOLED HD LCD driver(800 x 1280)"
+
+config DECON_LCD_S6E3FA0
+	depends on DECON_LCD && DECON_MIPI_DSI
+	tristate "S6E8FA0 AMOLED FULL HD LCD driver(1080 x 1920)"
+
+config DECON_LCD_PARALLEL_RGB
+	depends on DECON_LCD && !DECON_MIPI_DSI
+	tristate "LCD_480w_PARALLEL_RGB 800x 480"
+
+config S5P_DEV_MIPI_DSIM0
+	bool

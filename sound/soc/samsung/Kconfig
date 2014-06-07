@@ -34,6 +34,33 @@ config SND_SAMSUNG_SPDIF
 config SND_SAMSUNG_I2S
 	tristate
 
+config SND_SAMSUNG_IDMA
+	tristate
+
+config SND_SAMSUNG_AUDSS
+	tristate
+
+config SND_SAMSUNG_IOMMU
+	tristate "IOMMU support for Samsung Audio sub system"
+	depends on SND_SOC_SAMSUNG && SND_SAMSUNG_AUDSS
+	help
+		Say Y if you want to add support for iommu.
+
+config SND_SAMSUNG_FAKEDMA
+	tristate "Use Fake-DMA for Samsung I2S"
+	depends on SND_SOC_SAMSUNG
+	help
+		Say Y if you want to add support for fake-dma.
+
+config SND_SAMSUNG_XYREF
+	tristate
+
+config SND_SOC_ES515_I2C
+	tristate
+
+config SND_SOC_ES515_I2S
+	tristate
+
 config SND_SOC_SAMSUNG_NEO1973_WM8753
 	tristate "Audio support for Openmoko Neo1973 Smartphones (GTA02)"
 	depends on SND_SOC_SAMSUNG && MACH_NEO1973_GTA02
@@ -57,6 +84,7 @@ config SND_SOC_SAMSUNG_SMDK_WM8580
 	depends on SND_SOC_SAMSUNG && (MACH_SMDK6410 || MACH_SMDKC100 || MACH_SMDK6440 || MACH_SMDK6450 || MACH_SMDKV210 || MACH_SMDKC110)
 	select SND_SOC_WM8580
 	select SND_SAMSUNG_I2S
+	select SND_SAMSUNG_IDMA
 	help
 	  Say Y if you want to add support for SoC audio on the SMDKs.
 
@@ -67,6 +95,7 @@ config SND_SOC_SAMSUNG_SMDK_WM8994
 	select MFD_WM8994
 	select SND_SOC_WM8994
 	select SND_SAMSUNG_I2S
+	select SND_SAMSUNG_IDMA
 	help
 		Say Y if you want to add support for SoC audio on the SMDKs.
 
@@ -222,3 +251,72 @@ config SND_SOC_LITTLEMILL
 	select SND_SAMSUNG_I2S
 	select MFD_WM8994
 	select SND_SOC_WM8994
+
+config SND_SOC_SAMSUNG_XYREF5430_ES515
+	tristate "SoC I2S Audio support for eS515 on XYREF5430"
+	depends on SND_SOC_SAMSUNG
+	select SND_SAMSUNG_I2S
+	select SND_SAMSUNG_AUDSS
+	select SND_SAMSUNG_IOMMU
+	select SND_SAMSUNG_XYREF
+	select SND_SOC_ES515
+	select SND_SOC_ES515_I2S
+	select SND_SOC_ES515_I2C
+	select SND_SOC_DUMMY_CODEC
+	help
+	  Say Y if you want to add support for SoC audio on the XYREF5430.
+
+config SND_SOC_SAMSUNG_XYREF5422_ES515
+       tristate "SoC I2S Audio support for eS515 on XYREF5422"
+       depends on SND_SOC_SAMSUNG
+       select SND_SAMSUNG_I2S
+       select SND_SAMSUNG_AUDSS
+       select SND_SAMSUNG_XYREF
+       select SND_SOC_ES515
+       select SND_SOC_ES515_I2S
+       select SND_SOC_ES515_I2C
+       select SND_SOC_DUMMY_CODEC
+       help
+         Say Y if you want to add support for SoC audio on the XYREF5422.
+
+config SND_SOC_ES515_I2S_MASTER
+	bool "Enable Codec master mode for eS515 on XYREF"
+	depends on SND_SAMSUNG_XYREF && SND_SOC_ES515
+	default y
+	help
+	  Say Y if you want to add support for SoC audio on the XYREF.
+
+config SND_SOC_SAMSUNG_SMDK5422_WM8994
+	tristate "SoC I2S Audio support for wm8994 on SMDK5422"
+	depends on SND_SOC_SAMSUNG
+	select MFD_WM8994
+	select SND_SOC_WM8994
+	select SND_SAMSUNG_I2S
+	select SND_SAMSUNG_AUDSS
+	select SND_SOC_DUMMY_CODEC
+	help
+	  Say Y if you want to add support for SoC audio on the XYREF5430.
+
+config SND_SAMSUNG_AUX_HDMI
+	tristate "HDMI Audio support on XYREF"
+	depends on SND_SAMSUNG_XYREF
+	default y
+	help
+	  Say Y if you want to add support for HDMI audio on the XYREF.
+
+config SND_SAMSUNG_AUX_SPDIF
+	tristate "S/PDIF Audio support on XYREF"
+	depends on SND_SAMSUNG_XYREF
+	select SND_SAMSUNG_SPDIF
+	help
+	  Say Y if you want to add support for S/PDIF audio on the XYREF.
+
+# For support SEIREN audio
+source "sound/soc/samsung/seiren/Kconfig"
+
+config SND_SAMSUNG_SEIREN_DEBUG
+	bool "Enable debug message for SEIREN Audio"
+	depends on SND_SAMSUNG_SEIREN
+	default n
+	help
+	  Say Y if you want to add debug message for SEIREN Audio.

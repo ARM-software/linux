@@ -525,6 +525,30 @@ config MMC_DW
 	  block, this provides host support for SD and MMC interfaces, in both
 	  PIO and external DMA modes.
 
+choice
+	prompt "Flash Memory Protector Support"
+	depends on MMC_DW
+	default MMC_DW_FMP_BYPASS
+	help
+	  The flash memory protector feature of the eMMC controller
+	  provides a on-the-fly data decryption/encryption during flash
+	  read/write.
+
+config MMC_DW_BYPASS_FMP
+	boolean "Bypass FMP"
+	help
+	  This disables the flash memory protector feature of the eMMC controller.
+
+config MMC_DW_FMP_DM_CRYPT
+	boolean "FMP acceleration for DM_CRYPT"
+	depends on DM_CRYPT
+	help
+	  This option accelerates dm-crypt by using the flash
+	  memory protector feature of the eMMC controller.
+
+	  If unsure, choose "Bypass FMP" over this option.
+endchoice
+
 config MMC_DW_IDMAC
 	bool "Internal DMAC interface"
 	depends on MMC_DW

@@ -7,8 +7,10 @@ struct request;
 struct task_struct;
 
 struct mmc_blk_request {
+	struct mmc_request	mrq_que;
 	struct mmc_request	mrq;
 	struct mmc_command	sbc;
+	struct mmc_command	que;
 	struct mmc_command	cmd;
 	struct mmc_command	stop;
 	struct mmc_data		data;
@@ -41,6 +43,7 @@ struct mmc_queue_req {
 	struct mmc_async_req	mmc_active;
 	enum mmc_packed_type	cmd_type;
 	struct mmc_packed	*packed;
+	atomic_t		index;
 };
 
 struct mmc_queue {
@@ -54,10 +57,13 @@ struct mmc_queue {
 	int			(*issue_fn)(struct mmc_queue *, struct request *);
 	void			*data;
 	struct request_queue	*queue;
-	struct mmc_queue_req	mqrq[2];
+	struct mmc_queue_req	mqrq[EMMC_MAX_QUEUE_DEPTH];
 	struct mmc_queue_req	*mqrq_cur;
 	struct mmc_queue_req	*mqrq_prev;
 };
+
+#define IS_RT_CLASS_REQ(x)	\
+	(IOPRIO_PRIO_CLASS(req_get_ioprio(x)) == IOPRIO_CLASS_RT)
 
 extern int mmc_init_queue(struct mmc_queue *, struct mmc_card *, spinlock_t *,
 			  const char *);
@@ -72,5 +78,7 @@ extern void mmc_queue_bounce_post(struct mmc_queue_req *);
 
 extern int mmc_packed_init(struct mmc_queue *, struct mmc_card *);
 extern void mmc_packed_clean(struct mmc_queue *);
+
+extern void mmc_wait_cmdq_empty(struct mmc_host *);
 
 #endif

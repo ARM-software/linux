@@ -1,0 +1,28 @@
+#
+# Exynos multimedia device drivers
+#
+config VIDEO_EXYNOS
+	bool "Exynos Multimedia Devices"
+	depends on ARCH_EXYNOS4 || ARCH_EXYNOS5
+	default y
+	help
+	  This is a representative exynos multimedia device.
+
+if VIDEO_EXYNOS
+	source "drivers/media/platform/exynos/mdev/Kconfig"
+	source "drivers/media/platform/exynos/gsc_1.3/Kconfig"
+	source "drivers/media/platform/exynos/gsc/Kconfig"
+	source "drivers/media/platform/exynos/mfc/Kconfig"
+	source "drivers/media/platform/exynos/hevc/Kconfig"
+	source "drivers/media/platform/exynos/fimc-is/Kconfig"
+	source "drivers/media/platform/exynos/scaler/Kconfig"
+	source "drivers/media/platform/exynos/fimg2d/Kconfig"
+	source "drivers/media/platform/exynos/jpeg4/Kconfig"
+	source "drivers/media/platform/exynos/jpeg_hx/Kconfig"
+	source "drivers/media/platform/exynos/tv/Kconfig"
+endif
+
+config MEDIA_EXYNOS
+	bool
+	help
+	  Compile mdev to use exynos5 media device driver.

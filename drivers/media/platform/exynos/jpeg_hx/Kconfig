@@ -1,0 +1,12 @@
+#
+# Configuration for HX JPEG
+#
+
+config VIDEO_EXYNOS_HX_JPEG
+	bool "Samsung JPEG_HX driver"
+	depends on VIDEO_EXYNOS
+	select MEDIA_EXYNOS
+	select V4L2_MEM2MEM_DEV
+	default n
+	help
+	  This is a Samsung HX JPEG H/W driver

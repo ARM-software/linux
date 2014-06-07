@@ -18,6 +18,7 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <asm/mach/irq.h>
+#include <linux/syscore_ops.h>
 
 #ifdef CONFIG_EXYNOS_ATAGS
 #include <plat/cpu.h>
@@ -33,11 +34,15 @@
 
 static DEFINE_SPINLOCK(irq_controller_lock);
 
+static LIST_HEAD(combiner_list);
+
 struct combiner_chip_data {
+	struct list_head list;
 	unsigned int hwirq_offset;
 	unsigned int irq_mask;
 	void __iomem *base;
 	unsigned int parent_irq;
+	u32 combiner_save_mask;
 };
 
 static struct irq_domain *combiner_irq_domain;
@@ -133,6 +138,7 @@ static void __init combiner_init_one(struct combiner_chip_data *combiner_data,
 	combiner_data->hwirq_offset = (combiner_nr & ~3) * IRQ_IN_COMBINER;
 	combiner_data->irq_mask = 0xff << ((combiner_nr % 4) << 3);
 	combiner_data->parent_irq = irq;
+	list_add_tail(&combiner_data->list, &combiner_list);
 
 	/* Disable all interrupts */
 	__raw_writel(combiner_data->irq_mask, base + COMBINER_ENABLE_CLEAR);
@@ -242,13 +248,46 @@ void __init combiner_init(void __iomem *combiner_base,
 	}
 }
 
+#ifdef CONFIG_PM
+static int combiner_suspend(void)
+{
+	struct combiner_chip_data *cd;
+
+	list_for_each_entry(cd, &combiner_list, list) {
+		cd->combiner_save_mask = __raw_readl(cd->base
+						+ COMBINER_ENABLE_SET);
+	}
+	return 0;
+}
+
+static void combiner_resume(void)
+{
+	struct combiner_chip_data *cd;
+
+	list_for_each_entry(cd, &combiner_list, list) {
+		u32 mask = cd->combiner_save_mask;
+			__raw_writel(~mask, cd->base + COMBINER_ENABLE_CLEAR);
+			__raw_writel(mask, cd->base + COMBINER_ENABLE_SET);
+	}
+}
+#else
+#define irq_gc_suspend NULL
+#define irq_gc_resume NULL
+#endif
+
+static struct syscore_ops combiner_syscore_ops = {
+	.suspend = combiner_suspend,
+	.resume = combiner_resume,
+};
+
 #ifdef CONFIG_OF
 static int __init combiner_of_init(struct device_node *np,
 				   struct device_node *parent)
 {
 	void __iomem *combiner_base;
 	unsigned int max_nr = 20;
-	int irq_base = -1;
+	unsigned int irq_base = 0;
+	int ret = 0;
 
 	combiner_base = of_iomap(np, 0);
 	if (!combiner_base) {
@@ -262,14 +301,22 @@ static int __init combiner_of_init(struct device_node *np,
 			__func__, max_nr);
 	}
 
-	/* 
+	/*
 	 * FIXME: This is a hardwired COMBINER_IRQ(0,0). Once all devices
 	 * get their IRQ from DT, remove this in order to get dynamic
 	 * allocation.
 	 */
-	irq_base = 160;
+	ret = of_property_read_u32(np, "samsung,combiner-irqbase", &irq_base);
+	if (ret) {
+		irq_base = 160;
+		pr_info("%s: irq base not specified, "
+			"setting default as %d.\n",
+			__func__, irq_base);
+	}
 
 	combiner_init(combiner_base, np, max_nr, irq_base);
+
+	register_syscore_ops(&combiner_syscore_ops);
 
 	return 0;
 }

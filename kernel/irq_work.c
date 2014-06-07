@@ -178,6 +178,7 @@ static int irq_work_cpu_notify(struct notifier_block *self,
 
 	switch (action) {
 	case CPU_DYING:
+	case CPU_DYING_FROZEN:
 		/* Called from stop_machine */
 		if (WARN_ON_ONCE(cpu != smp_processor_id()))
 			break;

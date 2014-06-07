@@ -14,7 +14,16 @@ enum {
 	PM_QOS_RESERVED = 0,
 	PM_QOS_CPU_DMA_LATENCY,
 	PM_QOS_NETWORK_LATENCY,
+	PM_QOS_MEMORY_THROUGHPUT,
+	PM_QOS_DEVICE_THROUGHPUT,
+	PM_QOS_BUS_THROUGHPUT,
 	PM_QOS_NETWORK_THROUGHPUT,
+	PM_QOS_CPU_FREQ_MIN,
+	PM_QOS_CPU_FREQ_MAX,
+	PM_QOS_KFC_FREQ_MIN,
+	PM_QOS_KFC_FREQ_MAX,
+	PM_QOS_DISPLAY_THROUGHPUT,
+	PM_QOS_CAM_THROUGHPUT,
 
 	/* insert new class ID */
 	PM_QOS_NUM_CLASSES,
@@ -31,8 +40,17 @@ enum pm_qos_flags_status {
 
 #define PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE	(2000 * USEC_PER_SEC)
 #define PM_QOS_NETWORK_LAT_DEFAULT_VALUE	(2000 * USEC_PER_SEC)
+#define PM_QOS_MEMORY_THROUGHPUT_DEFAULT_VALUE	0
+#define PM_QOS_DEVICE_THROUGHPUT_DEFAULT_VALUE	0
+#define PM_QOS_BUS_THROUGHPUT_DEFAULT_VALUE	0
+#define PM_QOS_DISPLAY_THROUGHPUT_DEFAULT_VALUE	0
+#define PM_QOS_CAM_THROUGHPUT_DEFAULT_VALUE	0
 #define PM_QOS_NETWORK_THROUGHPUT_DEFAULT_VALUE	0
 #define PM_QOS_DEV_LAT_DEFAULT_VALUE		0
+#define PM_QOS_CPU_FREQ_MIN_DEFAULT_VALUE	0
+#define PM_QOS_CPU_FREQ_MAX_DEFAULT_VALUE	INT_MAX
+#define PM_QOS_KFC_FREQ_MIN_DEFAULT_VALUE	0
+#define PM_QOS_KFC_FREQ_MAX_DEFAULT_VALUE	INT_MAX
 
 #define PM_QOS_FLAG_NO_POWER_OFF	(1 << 0)
 #define PM_QOS_FLAG_REMOTE_WAKEUP	(1 << 1)
@@ -65,7 +83,9 @@ struct dev_pm_qos_request {
 enum pm_qos_type {
 	PM_QOS_UNITIALIZED,
 	PM_QOS_MAX,		/* return the largest value */
-	PM_QOS_MIN		/* return the smallest value */
+	PM_QOS_MIN,		/* return the smallest value */
+	PM_QOS_SUM,		/* return sum of values greater than zero */
+	PM_QOS_FORCE_MAX,
 };
 
 /*
@@ -107,6 +127,8 @@ static inline int dev_pm_qos_request_active(struct dev_pm_qos_request *req)
 
 int pm_qos_update_target(struct pm_qos_constraints *c, struct plist_node *node,
 			 enum pm_qos_req_action action, int value);
+int pm_qos_update_constraints(int pm_qos_class,
+			struct pm_qos_constraints *constraints);
 bool pm_qos_update_flags(struct pm_qos_flags *pqf,
 			 struct pm_qos_flags_request *req,
 			 enum pm_qos_req_action action, s32 val);

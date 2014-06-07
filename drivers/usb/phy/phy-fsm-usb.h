@@ -43,6 +43,8 @@
 
 /* OTG state machine according to the OTG spec */
 struct otg_fsm {
+	int reset;
+
 	/* Input */
 	int a_bus_resume;
 	int a_bus_suspend;
@@ -86,12 +88,12 @@ struct otg_fsm {
 
 	/* Current usb protocol used: 0:undefine; 1:host; 2:client */
 	int protocol;
-	spinlock_t lock;
+	struct mutex lock;
 };
 
 struct otg_fsm_ops {
 	void	(*chrg_vbus)(int on);
-	void	(*drv_vbus)(int on);
+	void	(*drv_vbus)(struct otg_fsm *fsm, int on);
 	void	(*loc_conn)(int on);
 	void	(*loc_sof)(int on);
 	void	(*start_pulse)(void);
@@ -111,7 +113,7 @@ static inline void otg_drv_vbus(struct otg_fsm *fsm, int on)
 {
 	if (fsm->drv_vbus != on) {
 		fsm->drv_vbus = on;
-		fsm->ops->drv_vbus(on);
+		fsm->ops->drv_vbus(fsm, on);
 	}
 }
 
@@ -144,6 +146,20 @@ static inline void otg_add_timer(struct otg_fsm *fsm, void *timer)
 static inline void otg_del_timer(struct otg_fsm *fsm, void *timer)
 {
 	fsm->ops->del_timer(timer);
+}
+
+static inline int otg_start_host(struct otg_fsm *fsm, int on)
+{
+	if (!fsm->ops->start_host)
+		return -EOPNOTSUPP;
+	return fsm->ops->start_host(fsm, on);
+}
+
+static inline int otg_start_gadget(struct otg_fsm *fsm, int on)
+{
+	if (!fsm->ops->start_gadget)
+		return -EOPNOTSUPP;
+	return fsm->ops->start_gadget(fsm, on);
 }
 
 int otg_statemachine(struct otg_fsm *fsm);

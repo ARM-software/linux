@@ -166,9 +166,10 @@ config TEGRA_IOMMU_SMMU
 	  space through the SMMU (System Memory Management Unit)
 	  hardware included on Tegra SoCs.
 
+# EXYNOS IOMMU support
 config EXYNOS_IOMMU
 	bool "Exynos IOMMU Support"
-	depends on ARCH_EXYNOS && EXYNOS_DEV_SYSMMU
+	depends on ARCH_EXYNOS
 	select IOMMU_API
 	help
 	  Support for the IOMMU(System MMU) of Samsung Exynos application
@@ -177,6 +178,50 @@ config EXYNOS_IOMMU
 	  address spaces
 
 	  If unsure, say N here.
+
+choice
+	prompt "Select Exynos IOMMU Type"
+	default EXYNOS7_IOMMU
+	depends on EXYNOS_IOMMU
+
+config EXYNOS5_IOMMU
+	bool "Exynos5 IOMMU Support (System MMU v1/2/3)"
+
+config EXYNOS7_IOMMU
+	bool "Exynos7 IOMMU Support (System MMU v5~)"
+
+endchoice
+
+config EXYNOS7_IOMMU_CHECK_DF
+	bool "Check direct fetch capability"
+	depends on EXYNOS7_IOMMU
+	default y
+	help
+	  Support for Direct fetch functionality. This allows to check
+	  direct fetch capability before setting special slots.
+
+config EXYNOS_IOVMM
+	bool "IO Virtual Memory Manager for Exynos IOMMUs"
+	select GENERIC_ALLOCATOR
+	depends on EXYNOS_IOMMU
+	default y
+	help
+	  Supporting the users of Exynos IOMMU for allocating and mapping
+	  an IO virtual memory region with a physical memory region
+	  and managing the allocated virtual memory regions.
+
+config EXYNOS_IOMMU_NO_MASTER_CLKGATE
+	bool "Always enable master's clock when System MMU is enabled"
+	depends on EXYNOS_IOMMU || EXYNOS7_IOMMU
+	default y
+	help
+	  Exynos IOMMU driver gates master's clock when access to the MMIO of
+	  System MMU is required. However, if the master's device driver does
+	  not handle the master's gate clocks, Exynos IOMMU driver may disable
+	  the master's clock.
+	  Say Y if Exynos IOMMU driver always enable the master's gate clock
+	  if System MMU is enabled to guarantee that the master's clock is not
+	  gated by System MMU driver.
 
 config EXYNOS_IOMMU_DEBUG
 	bool "Debugging log for Exynos IOMMU"

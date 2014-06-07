@@ -72,32 +72,38 @@ void exynos4212_register_clocks(void);
 #define exynos4212_register_clocks()
 #endif
 
+#ifdef CONFIG_SOC_EXYNOS5430
+int exynos5430_pmu_init(void);
+#else
+#define exynos5430_pmu_init()
+#endif
+
+#ifdef CONFIG_SOC_EXYNOS5422
+int exynos5422_pmu_init(void);
+#else
+#define exynos5422_pmu_init()
+#endif
+
 struct device_node;
 void combiner_init(void __iomem *combiner_base, struct device_node *np,
 			unsigned int max_nr, int irq_base);
 
 extern struct smp_operations exynos_smp_ops;
-
 extern void exynos_cpu_die(unsigned int cpu);
 
-/* PMU(Power Management Unit) support */
+extern void set_boot_flag(unsigned int cpu, unsigned int mode);
+extern void clear_boot_flag(unsigned int cpu, unsigned int mode);
+extern void cci_snoop_disable(unsigned int sif);
 
-#define PMU_TABLE_END	NULL
-
-enum sys_powerdown {
-	SYS_AFTR,
-	SYS_LPA,
-	SYS_SLEEP,
-	NUM_SYS_POWERDOWN,
+struct exynos_cpu_power_ops {
+	void (*power_up)(unsigned int cpu_id);
+	unsigned int (*power_state)(unsigned int cpu_id);
+	void (*power_down)(unsigned int cpu_id);
+	void (*cluster_down)(unsigned int cluster);
+	unsigned int (*cluster_state)(unsigned int cluster);
+	bool (*is_last_core)(unsigned int cpu);
 };
 
-extern unsigned long l2x0_regs_phys;
-struct exynos_pmu_conf {
-	void __iomem *reg;
-	unsigned int val[NUM_SYS_POWERDOWN];
-};
-
-extern void exynos_sys_powerdown_conf(enum sys_powerdown mode);
-extern void s3c_cpu_resume(void);
+extern struct exynos_cpu_power_ops exynos_cpu;
 
 #endif /* __ARCH_ARM_MACH_EXYNOS_COMMON_H */

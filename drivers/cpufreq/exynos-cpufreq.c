@@ -20,7 +20,7 @@
 
 #include <plat/cpu.h>
 
-#include "exynos-cpufreq.h"
+#include <mach/cpufreq.h>
 
 static struct exynos_dvfs_info *exynos_info;
 

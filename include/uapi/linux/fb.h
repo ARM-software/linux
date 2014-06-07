@@ -226,6 +226,10 @@ struct fb_bitfield {
 #define FB_VMODE_SMOOTH_XPAN	512	/* smooth xpan possible (internally used) */
 #define FB_VMODE_CONUPDATE	512	/* don't update x/yoffset	*/
 
+#define FB_FLAG_RATIO_4_3      64
+#define FB_FLAG_RATIO_16_9     128
+#define FB_FLAG_PIXEL_REPEAT   256
+
 /*
  * Display rotation support
  */

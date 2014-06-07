@@ -5,6 +5,8 @@
 ccflags-$(CONFIG_USB_DEBUG) := -DDEBUG
 
 obj-$(CONFIG_USB_PHY)			+= phy.o
+obj-$(CONFIG_OF)			+= of.o
+obj-$(CONFIG_USB_OTG_WAKELOCK)		+= otg-wakelock.o
 
 # transceiver drivers, keep the list sorted
 
@@ -19,6 +21,7 @@ obj-$(CONFIG_OMAP_USB2)			+= phy-omap-usb2.o
 obj-$(CONFIG_OMAP_USB3)			+= phy-omap-usb3.o
 obj-$(CONFIG_SAMSUNG_USBPHY)		+= phy-samsung-usb.o
 obj-$(CONFIG_SAMSUNG_USB2PHY)		+= phy-samsung-usb2.o
+obj-$(CONFIG_SAMSUNG_USB2PHY_DUMMY)	+= phy-samsung-usb2-dummy.o
 obj-$(CONFIG_SAMSUNG_USB3PHY)		+= phy-samsung-usb3.o
 obj-$(CONFIG_TWL4030_USB)		+= phy-twl4030-usb.o
 obj-$(CONFIG_TWL6030_USB)		+= phy-twl6030-usb.o

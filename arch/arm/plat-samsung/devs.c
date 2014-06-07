@@ -50,7 +50,6 @@
 #include <plat/adc.h>
 #include <linux/platform_data/ata-samsung_cf.h>
 #include <linux/platform_data/usb-ehci-s5p.h>
-#include <plat/fb.h>
 #include <plat/fb-s3c2410.h>
 #include <plat/hdmi.h>
 #include <linux/platform_data/hwmon-s3c.h>
@@ -1499,10 +1498,13 @@ struct platform_device s3c64xx_device_spi0 = {
 	},
 };
 
-void __init s3c64xx_spi0_set_platdata(int (*cfg_gpio)(void), int src_clk_nr,
-						int num_cs)
+void __init s3c64xx_spi0_set_platdata(struct s3c64xx_spi_info *pd,
+				      int src_clk_nr, int num_cs)
 {
-	struct s3c64xx_spi_info pd;
+	if (!pd) {
+		pr_err("%s:Need to pass platform data\n", __func__);
+		return;
+	}
 
 	/* Reject invalid configuration */
 	if (!num_cs || src_clk_nr < 0) {
@@ -1510,14 +1512,22 @@ void __init s3c64xx_spi0_set_platdata(int (*cfg_gpio)(void), int src_clk_nr,
 		return;
 	}
 
-	pd.num_cs = num_cs;
-	pd.src_clk_nr = src_clk_nr;
-	pd.cfg_gpio = (cfg_gpio) ? cfg_gpio : s3c64xx_spi0_cfg_gpio;
+	pd->num_cs = num_cs;
+	pd->src_clk_nr = src_clk_nr;
+	if (!pd->cfg_gpio)
+		pd->cfg_gpio = s3c64xx_spi0_cfg_gpio;
+
+	if (pd->dma_mode != CPU_MODE)
+		pd->dma_mode = DMA_MODE;
+
+	if (pd->swap_mode != SWAP_MODE)
+		pd->dma_mode = SWAP_MODE;
+
 #ifdef CONFIG_PL330_DMA
 	pd.filter = pl330_filter;
 #endif
 
-	s3c_set_platdata(&pd, sizeof(pd), &s3c64xx_device_spi0);
+	s3c_set_platdata(pd, sizeof(*pd), &s3c64xx_device_spi0);
 }
 #endif /* CONFIG_S3C64XX_DEV_SPI0 */
 
@@ -1540,10 +1550,13 @@ struct platform_device s3c64xx_device_spi1 = {
 	},
 };
 
-void __init s3c64xx_spi1_set_platdata(int (*cfg_gpio)(void), int src_clk_nr,
-						int num_cs)
+void __init s3c64xx_spi1_set_platdata(struct s3c64xx_spi_info *pd,
+				      int src_clk_nr, int num_cs)
 {
-	struct s3c64xx_spi_info pd;
+	if (!pd) {
+		pr_err("%s:Need to pass platform data\n", __func__);
+		return;
+	}
 
 	/* Reject invalid configuration */
 	if (!num_cs || src_clk_nr < 0) {
@@ -1551,14 +1564,22 @@ void __init s3c64xx_spi1_set_platdata(int (*cfg_gpio)(void), int src_clk_nr,
 		return;
 	}
 
-	pd.num_cs = num_cs;
-	pd.src_clk_nr = src_clk_nr;
-	pd.cfg_gpio = (cfg_gpio) ? cfg_gpio : s3c64xx_spi1_cfg_gpio;
+	pd->num_cs = num_cs;
+	pd->src_clk_nr = src_clk_nr;
+	if (!pd->cfg_gpio)
+		pd->cfg_gpio = s3c64xx_spi1_cfg_gpio;
+
+	if (pd->dma_mode != CPU_MODE)
+		pd->dma_mode = DMA_MODE;
+
+	if (pd->swap_mode != SWAP_MODE)
+		pd->dma_mode = SWAP_MODE;
+
 #ifdef CONFIG_PL330_DMA
 	pd.filter = pl330_filter;
 #endif
 
-	s3c_set_platdata(&pd, sizeof(pd), &s3c64xx_device_spi1);
+	s3c_set_platdata(pd, sizeof(*pd), &s3c64xx_device_spi1);
 }
 #endif /* CONFIG_S3C64XX_DEV_SPI1 */
 
@@ -1581,10 +1602,13 @@ struct platform_device s3c64xx_device_spi2 = {
 	},
 };
 
-void __init s3c64xx_spi2_set_platdata(int (*cfg_gpio)(void), int src_clk_nr,
-						int num_cs)
+void __init s3c64xx_spi2_set_platdata(struct s3c64xx_spi_info *pd,
+				      int src_clk_nr, int num_cs)
 {
-	struct s3c64xx_spi_info pd;
+	if (!pd) {
+		pr_err("%s:Need to pass platform data\n", __func__);
+		return;
+	}
 
 	/* Reject invalid configuration */
 	if (!num_cs || src_clk_nr < 0) {
@@ -1592,13 +1616,21 @@ void __init s3c64xx_spi2_set_platdata(int (*cfg_gpio)(void), int src_clk_nr,
 		return;
 	}
 
-	pd.num_cs = num_cs;
-	pd.src_clk_nr = src_clk_nr;
-	pd.cfg_gpio = (cfg_gpio) ? cfg_gpio : s3c64xx_spi2_cfg_gpio;
+	pd->num_cs = num_cs;
+	pd->src_clk_nr = src_clk_nr;
+	if (!pd->cfg_gpio)
+		pd->cfg_gpio = s3c64xx_spi2_cfg_gpio;
+
+	if (pd->dma_mode != CPU_MODE)
+		pd->dma_mode = DMA_MODE;
+
+	if (pd->swap_mode != SWAP_MODE)
+		pd->dma_mode = SWAP_MODE;
+
 #ifdef CONFIG_PL330_DMA
 	pd.filter = pl330_filter;
 #endif
 
-	s3c_set_platdata(&pd, sizeof(pd), &s3c64xx_device_spi2);
+	s3c_set_platdata(pd, sizeof(*pd), &s3c64xx_device_spi2);
 }
 #endif /* CONFIG_S3C64XX_DEV_SPI2 */

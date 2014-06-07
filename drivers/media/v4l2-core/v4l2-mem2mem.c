@@ -202,7 +202,7 @@ static void v4l2_m2m_try_run(struct v4l2_m2m_dev *m2m_dev)
  * An example of the above could be an instance that requires more than one
  * src/dst buffer per transaction.
  */
-static void v4l2_m2m_try_schedule(struct v4l2_m2m_ctx *m2m_ctx)
+void v4l2_m2m_try_schedule(struct v4l2_m2m_ctx *m2m_ctx)
 {
 	struct v4l2_m2m_dev *m2m_dev;
 	unsigned long flags_job, flags_out, flags_cap;
@@ -438,6 +438,14 @@ int v4l2_m2m_streamoff(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 	m2m_dev = m2m_ctx->m2m_dev;
 	spin_lock_irqsave(&m2m_dev->job_spinlock, flags_job);
 	/* We should not be scheduled anymore, since we're dropping a queue. */
+	if (!list_empty(&m2m_dev->job_queue)) {
+		struct v4l2_m2m_ctx *list_ctx, *temp_ctx;
+		list_for_each_entry_safe(list_ctx, temp_ctx,
+			&m2m_dev->job_queue, queue) {
+		if (list_ctx == m2m_ctx)
+			list_del(&m2m_ctx->queue);
+		}
+	}
 	INIT_LIST_HEAD(&m2m_ctx->queue);
 	m2m_ctx->job_flags = 0;
 

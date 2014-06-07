@@ -36,7 +36,9 @@
 struct cma {
 	unsigned long	base_pfn;
 	unsigned long	count;
+	unsigned long	free_count;
 	unsigned long	*bitmap;
+	bool isolated;
 };
 
 struct cma *dma_contiguous_default_area;
@@ -165,12 +167,13 @@ static __init struct cma *cma_create_area(unsigned long base_pfn,
 
 	pr_debug("%s(base %08lx, count %lx)\n", __func__, base_pfn, count);
 
-	cma = kmalloc(sizeof *cma, GFP_KERNEL);
+	cma = kzalloc(sizeof *cma, GFP_KERNEL);
 	if (!cma)
 		return ERR_PTR(-ENOMEM);
 
 	cma->base_pfn = base_pfn;
 	cma->count = count;
+	cma->free_count = count;
 	cma->bitmap = kzalloc(bitmap_size, GFP_KERNEL);
 
 	if (!cma->bitmap)
@@ -334,10 +337,12 @@ struct page *dma_alloc_from_contiguous(struct device *dev, int count,
 			break;
 
 		pfn = cma->base_pfn + pageno;
-		ret = alloc_contig_range(pfn, pfn + count, MIGRATE_CMA);
+		ret = cma->isolated ?
+			0 : alloc_contig_range(pfn, pfn + count, MIGRATE_CMA);
 		if (ret == 0) {
 			bitmap_set(cma->bitmap, pageno, count);
 			page = pfn_to_page(pfn);
+			cma->free_count -= count;
 			break;
 		} else if (ret != -EBUSY) {
 			break;
@@ -383,8 +388,134 @@ bool dma_release_from_contiguous(struct device *dev, struct page *pages,
 
 	mutex_lock(&cma_mutex);
 	bitmap_clear(cma->bitmap, pfn - cma->base_pfn, count);
-	free_contig_range(pfn, count);
+	if (!cma->isolated)
+		free_contig_range(pfn, count);
+	cma->free_count += count;
 	mutex_unlock(&cma_mutex);
 
 	return true;
+}
+
+/**
+ * dma_contiguous_info() - retrieving contiguous memory information
+ * @dev:  Pointer to device to get the information.
+ * @info: [OUT] pointer to a structure to store the information
+ *
+ * This fills @info the status of a contiguous memory. -ENODEV if
+ * the given device does not have contiguous memory.
+ */
+int dma_contiguous_info(struct device *dev, struct cma_info *info)
+{
+	struct cma *cma = dev_get_cma_area(dev);
+
+	if (!info)
+		return 0;
+
+	if (!cma)
+		return -ENODEV;
+
+	info->base = cma->base_pfn << PAGE_SHIFT;
+	info->size = cma->count << PAGE_SHIFT;
+	info->free = cma->free_count << PAGE_SHIFT;
+
+	return 0;
+}
+
+static void dma_contiguous_deisolate_until(struct device *dev, int idx_until)
+{
+	struct cma *cma = dev_get_cma_area(dev);
+	int idx;
+
+	if (!cma || !idx_until)
+		return;
+
+	mutex_lock(&cma_mutex);
+
+	if (!cma->isolated) {
+		mutex_unlock(&cma_mutex);
+		dev_err(dev, "Not isolated!\n");
+		return;
+	}
+
+	idx = find_first_zero_bit(cma->bitmap, idx_until);
+	while (idx < idx_until) {
+		int idx_set;
+
+		idx_set = find_next_bit(cma->bitmap, idx_until, idx);
+
+		free_contig_range(cma->base_pfn + idx, idx_set - idx);
+
+		idx = find_next_zero_bit(cma->bitmap, idx_until, idx_set);
+	}
+
+	cma->isolated = false;
+
+	mutex_unlock(&cma_mutex);
+}
+
+/**
+ * dma_contiguous_deisolate() - return contiguous memory to the page allocator
+ * @dev: Pointer to device which owns the contiguous memory
+ *
+ * This function return the contiguous memory that is not allocated by CMA to
+ * the page allocator so that the kernel can allocate the contiguous memory.
+ */
+void dma_contiguous_deisolate(struct device *dev)
+{
+	struct cma *cma = dev_get_cma_area(dev);
+	dma_contiguous_deisolate_until(dev, cma->count);
+}
+
+/**
+ * dma_contiguous_isolate() - isolate contiguous memory from the page allocator
+ * @dev: Pointer to device which owns the contiguous memory
+ *
+ * This function isolates contiguous memory from the page allocator. If some of
+ * the contiguous memory is allocated, it is reclaimed.
+ */
+int dma_contiguous_isolate(struct device *dev)
+{
+	struct cma *cma = dev_get_cma_area(dev);
+	int ret;
+	int idx;
+
+	if (!cma)
+		return -ENODEV;
+
+	if (cma->count == 0)
+		return 0;
+
+	mutex_lock(&cma_mutex);
+
+	if (cma->isolated) {
+		mutex_unlock(&cma_mutex);
+		dev_err(dev, "Alread isolated!\n");
+		return 0;
+	}
+
+	idx = find_first_zero_bit(cma->bitmap, cma->count);
+	while (idx < cma->count) {
+		int idx_set;
+
+		idx_set = find_next_bit(cma->bitmap, cma->count, idx);
+		ret = alloc_contig_range(cma->base_pfn + idx,
+					cma->base_pfn + idx_set,
+					MIGRATE_CMA);
+		if (ret != 0) {
+			mutex_unlock(&cma_mutex);
+			dma_contiguous_deisolate_until(dev, idx_set);
+			dev_err(dev, "Failed to isolate %#lx@%#010x.\n",
+				(idx_set - idx) * PAGE_SIZE,
+				PFN_PHYS(cma->base_pfn + idx));
+			return ret;
+		}
+
+		idx = find_next_zero_bit(cma->bitmap, cma->count, idx_set);
+	}
+
+	cma->isolated = true;
+
+	mutex_unlock(&cma_mutex);
+
+	return 0;
 }

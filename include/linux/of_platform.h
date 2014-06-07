@@ -81,6 +81,7 @@ extern struct platform_device *of_device_alloc(struct device_node *np,
 					 const char *bus_id,
 					 struct device *parent);
 extern struct platform_device *of_find_device_by_node(struct device_node *np);
+extern struct amba_device *of_find_amba_device_by_node(struct device_node *np);
 
 #ifdef CONFIG_OF_ADDRESS /* device reg helpers depend on OF_ADDRESS */
 /* Platform devices and busses creation */

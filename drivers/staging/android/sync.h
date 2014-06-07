@@ -20,6 +20,7 @@
 #include <linux/ktime.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
+#include <linux/seq_file.h>
 #include <linux/wait.h>
 
 struct sync_timeline;

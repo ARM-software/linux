@@ -758,6 +758,7 @@ static int snd_soc_dapm_suspend_check(struct snd_soc_dapm_widget *widget)
 	}
 }
 
+#ifndef CONFIG_SND_SOC_WM8994
 /* add widget to list if it's not already in the list */
 static int dapm_list_add_widget(struct snd_soc_dapm_widget_list **list,
 	struct snd_soc_dapm_widget *w)
@@ -796,6 +797,7 @@ static int dapm_list_add_widget(struct snd_soc_dapm_widget_list **list,
 	wlist->num_widgets++;
 	return 1;
 }
+#endif
 
 /*
  * Recursively check for a completed path to an active or physically connected
@@ -850,6 +852,24 @@ static int is_connected_output_ep(struct snd_soc_dapm_widget *widget,
 		}
 	}
 
+#ifdef CONFIG_SND_SOC_WM8994
+	list_for_each_entry(path, &widget->sinks, list_source) {
+		DAPM_UPDATE_STAT(widget, neighbour_checks);
+
+		if (path->weak)
+			continue;
+
+		if (path->walked)
+			continue;
+
+		trace_snd_soc_dapm_output_path(widget, path);
+
+		if (path->sink && path->connect) {
+			path->walked = 1;
+			con += is_connected_output_ep(path->sink, list);
+		}
+	}
+#else
 	list_for_each_entry(path, &widget->sinks, list_source) {
 		DAPM_UPDATE_STAT(widget, neighbour_checks);
 
@@ -886,6 +906,7 @@ static int is_connected_output_ep(struct snd_soc_dapm_widget *widget,
 			path->walking = 0;
 		}
 	}
+#endif
 
 	widget->outputs = con;
 
@@ -957,6 +978,24 @@ static int is_connected_input_ep(struct snd_soc_dapm_widget *widget,
 		}
 	}
 
+#ifdef CONFIG_SND_SOC_WM8994
+	list_for_each_entry(path, &widget->sources, list_sink) {
+		DAPM_UPDATE_STAT(widget, neighbour_checks);
+
+		if (path->weak)
+			continue;
+
+		if (path->walked)
+			continue;
+
+		trace_snd_soc_dapm_input_path(widget, path);
+
+		if (path->source && path->connect) {
+			path->walked = 1;
+			con += is_connected_input_ep(path->source, list);
+		}
+	}
+#else
 	list_for_each_entry(path, &widget->sources, list_sink) {
 		DAPM_UPDATE_STAT(widget, neighbour_checks);
 
@@ -993,6 +1032,7 @@ static int is_connected_input_ep(struct snd_soc_dapm_widget *widget,
 			path->walking = 0;
 		}
 	}
+#endif
 
 	widget->inputs = con;
 

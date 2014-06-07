@@ -171,7 +171,7 @@ void s3c_pm_do_save(struct sleep_save *ptr, int count)
 {
 	for (; count > 0; count--, ptr++) {
 		ptr->val = __raw_readl(ptr->reg);
-		S3C_PMDBG("saved %p value %08lx\n", ptr->reg, ptr->val);
+		pr_debug("saved %p value %08lx\n", ptr->reg, ptr->val);
 	}
 }
 
@@ -232,7 +232,8 @@ static void __maybe_unused s3c_pm_show_resume_irqs(int start,
 	}
 }
 
-
+void (*pm_logic_prep)(void);
+void (*pm_logic_finish)(void);
 void (*pm_cpu_prep)(void);
 int (*pm_cpu_sleep)(unsigned long);
 
@@ -293,10 +294,6 @@ static int s3c_pm_enter(suspend_state_t state)
 
 	pm_cpu_prep();
 
-	/* flush cache back to ram */
-
-	flush_cache_all();
-
 	s3c_pm_check_store();
 
 	/* send the cpu to sleep... */
@@ -345,12 +342,16 @@ static int s3c_pm_prepare(void)
 	/* prepare check area if configured */
 
 	s3c_pm_check_prepare();
+	if (pm_logic_prep)
+		pm_logic_prep();
 	return 0;
 }
 
 static void s3c_pm_finish(void)
 {
 	s3c_pm_check_cleanup();
+	if (pm_logic_finish)
+		pm_logic_finish();
 }
 
 static const struct platform_suspend_ops s3c_pm_ops = {

@@ -20,7 +20,7 @@ static void of_get_regulation_constraints(struct device_node *np,
 					struct regulator_init_data **init_data)
 {
 	const __be32 *min_uV, *max_uV, *uV_offset;
-	const __be32 *min_uA, *max_uA, *ramp_delay;
+	const __be32 *min_uA, *max_uA, *ramp_delay, *initial_mode;
 	struct regulation_constraints *constraints = &(*init_data)->constraints;
 
 	constraints->name = of_get_property(np, "regulator-name", NULL);
@@ -64,6 +64,10 @@ static void of_get_regulation_constraints(struct device_node *np,
 	ramp_delay = of_get_property(np, "regulator-ramp-delay", NULL);
 	if (ramp_delay)
 		constraints->ramp_delay = be32_to_cpu(*ramp_delay);
+
+	initial_mode = of_get_property(np, "regulator-initial-mode", NULL);
+	if (initial_mode)
+		constraints->initial_mode = be32_to_cpu(*initial_mode);
 }
 
 /**

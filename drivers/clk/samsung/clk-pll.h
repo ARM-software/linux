@@ -12,6 +12,33 @@
 #ifndef __SAMSUNG_CLK_PLL_H
 #define __SAMSUNG_CLK_PLL_H
 
+#define PLL_35XX_RATE(_rate, _m, _p, _s)			\
+	{							\
+		.rate	=	(_rate),				\
+		.mdiv	=	(_m),				\
+		.pdiv	=	(_p),				\
+		.sdiv	=	(_s),				\
+	}
+
+#define PLL_36XX_RATE(_rate, _m, _p, _s, _k)			\
+	{							\
+		.rate	=	(_rate),				\
+		.mdiv	=	(_m),				\
+		.pdiv	=	(_p),				\
+		.sdiv	=	(_s),				\
+		.kdiv	=	(_k),				\
+	}
+
+/* NOTE: Rate table should be kept sorted in descending order. */
+
+struct samsung_pll_rate_table {
+	unsigned int rate;
+	unsigned int pdiv;
+	unsigned int mdiv;
+	unsigned int sdiv;
+	unsigned int kdiv;
+};
+
 enum pll45xx_type {
 	pll_4500,
 	pll_4502,
@@ -25,9 +52,15 @@ enum pll46xx_type {
 };
 
 extern struct clk * __init samsung_clk_register_pll35xx(const char *name,
-			const char *pname, const void __iomem *con_reg);
+			const char *pname, void __iomem *lock_reg,
+			void __iomem *con_reg,
+			const struct samsung_pll_rate_table *rate_table,
+			const unsigned int rate_count);
 extern struct clk * __init samsung_clk_register_pll36xx(const char *name,
-			const char *pname, const void __iomem *con_reg);
+			const char *pname, void __iomem *lock_reg,
+			void __iomem *con_reg,
+			const struct samsung_pll_rate_table *rate_table,
+			const unsigned int rate_count);
 extern struct clk * __init samsung_clk_register_pll45xx(const char *name,
 			const char *pname, const void __iomem *con_reg,
 			enum pll45xx_type type);

@@ -334,6 +334,15 @@ config CHARGER_BQ2415X
 	  You'll need this driver to charge batteries on e.g. Nokia
 	  RX-51/N900.
 
+config CHARGER_BQ24160
+	tristate "TI BQ24160 battery charger driver"
+	depends on I2C
+	help
+	  Say Y to enable support for the TI BQ24160 battery charger
+	  PMICs.
+
+	  You'll need this driver to charge batteries on Xyref5430 board.
+
 config CHARGER_SMB347
 	tristate "Summit Microelectronics SMB347 Battery Charger"
 	depends on I2C

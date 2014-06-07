@@ -597,6 +597,16 @@ config IO_36
 
 comment "Processor Features"
 
+config ARM_TRUSTZONE
+	bool "Support TrustZone-enabled Trusted Execution Environment"
+	default y
+	help
+	  Select if you want a kernel to be executed at non-secure world.
+	  This option should be used with related secure bootloader and
+	  TrustZone software.
+
+	  If you don't know about TrustZone, say 'N'.
+
 config ARM_LPAE
 	bool "Support for the Large Physical Address Extension"
 	depends on MMU && CPU_32v7 && !CPU_32v6 && !CPU_32v5 && \
@@ -820,6 +830,11 @@ config DMA_CACHE_RWFO
 	  processors, if cache maintenance operations are not broadcast
 	  in hardware, other workarounds are needed (e.g. cache
 	  maintenance broadcasting in software via FIQ).
+
+config L2_AUTO_CLOCK_DISABLE
+	bool "Prevents the clock generator from stopping the L2 logic clock"
+	depends on CPU_V7
+	default n
 
 config OUTER_CACHE
 	bool

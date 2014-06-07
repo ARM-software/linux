@@ -1,0 +1,20 @@
+config VIDEO_EXYNOS_GSCALER_1_3
+	bool "Exynos G-Scaler driver(ver1.3)"
+	depends on VIDEO_EXYNOS
+	select MEDIA_EXYNOS
+	select V4L2_MEM2MEM_DEV
+	default n
+	help
+	  This is a v4l2 driver for exynos G-Scaler device.
+
+if VIDEO_EXYNOS_GSCALER_1_3 && VIDEOBUF2_CMA_PHYS
+comment "Reserved memory configurations"
+config VIDEO_SAMSUNG_MEMSIZE_GSC0
+	int "Memory size in kbytes for GSC0"
+	default "5120"
+
+config VIDEO_SAMSUNG_MEMSIZE_GSC1
+	int "Memory size in kbytes for GSC1"
+	default "5120"
+endif
+

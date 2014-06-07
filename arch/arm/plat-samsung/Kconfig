@@ -495,4 +495,10 @@ config DEBUG_S3C_UART
 	default "2" if DEBUG_S3C_UART2
 	default "3" if DEBUG_S3C_UART3
 
+config SAMSUNG_CORE_TEST
+	tristate "core configuration debugging"
+	depends on ARCH_EXYNOS5
+	help
+	  Debug core configuration.
+
 endif

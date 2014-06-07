@@ -9,6 +9,8 @@
  * published by the Free Software Foundation.
 */
 
+#include <linux/pm_qos.h>
+
 struct s3c24xx_uart_info {
 	char			*name;
 	unsigned int		type;
@@ -32,6 +34,32 @@ struct s3c24xx_uart_info {
 	int (*reset_port)(struct uart_port *, struct s3c2410_uartcfg *);
 };
 
+#ifdef CONFIG_SERIAL_SAMSUNG_DMA
+struct uart_dma_data {
+	unsigned ch;
+	unsigned int busy;
+	unsigned int req_size;
+	unsigned long fifo_base;
+	enum dma_ch req_ch;
+	enum dma_transfer_direction direction;
+};
+
+struct exynos_uart_dma {
+	unsigned int use_dma;
+
+	dma_addr_t tx_src_addr;
+	dma_addr_t rx_dst_addr;
+
+	struct uart_dma_data tx;
+	struct uart_dma_data rx;
+
+	struct samsung_dma_ops *ops;
+	struct platform_device *pdev;
+
+	char *rx_buff;
+};
+#endif
+
 struct s3c24xx_serial_drv_data {
 	struct s3c24xx_uart_info	*info;
 	struct s3c2410_uartcfg		*def_cfg;
@@ -41,24 +69,35 @@ struct s3c24xx_serial_drv_data {
 struct s3c24xx_uart_port {
 	unsigned char			rx_claimed;
 	unsigned char			tx_claimed;
-	unsigned int			pm_level;
 	unsigned long			baudclk_rate;
 
 	unsigned int			rx_irq;
 	unsigned int			tx_irq;
 
+#ifdef CONFIG_SERIAL_SAMSUNG_DMA
+	unsigned int                    err_irq;
+	unsigned int                    err_occurred;
+#endif
 	struct s3c24xx_uart_info	*info;
 	struct clk			*clk;
 	struct clk			*baudclk;
 	struct uart_port		port;
+#ifdef CONFIG_SERIAL_SAMSUNG_DMA
+	struct exynos_uart_dma          uart_dma;
+#endif
 	struct s3c24xx_serial_drv_data	*drv_data;
+
+	s32				mif_qos_val;
+	unsigned long			mif_qos_timeout;
 
 	/* reference to platform data */
 	struct s3c2410_uartcfg		*cfg;
 
-#ifdef CONFIG_CPU_FREQ
-	struct notifier_block		freq_transition;
-#endif
+	struct notifier_block		aud_uart_notifier;
+	struct platform_device		*pdev;
+
+	struct pm_qos_request		s3c24xx_uart_mif_qos;
+	struct delayed_work		mif_qos_work;
 };
 
 /* conversion functions */

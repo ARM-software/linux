@@ -20,24 +20,8 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 
-/**
- * struct samsung_clock_alias: information about mux clock
- * @id: platform specific id of the clock.
- * @dev_name: name of the device to which this clock belongs.
- * @alias: optional clock alias name to be assigned to this clock.
- */
-struct samsung_clock_alias {
-	unsigned int		id;
-	const char		*dev_name;
-	const char		*alias;
-};
-
-#define ALIAS(_id, dname, a)	\
-	{							\
-		.id		= _id,				\
-		.dev_name	= dname,			\
-		.alias		= a,				\
-	}
+#define MHZ (1000*1000)
+#define CLK_GATE_MULTI_BIT_SET   BIT(30)
 
 /**
  * struct samsung_fixed_rate_clock: information about fixed-rate clock
@@ -106,6 +90,52 @@ struct samsung_fixed_factor_clock {
  * @mux_flags: flags for mux-type clock.
  * @alias: optional clock alias name to be assigned to this clock.
  */
+
+#if defined(CONFIG_SOC_EXYNOS5430_REV_1)
+struct samsung_mux_clock {
+	unsigned int		id;
+	const char		*dev_name;
+	const char		*name;
+	const char		**parent_names;
+	u8			num_parents;
+	unsigned long		flags;
+	unsigned long		offset;
+	u8			shift;
+	u8			width;
+	u8			mux_flags;
+	const char		*alias;
+	unsigned long		stat_offset;
+	u8			stat_shift;
+	u8			stat_width;
+};
+
+#define __MUX(_id, dname, cname, pnames, o, s, w, f, mf, a, so, ss, sw)	\
+{							\
+	.id		= _id,				\
+	.dev_name	= dname,			\
+	.name		= cname,			\
+	.parent_names	= pnames,			\
+	.num_parents	= ARRAY_SIZE(pnames),		\
+	.flags		= f,				\
+	.offset		= o,				\
+	.shift		= s,				\
+	.width		= w,				\
+	.mux_flags	= mf,				\
+	.alias		= a,				\
+	.stat_offset	= so,				\
+	.stat_shift	= ss,				\
+	.stat_width	= sw,				\
+}
+
+#define MUX(_id, cname, pnames, o, s, w)			\
+	__MUX(_id, NULL, cname, pnames, o, s, w, 0, 0, NULL, 0, 0, 0)
+
+#define MUX_A(_id, cname, pnames, o, s, w, a)			\
+	__MUX(_id, NULL, cname, pnames, o, s, w, 0, 0, a, 0, 0, 0)
+
+#define MUX_STAT(_id, cname, pnames, o, s, w, so, ss, sw)			\
+	__MUX(_id, NULL, cname, pnames, o, s, w, 0, 0, NULL, so, ss, sw)
+#else
 struct samsung_mux_clock {
 	unsigned int		id;
 	const char		*dev_name;
@@ -121,19 +151,19 @@ struct samsung_mux_clock {
 };
 
 #define __MUX(_id, dname, cname, pnames, o, s, w, f, mf, a)	\
-	{							\
-		.id		= _id,				\
-		.dev_name	= dname,			\
-		.name		= cname,			\
-		.parent_names	= pnames,			\
-		.num_parents	= ARRAY_SIZE(pnames),		\
-		.flags		= f,				\
-		.offset		= o,				\
-		.shift		= s,				\
-		.width		= w,				\
-		.mux_flags	= mf,				\
-		.alias		= a,				\
-	}
+{							\
+	.id		= _id,				\
+	.dev_name	= dname,			\
+	.name		= cname,			\
+	.parent_names	= pnames,			\
+	.num_parents	= ARRAY_SIZE(pnames),		\
+	.flags		= f,				\
+	.offset		= o,				\
+	.shift		= s,				\
+	.width		= w,				\
+	.mux_flags	= mf,				\
+	.alias		= a,				\
+}
 
 #define MUX(_id, cname, pnames, o, s, w)			\
 	__MUX(_id, NULL, cname, pnames, o, s, w, 0, 0, NULL)
@@ -143,6 +173,7 @@ struct samsung_mux_clock {
 
 #define MUX_F(_id, cname, pnames, o, s, w, f, mf)		\
 	__MUX(_id, NULL, cname, pnames, o, s, w, f, mf, NULL)
+#endif
 
 /**
  * @id: platform specific id of the clock.
@@ -167,10 +198,9 @@ struct samsung_div_clock {
 	u8			width;
 	u8			div_flags;
 	const char		*alias;
-	struct clk_div_table	*table;
 };
 
-#define __DIV(_id, dname, cname, pname, o, s, w, f, df, a, t)	\
+#define __DIV(_id, dname, cname, pname, o, s, w, f, df, a)	\
 	{							\
 		.id		= _id,				\
 		.dev_name	= dname,			\
@@ -182,20 +212,16 @@ struct samsung_div_clock {
 		.width		= w,				\
 		.div_flags	= df,				\
 		.alias		= a,				\
-		.table		= t,				\
 	}
 
 #define DIV(_id, cname, pname, o, s, w)				\
-	__DIV(_id, NULL, cname, pname, o, s, w, 0, 0, NULL, NULL)
+	__DIV(_id, NULL, cname, pname, o, s, w, 0, 0, NULL)
 
 #define DIV_A(_id, cname, pname, o, s, w, a)			\
-	__DIV(_id, NULL, cname, pname, o, s, w, 0, 0, a, NULL)
+	__DIV(_id, NULL, cname, pname, o, s, w, 0, 0, a)
 
 #define DIV_F(_id, cname, pname, o, s, w, f, df)		\
-	__DIV(_id, NULL, cname, pname, o, s, w, f, df, NULL, NULL)
-
-#define DIV_T(_id, cname, pname, o, s, w, t)			\
-	__DIV(_id, NULL, cname, pname, o, s, w, 0, 0, NULL, t)
+	__DIV(_id, NULL, cname, pname, o, s, w, f, df, NULL)
 
 /**
  * struct samsung_gate_clock: information about gate clock
@@ -219,9 +245,10 @@ struct samsung_gate_clock {
 	u8			bit_idx;
 	u8			gate_flags;
 	const char		*alias;
+	unsigned long		set_bit;
 };
 
-#define __GATE(_id, dname, cname, pname, o, b, f, gf, a)	\
+#define __GATE(_id, dname, cname, pname, o, b, f, gf, a, s)	\
 	{							\
 		.id		= _id,				\
 		.dev_name	= dname,			\
@@ -232,19 +259,23 @@ struct samsung_gate_clock {
 		.bit_idx	= b,				\
 		.gate_flags	= gf,				\
 		.alias		= a,				\
+		.set_bit	= s,				\
 	}
 
 #define GATE(_id, cname, pname, o, b, f, gf)			\
-	__GATE(_id, NULL, cname, pname, o, b, f, gf, NULL)
+	__GATE(_id, NULL, cname, pname, o, b, f, gf, NULL, 0)
+
+#define MGATE(_id, cname, pname, o, b, f, gf, s)			\
+	__GATE(_id, NULL, cname, pname, o, b, f, gf, NULL, s)
 
 #define GATE_A(_id, cname, pname, o, b, f, gf, a)		\
-	__GATE(_id, NULL, cname, pname, o, b, f, gf, a)
+	__GATE(_id, NULL, cname, pname, o, b, f, gf, a, 0)
 
 #define GATE_D(_id, dname, cname, pname, o, b, f, gf)		\
-	__GATE(_id, dname, cname, pname, o, b, f, gf, NULL)
+	__GATE(_id, dname, cname, pname, o, b, f, gf, NULL, 0)
 
 #define GATE_DA(_id, dname, cname, pname, o, b, f, gf, a)	\
-	__GATE(_id, dname, cname, pname, o, b, f, gf, a)
+	__GATE(_id, dname, cname, pname, o, b, f, gf, a, 0)
 
 #define PNAME(x) static const char *x[] __initdata
 
@@ -269,8 +300,6 @@ extern void __init samsung_clk_of_register_fixed_ext(
 
 extern void samsung_clk_add_lookup(struct clk *clk, unsigned int id);
 
-extern void samsung_clk_register_alias(struct samsung_clock_alias *list,
-		unsigned int nr_clk);
 extern void __init samsung_clk_register_fixed_rate(
 		struct samsung_fixed_rate_clock *clk_list, unsigned int nr_clk);
 extern void __init samsung_clk_register_fixed_factor(
@@ -283,5 +312,11 @@ extern void __init samsung_clk_register_gate(
 		struct samsung_gate_clock *clk_list, unsigned int nr_clk);
 
 extern unsigned long _get_rate(const char *clk_name);
+
+
+extern int exynos_set_parent(const char *child, const char *parent);
+extern struct clk *exynos_get_parent(const char *child);
+extern int exynos_set_rate(const char *conid, unsigned int rate);
+extern unsigned int  exynos_get_rate(const char *conid);
 
 #endif /* __SAMSUNG_CLK_H */

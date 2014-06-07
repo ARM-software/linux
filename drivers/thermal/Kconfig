@@ -169,4 +169,28 @@ config INTEL_POWERCLAMP
 	  enforce idle time which results in more package C-state residency. The
 	  user interface is exposed via generic thermal framework.
 
+config CPU_THERMAL_IPA
+	bool "Enable Intelligent Power Arbiter"
+	depends on THERMAL && CPU_FREQ && EXYNOS_THERMAL
+	help
+	  This implements the Intelligent Power Arbiter (IPA)
+
+config CPU_THERMAL_IPA_CONTROL
+	bool "Enable control"
+	depends on CPU_THERMAL_IPA
+	help
+	  This implements the intelligent power arbiter (IPA) control algorithms.
+	  If you want this support, you should say Y here.
+
+config CPU_THERMAL_IPA_DEBUG
+	bool "Enable debugging"
+	depends on CPU_THERMAL_IPA
+	select FUNCTION_TRACER
+	select DYNAMIC_FTRACE
+	help
+	  This enables *trace* routines in IPA, used to collect logs
+	  of temperature, CPU and GPU utilisations and power
+	  estimates.  If you want to analyze IPA behaviour, you should
+	  say Y here.
+
 endif

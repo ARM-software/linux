@@ -1,0 +1,55 @@
+config DECON_TV
+	bool "Samsung Display Enhancement Controller Television(DECON_TV)"
+	depends on FB
+
+if DECON_TV
+config DECON_TV_FB
+	bool "Samsung DECON_TV Framebuffer driver"
+	depends on DECON_TV
+	default y
+	help
+	  Say Y here if you want support for the DECON_TV in Samsung S5P SoCs.
+	  This device produce image data to one of output interfaces.
+
+config VIDEO_EXYNOS_HDMI
+	bool "Samsung HDMI driver"
+	depends on DECON_TV
+	depends on VIDEO_V4L2
+	select SWITCH
+	select FB_MODE_HELPERS
+	default y
+	help
+	  Say Y here if you want support for the HDMI output
+	  interface in S5P Samsung SoC. The driver can be compiled
+	  as module. It is an auxiliary driver, that exposes a V4L2
+	  subdev for use by other drivers. This driver requires
+	  hdmiphy driver to work correctly.
+
+config VIDEO_EXYNOS_HDMI_AUDIO_I2S
+	bool "Enable HDMI audio using I2S path"
+	depends on DECON_TV
+	depends on VIDEO_EXYNOS_HDMI
+	depends on SND_SAMSUNG_I2S
+	default y
+	help
+	  Enables HDMI audio through I2S path.
+
+config VIDEO_EXYNOS_HDMI_AUDIO_SPDIF
+	bool "Enable HDMI audio using SPDIF path"
+	depends on DECON_TV
+	depends on VIDEO_EXYNOS_HDMI
+	depends on SND_SOC_SAMSUNG_SMDK_SPDIF
+	default n
+	help
+	  Enables HDMI audio through SPDIF path.
+
+config VIDEO_EXYNOS_HDMI_CEC
+	tristate "Samsung HDMI CEC Driver"
+	depends on DECON_TV
+	depends on VIDEO_DEV && VIDEO_V4L2 && I2C
+	default n
+	help
+	  Say Y here if you want support for the HDMI CEC
+	  interface in S5P Samsung SoC. The driver can be compiled
+	  as module.
+endif

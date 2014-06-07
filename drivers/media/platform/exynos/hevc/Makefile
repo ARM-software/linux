@@ -1,0 +1,11 @@
+obj-$(CONFIG_VIDEO_EXYNOS_HEVC) := exynos-hevc.o
+exynos-hevc-y += hevc.o hevc_opr.o
+exynos-hevc-y += hevc_pm.o
+exynos-hevc-y += hevc_cmd.o
+exynos-hevc-y += hevc_intr.o
+exynos-hevc-y += hevc_inst.o
+exynos-hevc-y += hevc_dec.o
+exynos-hevc-y += hevc_mem.o
+exynos-hevc-y += hevc_reg.o
+exynos-hevc-y += hevc_ctrl.o
+exynos-hevc-y += hevc_qos.o

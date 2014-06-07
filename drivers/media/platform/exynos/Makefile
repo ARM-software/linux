@@ -1,0 +1,12 @@
+obj-$(CONFIG_EXYNOS_MEDIA_DEVICE)	+= mdev/
+obj-$(CONFIG_VIDEO_EXYNOS_GSCALER_1_3)	+= gsc_1.3/
+obj-$(CONFIG_VIDEO_EXYNOS_GSCALER)	+= gsc/
+obj-$(CONFIG_VIDEO_EXYNOS_MFC)		+= mfc/
+obj-$(CONFIG_VIDEO_EXYNOS_HEVC)		+= hevc/
+obj-$(CONFIG_VIDEO_EXYNOS_FIMC_IS)	+= fimc-is/
+obj-$(CONFIG_VIDEO_EXYNOS_SCALER)	+= scaler/
+obj-$(CONFIG_VIDEO_EXYNOS_FIMG2D)	+= fimg2d/
+obj-$(CONFIG_VIDEO_EXYNOS_JPEG)		+= jpeg4/
+obj-$(CONFIG_VIDEO_EXYNOS_HX_JPEG)	+= jpeg_hx/
+obj-$(CONFIG_VIDEO_EXYNOS_TV)		+= tv/
+EXTRA_CLAGS += -Idrivers/media/video

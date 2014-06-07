@@ -1,0 +1,13 @@
+#
+# Mobicore Configuration
+#
+
+if SOC_EXYNOS5422
+source "drivers/gud/gud-exynos5422/Kconfig"
+endif
+
+if SOC_EXYNOS5430
+source "drivers/gud/gud-exynos5430/Kconfig"
+endif
+
+source "drivers/gud/sec-os-ctrl/Kconfig"

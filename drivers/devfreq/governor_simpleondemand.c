@@ -13,7 +13,25 @@
 #include <linux/module.h>
 #include <linux/devfreq.h>
 #include <linux/math64.h>
+#include <linux/pm_qos.h>
+#include <linux/module.h>
+#include <linux/slab.h>
+
 #include "governor.h"
+
+static int devfreq_simple_ondemand_notifier(struct notifier_block *nb, unsigned long val,
+						void *v)
+{
+	struct devfreq_notifier_block *devfreq_nb;
+
+	devfreq_nb = container_of(nb, struct devfreq_notifier_block, nb);
+
+	mutex_lock(&devfreq_nb->df->lock);
+	update_devfreq(devfreq_nb->df);
+	mutex_unlock(&devfreq_nb->df->lock);
+
+	return NOTIFY_OK;
+}
 
 /* Default constants for DevFreq-Simple-Ondemand (DFSO) */
 #define DFSO_UPTHRESHOLD	(90)
@@ -28,6 +46,10 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	unsigned int dfso_downdifferential = DFSO_DOWNDIFFERENCTIAL;
 	struct devfreq_simple_ondemand_data *data = df->data;
 	unsigned long max = (df->max_freq) ? df->max_freq : UINT_MAX;
+	unsigned long pm_qos_min = 0;
+
+	if (data)
+		pm_qos_min = pm_qos_request(data->pm_qos_class);
 
 	if (err)
 		return err;
@@ -42,8 +64,13 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	    dfso_upthreshold < dfso_downdifferential)
 		return -EINVAL;
 
+	if (data && data->cal_qos_max)
+		max = (df->max_freq) ? df->max_freq : 0;
+
 	/* Assume MAX if it is going to be divided by zero */
 	if (stat.total_time == 0) {
+		if (data && data->cal_qos_max)
+			max = max3(max, data->cal_qos_max, pm_qos_min);
 		*freq = max;
 		return 0;
 	}
@@ -57,12 +84,16 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	/* Set MAX if it's busy enough */
 	if (stat.busy_time * 100 >
 	    stat.total_time * dfso_upthreshold) {
+		if (data && data->cal_qos_max)
+			max = max3(max, data->cal_qos_max, pm_qos_min);
 		*freq = max;
 		return 0;
 	}
 
 	/* Set MAX if we do not know the initial frequency */
 	if (stat.current_frequency == 0) {
+		if (data && data->cal_qos_max)
+			max = max3(max, data->cal_qos_max, pm_qos_min);
 		*freq = max;
 		return 0;
 	}
@@ -80,7 +111,16 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	b = div_u64(a, stat.total_time);
 	b *= 100;
 	b = div_u64(b, (dfso_upthreshold - dfso_downdifferential / 2));
+
+	if (data && data->cal_qos_max) {
+		if (b > data->cal_qos_max)
+			b = data->cal_qos_max;
+	}
+
 	*freq = (unsigned long) b;
+
+	if (pm_qos_min)
+		*freq = max(pm_qos_min, *freq);
 
 	if (df->min_freq && *freq < df->min_freq)
 		*freq = df->min_freq;
@@ -90,16 +130,53 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	return 0;
 }
 
+static int devfreq_simple_ondemand_register_notifier(struct devfreq *df)
+{
+	int ret;
+	struct devfreq_simple_ondemand_data *data = df->data;
+
+	if (!data)
+		return -EINVAL;
+
+	data->nb.df = df;
+	data->nb.nb.notifier_call = devfreq_simple_ondemand_notifier;
+
+	ret = pm_qos_add_notifier(data->pm_qos_class, &data->nb.nb);
+	if (ret < 0)
+		goto err;
+
+	return 0;
+err:
+	kfree((void *)&data->nb.nb);
+
+	return ret;
+}
+
+static int devfreq_simple_ondemand_unregister_notifier(struct devfreq *df)
+{
+	struct devfreq_simple_ondemand_data *data = df->data;
+
+	return pm_qos_remove_notifier(data->pm_qos_class, &data->nb.nb);
+}
+
 static int devfreq_simple_ondemand_handler(struct devfreq *devfreq,
 				unsigned int event, void *data)
 {
+	int ret;
+
 	switch (event) {
 	case DEVFREQ_GOV_START:
+		ret = devfreq_simple_ondemand_register_notifier(devfreq);
+		if (ret)
+			return ret;
 		devfreq_monitor_start(devfreq);
 		break;
 
 	case DEVFREQ_GOV_STOP:
 		devfreq_monitor_stop(devfreq);
+		ret = devfreq_simple_ondemand_unregister_notifier(devfreq);
+		if (ret)
+			return ret;
 		break;
 
 	case DEVFREQ_GOV_INTERVAL:

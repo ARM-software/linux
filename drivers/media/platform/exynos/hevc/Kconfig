@@ -1,0 +1,9 @@
+config VIDEO_EXYNOS_HEVC
+	bool "Exynos HEVC Driver"
+	default y
+	depends on VIDEO_EXYNOS
+	select VIDEOBUF2_CORE
+	select EXYNOS_HEVC_V1
+	---help---
+	  HEVC driver for V4L2.
+

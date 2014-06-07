@@ -1,0 +1,5 @@
+config SND_SAMSUNG_SEIREN
+    bool "SEIREN Audio support"
+    depends on SND_SOC_SAMSUNG && SND_SAMSUNG_AUDSS
+    help
+      Say Y if you want to support SEIREN AUDIO.

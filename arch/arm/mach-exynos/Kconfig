@@ -24,6 +24,7 @@ config ARCH_EXYNOS5
 	bool "SAMSUNG EXYNOS5"
 	select HAVE_ARM_SCU if SMP
 	select HAVE_SMP
+	select HAVE_EXYNOS5_HSI2C if I2C
 	help
 	  Samsung EXYNOS5 (Cortex-A15) SoC based systems
 
@@ -71,6 +72,64 @@ config SOC_EXYNOS5250
 	help
 	  Enable EXYNOS5250 SoC support
 
+config SOC_EXYNOS5422
+	bool "SAMSUNG EXYNOS5422"
+	default n
+	depends on ARCH_EXYNOS5
+	select PM_GENERIC_DOMAINS if PM
+	select S5P_PM if PM
+	select S5P_SLEEP if SUSPEND
+	select SAMSUNG_DMADEV
+	select L2_AUTO_CLOCK_DISABLE
+	help
+	  Enable EXYNOS5422 SoC support
+
+config SOC_EXYNOS5422_REV_0
+	bool "Rev 0.0"
+	depends on SOC_EXYNOS5422
+	select L2_AUTO_CLOCK_DISABLE
+	help
+	  This option enables for REV 0
+
+config SOC_EXYNOS5430
+	bool "SAMSUNG EXYNOS5430"
+	default n
+	depends on ARCH_EXYNOS5
+	select PM_GENERIC_DOMAINS if PM
+	select S5P_PM if PM
+	select S5P_SLEEP if SUSPEND
+	select SAMSUNG_DMADEV
+	help
+	  Enable EXYNOS5430 SoC support
+
+choice
+	prompt "Revision Type"
+	depends on SOC_EXYNOS5430
+	help
+	  This option selects cpu revision number.
+
+config SOC_EXYNOS5430_REV_0
+	bool "Rev 0.0"
+
+config SOC_EXYNOS5430_REV_1
+	bool "Rev 1.0"
+
+endchoice
+
+config EXYNOS5430_BTS
+	bool "Bus traffic shaper support"
+	default y
+	depends on SOC_EXYNOS5430
+	help
+	  Enable BTS (Bus traffic shaper) support
+
+config EXYNOS5422_BTS
+	bool "Bus traffic shaper support"
+	default y
+	depends on SOC_EXYNOS5422
+	help
+	  Enable BTS (Bus traffic shaper) support
+
 config SOC_EXYNOS5440
 	bool "SAMSUNG EXYNOS5440"
 	default y
@@ -84,6 +143,53 @@ config SOC_EXYNOS5440
 	help
 	  Enable EXYNOS5440 SoC support
 
+config EXYNOS_SNAPSHOT
+	bool "Enable SnapShot of exynos for debugging"
+	default y
+
+config EXYNOS_SNAPSHOT_REG
+	bool "Enable debugging of register access by exynos-snapshot log"
+	depends on EXYNOS_SNAPSHOT
+	default n
+
+config EXYNOS_SNAPSHOT_HRTIMER
+	bool "Enable debugging of hrtimer by exynos-snapshot log"
+	depends on EXYNOS_SNAPSHOT
+	default n
+
+config EXYNOS_SNAPSHOT_SOFTIRQ
+	bool "Enable debugging of softirq by exynos-snapshot log"
+	depends on EXYNOS_SNAPSHOT
+	default n
+
+config EXYNOS_SNAPSHOT_HOOK_LOGGER
+	bool "Enable hooking android platform log for ramdump"
+	depends on EXYNOS_SNAPSHOT
+	default y
+
+config EXYNOS_SNAPSHOT_PANIC_REBOOT
+	bool "Enable forced reboot after panic for ramdump"
+	depends on EXYNOS_SNAPSHOT
+	default y
+
+config EXYNOS_SNAPSHOT_FORCE_DUMP_MODE
+	bool "Enable forced ramdump mode when reboot, this is usually used for test"
+	depends on EXYNOS_SNAPSHOT
+	default n
+
+config EXYNOS5_DYNAMIC_CPU_HOTPLUG
+	bool "Dynamic CPU Hotplug support"
+	depends on CPU_FREQ
+	help
+		Enable Dynamic CPU Hotplug
+
+config EXYNOS_CONTENT_PATH_PROTECTION
+	bool "Exynos Content Path Protection"
+	depends on (ARM_TRUSTZONE && ARCH_EXYNOS5)
+	default y
+	help
+	  Enable content path protection of EXYNOS.
+
 config EXYNOS_ATAGS
 	bool "ATAGS based boot for EXYNOS (deprecated)"
 	depends on !ARCH_MULTIPLATFORM
@@ -94,6 +200,27 @@ config EXYNOS_ATAGS
 	  through device tree. This enables support for board files using
 	  the traditional ATAGS boot format.
 	  Note that this option is not available for multiplatform builds.
+
+config EXYNOS5_SETUP_MIPIPHY
+	bool
+	depends on (VIDEO_EXYNOS_FIMC_IS)
+	default y
+	help
+	  Compile in common setup code for MIPI-CSIS devices
+
+config EXYNOS_CONTENT_PATH_PROTECTION
+	bool "Exynos Content Path Protection"
+	depends on (ARM_TRUSTZONE && ARCH_EXYNOS5)
+	default y
+	help
+	  Enable content path protection of EXYNOS.
+
+config ASV_MARGIN_TEST
+	bool "Enable margin test"
+	depends on ARM_ATAG_DTB_COMPAT
+	default n
+	help
+	  Support to ASV voltage margin test
 
 if EXYNOS_ATAGS
 
@@ -429,10 +556,64 @@ config MACH_EXYNOS5_DT
 	depends on ARCH_EXYNOS5
 	select ARM_AMBA
 	select CLKSRC_OF
+	select PINCTRL
+	select PINCTRL_EXYNOS
 	select USE_OF
 	help
 	  Machine support for Samsung EXYNOS5 machine with device tree enabled.
 	  Select this if a fdt blob is available for the EXYNOS5 SoC based board.
+
+config MACH_SMDK5422
+	bool "SAMSUNG SMDK5422 Machine using device tree"
+	default y
+	depends on ARCH_EXYNOS5
+	select ARM_AMBA
+	select CLKSRC_OF
+	select PINCTRL
+	select PINCTRL_EXYNOS
+	select USE_OF
+	help
+	  Machine support for Samsung EXYNOS5422 machine with device tree enabled.
+	  Select this if a fdt blob is available for the EXYNOS5422 SoC based board.
+
+config MACH_XYREF5422
+	bool "SAMSUNG XYREF5422 Machine using device tree"
+	default y
+	depends on ARCH_EXYNOS5
+	select ARM_AMBA
+	select CLKSRC_OF
+	select PINCTRL
+	select PINCTRL_EXYNOS
+	select USE_OF
+	help
+	  Machine support for Samsung EXYNOS5422 machine with device tree enabled.
+	  Select this if a fdt blob is available for the EXYNOS5422 SoC based board.
+
+config MACH_ODROIDXU3
+	bool "Hardkernel odroid-xu3 Machine using device tree"
+	default y
+	depends on ARCH_EXYNOS5
+	select ARM_AMBA
+	select CLKSRC_OF
+	select PINCTRL
+	select PINCTRL_EXYNOS
+	select USE_OF
+	help
+	  Machine support for Hardkernel odroid-xu3 machine with device tree enabled.
+	  Select this if a fdt blob is available for the EXYNOS5422 SoC based board.
+
+config MACH_XYREF5430
+	bool "SAMSUNG XYREF5430 Machine using device tree"
+	default y
+	depends on ARCH_EXYNOS5
+	select ARM_AMBA
+	select CLKSRC_OF
+	select PINCTRL
+	select PINCTRL_EXYNOS
+	select USE_OF
+	help
+	  Machine support for Samsung EXYNOS5430 machine with device tree enabled.
+	  Select this if a fdt blob is available for the EXYNOS5430 SoC based board.
 
 if ARCH_EXYNOS4
 

@@ -53,6 +53,8 @@ ENTRY(cpu_v7_switch_mm)
 #endif
 #ifdef CONFIG_ARM_ERRATA_754322
 	dsb
+#elif CONFIG_ARM_ERRATA_766421
+	dmb
 #endif
 	mcr	p15, 0, r1, c13, c0, 1		@ set context ID
 	isb

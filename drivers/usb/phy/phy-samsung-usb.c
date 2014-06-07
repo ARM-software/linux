@@ -31,6 +31,9 @@
 
 #include "phy-samsung-usb.h"
 
+static struct raw_notifier_head usb_lpa_nh =
+		RAW_NOTIFIER_INIT(usb_lpa_nh);
+
 int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 {
 	struct device_node *usbphy_sys;
@@ -56,7 +59,7 @@ int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 	 * Few SoCs may not have this switch available
 	 */
 	if (sphy->sysreg == NULL)
-		dev_warn(sphy->dev, "Can't get usb-phy sysreg cfg register\n");
+		dev_dbg(sphy->dev, "Can't get usb-phy sysreg cfg register\n");
 
 	of_node_put(usbphy_sys);
 
@@ -97,6 +100,7 @@ void samsung_usbphy_set_isolation(struct samsung_usbphy *sphy, bool on)
 		 * device phy control with enable bit at position 0.
 		 */
 	case TYPE_EXYNOS5250:
+	case TYPE_EXYNOS5:
 		if (sphy->phy_type == USB_PHY_TYPE_DEVICE) {
 			reg = sphy->pmuregs +
 				sphy->drv_data->devphy_reg_offset;
@@ -112,16 +116,57 @@ void samsung_usbphy_set_isolation(struct samsung_usbphy *sphy, bool on)
 		return;
 	}
 
-	reg_val = readl(reg);
+	if (reg) {
+		reg_val = readl(reg);
 
-	if (on)
-		reg_val &= ~en_mask;
-	else
-		reg_val |= en_mask;
+		if (on)
+			reg_val &= ~en_mask;
+		else
+			reg_val |= en_mask;
 
-	writel(reg_val, reg);
+		writel(reg_val, reg);
+	}
 }
 EXPORT_SYMBOL_GPL(samsung_usbphy_set_isolation);
+
+void samsung_hsicphy_set_isolation(struct samsung_usbphy *sphy, bool on)
+{
+	void __iomem *reg = NULL;
+	u32 reg_val;
+	u32 en_mask = 0;
+
+	if (!sphy->pmuregs) {
+		dev_warn(sphy->dev, "Can't set pmu isolation\n");
+		return;
+	}
+
+	switch (sphy->drv_data->cpu_type) {
+	case TYPE_EXYNOS5:
+		if (sphy->phy_type == USB_PHY_TYPE_HOST) {
+			reg = sphy->pmuregs +
+				sphy->drv_data->hsicphy_reg_offset;
+			en_mask = sphy->drv_data->hsicphy_en_mask;
+		} else {
+			dev_err(sphy->dev, "Invalid phy type\n");
+		}
+		break;
+	default:
+		dev_dbg(sphy->dev, "It is not needed in this SoC type");
+		return;
+	}
+
+	if (reg) {
+		reg_val = readl(reg);
+
+		if (on)
+			reg_val &= ~en_mask;
+		else
+			reg_val |= en_mask;
+
+		writel(reg_val, reg);
+	}
+}
+EXPORT_SYMBOL_GPL(samsung_hsicphy_set_isolation);
 
 /*
  * Configure the mode of working of usb-phy here: HOST/DEVICE.
@@ -131,7 +176,7 @@ void samsung_usbphy_cfg_sel(struct samsung_usbphy *sphy)
 	u32 reg;
 
 	if (!sphy->sysreg) {
-		dev_warn(sphy->dev, "Can't configure specified phy mode\n");
+		dev_dbg(sphy->dev, "Can't configure specified phy mode\n");
 		return;
 	}
 
@@ -174,7 +219,8 @@ int samsung_usbphy_get_refclk_freq(struct samsung_usbphy *sphy)
 	 * In exynos5250 USB host and device PHY use
 	 * external crystal clock XXTI
 	 */
-	if (sphy->drv_data->cpu_type == TYPE_EXYNOS5250)
+	if (sphy->drv_data->cpu_type == TYPE_EXYNOS5250 ||
+		sphy->drv_data->cpu_type == TYPE_EXYNOS5)
 		ref_clk = devm_clk_get(sphy->dev, "ext_xtal");
 	else
 		ref_clk = devm_clk_get(sphy->dev, "xusbxti");
@@ -183,7 +229,8 @@ int samsung_usbphy_get_refclk_freq(struct samsung_usbphy *sphy)
 		return PTR_ERR(ref_clk);
 	}
 
-	if (sphy->drv_data->cpu_type == TYPE_EXYNOS5250) {
+	if (sphy->drv_data->cpu_type == TYPE_EXYNOS5250 ||
+		sphy->drv_data->cpu_type == TYPE_EXYNOS5) {
 		/* set clock frequency for PLL */
 		switch (clk_get_rate(ref_clk)) {
 		case 9600 * KHZ:
@@ -234,3 +281,37 @@ int samsung_usbphy_get_refclk_freq(struct samsung_usbphy *sphy)
 	return refclk_freq;
 }
 EXPORT_SYMBOL_GPL(samsung_usbphy_get_refclk_freq);
+
+int samsung_usbphy_check_op(void)
+{
+	int op;
+
+	op = usb_phy_check_op();
+	/* REVISIT: this also can be done by cpuidle code */
+	if (!op) {
+		/* System is going to enter LPA, so notify all subscribers */
+		raw_notifier_call_chain(&usb_lpa_nh,
+				USB_LPA_PREPARE, NULL);
+	}
+
+	return op;
+}
+EXPORT_SYMBOL_GPL(samsung_usbphy_check_op);
+
+void samsung_usb_lpa_resume(void)
+{
+	raw_notifier_call_chain(&usb_lpa_nh, USB_LPA_RESUME, NULL);
+}
+EXPORT_SYMBOL_GPL(samsung_usb_lpa_resume);
+
+int register_samsung_usb_lpa_notifier(struct notifier_block *nb)
+{
+	return raw_notifier_chain_register(&usb_lpa_nh, nb);
+}
+EXPORT_SYMBOL_GPL(register_samsung_usb_lpa_notifier);
+
+int unregister_samsung_usb_lpa_notifier(struct notifier_block *nb)
+{
+	return raw_notifier_chain_unregister(&usb_lpa_nh, nb);
+}
+EXPORT_SYMBOL_GPL(unregister_samsung_usb_lpa_notifier);

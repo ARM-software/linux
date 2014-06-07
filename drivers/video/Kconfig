@@ -23,6 +23,8 @@ source "drivers/gpu/drm/Kconfig"
 
 source "drivers/gpu/host1x/Kconfig"
 
+source "drivers/gpu/arm/Kconfig"
+
 config VGASTATE
        tristate
        default n
@@ -2035,6 +2037,9 @@ config FB_TMIO_ACCELL
 	bool "tmiofb acceleration"
 	depends on FB_TMIO
 	default y
+
+source "drivers/video/decon_tv_display/Kconfig"
+source "drivers/video/decon_display/Kconfig"
 
 config FB_S3C
 	tristate "Samsung S3C framebuffer support"

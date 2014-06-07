@@ -1,0 +1,14 @@
+config VIDEO_EXYNOS_SCALER
+	bool "EXYNOS Scaler Driver"
+	depends on VIDEO_EXYNOS && ARCH_EXYNOS5
+	select V4L2_MEM2MEM_DEV
+	default n
+	help
+	  This is a v4l2 driver for EXYNOS Scaler (MSCL) device.
+
+config SCALER_NO_SOFTRST
+	bool "Ignore SOFT_RESET control"
+	depends on VIDEO_EXYNOS_SCALER
+	default n
+	---help---
+	  This disables SOFT_RESET control for Exynos Scaler initial settings.

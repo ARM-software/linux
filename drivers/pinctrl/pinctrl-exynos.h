@@ -25,6 +25,10 @@
 #define EXYNOS_WKUP_ECON_OFFSET		0xE00
 #define EXYNOS_WKUP_EMASK_OFFSET	0xF00
 #define EXYNOS_WKUP_EPEND_OFFSET	0xF40
+#define EXYNOS5430_WKUP_ECON_OFFSET	0x700
+#define EXYNOS5430_WKUP_EFLTCON_OFFSET	0x800
+#define EXYNOS5430_WKUP_EMASK_OFFSET	0x900
+#define EXYNOS5430_WKUP_EPEND_OFFSET	0xA00
 #define EXYNOS_SVC_OFFSET		0xB08
 #define EXYNOS_EINT_FUNC		0xF
 
@@ -44,21 +48,28 @@
 #define EXYNOS_EINT_CON_MASK		0xF
 #define EXYNOS_EINT_CON_LEN		4
 
+/* EINT filter configuration */
+#define EXYNOS_EINT_FLTCON_EN		(1 << 7)
+#define EXYNOS_EINT_FLTCON_SEL		(1 << 6)
+#define EXYNOS_EINT_FLTCON_WIDTH(x)	((x) & 0x3f)
+#define EXYNOS_EINT_FLTCON_MASK		0xFF
+#define EXYNOS_EINT_FLTCON_LEN		8
+
 #define EXYNOS_EINT_MAX_PER_BANK	8
 #define EXYNOS_EINT_NR_WKUP_EINT
 
-#define EXYNOS_PIN_BANK_EINTN(pins, reg, id)		\
+#define EXYNOS_PIN_BANK_EINTN(types, pins, reg, id)	\
 	{						\
-		.type		= &bank_type_off,	\
+		.type		= &types,		\
 		.pctl_offset	= reg,			\
 		.nr_pins	= pins,			\
 		.eint_type	= EINT_TYPE_NONE,	\
 		.name		= id			\
 	}
 
-#define EXYNOS_PIN_BANK_EINTG(pins, reg, id, offs)	\
+#define EXYNOS_PIN_BANK_EINTG(types, pins, reg, id, offs)	\
 	{						\
-		.type		= &bank_type_off,	\
+		.type		= &types,		\
 		.pctl_offset	= reg,			\
 		.nr_pins	= pins,			\
 		.eint_type	= EINT_TYPE_GPIO,	\
@@ -66,9 +77,9 @@
 		.name		= id			\
 	}
 
-#define EXYNOS_PIN_BANK_EINTW(pins, reg, id, offs)	\
+#define EXYNOS_PIN_BANK_EINTW(types, pins, reg, id, offs)	\
 	{						\
-		.type		= &bank_type_alive,	\
+		.type		= &types,		\
 		.pctl_offset	= reg,			\
 		.nr_pins	= pins,			\
 		.eint_type	= EINT_TYPE_WKUP,	\

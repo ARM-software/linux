@@ -539,6 +539,9 @@ void __bio_clone(struct bio *bio, struct bio *bio_src)
 	bio->bi_vcnt = bio_src->bi_vcnt;
 	bio->bi_size = bio_src->bi_size;
 	bio->bi_idx = bio_src->bi_idx;
+#ifdef CONFIG_MMC_DW_FMP_DM_CRYPT
+	bio->bi_sensitive_data = bio_src->bi_sensitive_data;
+#endif
 }
 EXPORT_SYMBOL(__bio_clone);
 

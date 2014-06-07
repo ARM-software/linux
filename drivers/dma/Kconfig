@@ -233,6 +233,11 @@ config PL330_DMA
 	  You need to provide platform specific settings via
 	  platform_data for a dma-pl330 device.
 
+config PL330TEST_LOG
+	bool "pl330 test log"
+	default 0
+	depends on PL330_DMA
+
 config PCH_DMA
 	tristate "Intel EG20T PCH / LAPIS Semicon IOH(ML7213/ML7223/ML7831) DMA"
 	depends on PCI && X86

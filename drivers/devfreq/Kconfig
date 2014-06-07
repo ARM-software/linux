@@ -38,6 +38,11 @@ config DEVFREQ_GOV_SIMPLE_ONDEMAND
 	  values that imply the usage rate. A device may provide tuned
 	  values to the governor with data field at devfreq_add_device().
 
+config DEVFREQ_GOV_SIMPLE_USAGE
+	tristate "Simple Usage"
+	help
+	  Chooses frequency based on the percentage of target device.
+
 config DEVFREQ_GOV_PERFORMANCE
 	tristate "Performance"
 	help
@@ -77,5 +82,40 @@ config ARM_EXYNOS4_BUS_DEVFREQ
 	  the operating frequencies and voltages with OPP support.
 	  To operate with optimal voltages, ASV support is required
 	  (CONFIG_EXYNOS_ASV).
+
+config ARM_EXYNOS5422_BUS_DEVFREQ
+	bool "ARM Exynos5422 Memory Bus DEVFREQ Driver"
+	depends on SOC_EXYNOS5422
+	select ARCH_HAS_OPP
+	select PM_OPP
+	select DEVFREQ_GOV_SIMPLE_ONDEMAND
+	help
+	  This adds the DEVFREQ driver for Exynos5 series memory and int.
+
+config ARM_EXYNOS5430_BUS_DEVFREQ
+	bool "ARM Exynos5430 Memory Bus DEVFREQ Driver"
+	depends on SOC_EXYNOS5430
+	select ARCH_HAS_OPP
+	select PM_OPP
+	select DEVFREQ_GOV_SIMPLE_ONDEMAND
+	help
+	  This adds the DEVFREQ driver for Exynos5 series memory and int.
+
+choice
+	prompt "ARM Exynos5430 DEVFREQ Driver for CAM"
+	default ARM_EXYNOS5430_BUS_DEVFREQ_CAM_16M
+
+config ARM_EXYNOS5430_BUS_DEVFREQ_CAM_16M
+	bool "ARM Exynos5430 DEVFREQ for CAM 16M"
+	depends on ARM_EXYNOS5430_BUS_DEVFREQ
+	help
+	 This adds the DVFS table for CAM 16M
+
+config ARM_EXYNOS5430_BUS_DEVFREQ_CAM_13M
+	bool "ARM Exynos5430 DEVFREQ for CAM 13M"
+	depends on ARM_EXYNOS5430_BUS_DEVFREQ
+	help
+	 This adds the DVFS table for CAM 13M
+endchoice
 
 endif # PM_DEVFREQ

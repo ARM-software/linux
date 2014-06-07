@@ -1,0 +1,12 @@
+#
+# Configuration for JPEG
+#
+
+config VIDEO_EXYNOS_JPEG
+	bool "Samsung JPEG_v4.x driver"
+	depends on VIDEO_EXYNOS
+	select MEDIA_EXYNOS
+	select V4L2_MEM2MEM_DEV
+	default n
+	help
+	  This is a Samsung JPEG H/W driver for V4.x

@@ -31,6 +31,32 @@ config CPU_IDLE_GOV_MENU
 config ARCH_NEEDS_CPU_IDLE_COUPLED
 	def_bool n
 
+config EXYNOS_CPUIDLE_C2
+	bool "EXYNOS CPUIDLE C2"
+	depends on CPU_IDLE
+	default y
+	help
+	  Enable C2 state on cpuidle
+
+config EXYNOS_CLUSTER_POWER_DOWN
+	bool "EXYNOS CLUSTER POWER DOWN"
+	depends on EXYNOS_CPUIDLE_C2
+	help
+	  Enable C2 state on cpuidle
+
+config CPUIDLE_TEST_SYSFS
+	bool "Enable C2 sysfs"
+	depends on EXYNOS_CPUIDLE_C2
+	help
+	  Enable sysfs interface to check C2 status
+
+config EXYNOS_IDLE_CLOCK_DOWN
+	bool "EXYNOS core idle clock down"
+	depends on CPU_IDLE
+	default y
+	help
+	  Enable core idle clock down
+
 if CPU_IDLE
 
 config CPU_IDLE_CALXEDA

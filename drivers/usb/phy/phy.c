@@ -82,6 +82,43 @@ static int devm_usb_phy_match(struct device *dev, void *res, void *match_data)
 }
 
 /**
+ * usb_phy_check_op - check all USB PHYs operation
+ *
+ * Returns true if at least one PHY is active.
+ */
+bool usb_phy_check_op(void)
+{
+	struct usb_phy	*phy = NULL;
+	unsigned long	flags;
+	bool		op = false;
+
+	spin_lock_irqsave(&phy_lock, flags);
+
+	list_for_each_entry(phy, &phy_list, head) {
+		if (phy->type == USB_PHY_TYPE_USB3) {
+			if (usb_phy_is_active(phy)) {
+				op = true;
+				break;
+			} else {
+				continue;
+			}
+		}
+
+		if (phy->type == USB_PHY_TYPE_USB2) {
+			if (usb_phy_is_active(phy)) {
+				op = true;
+				break;
+			}
+		}
+	}
+
+	spin_unlock_irqrestore(&phy_lock, flags);
+
+	return op;
+}
+EXPORT_SYMBOL_GPL(usb_phy_check_op);
+
+/**
  * devm_usb_get_phy - find the USB PHY
  * @dev - device that requests this phy
  * @type - the type of the phy the controller requires

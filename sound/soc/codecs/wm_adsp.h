@@ -13,8 +13,10 @@
 #ifndef __WM_ADSP_H
 #define __WM_ADSP_H
 
+#include <linux/circ_buf.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
+#include <sound/compress_driver.h>
 
 #include "wmfw.h"
 
@@ -27,9 +29,40 @@ struct wm_adsp_region {
 
 struct wm_adsp_alg_region {
 	struct list_head list;
+	unsigned int block;
 	unsigned int alg;
 	int type;
 	unsigned int base;
+	unsigned int offset;
+	size_t len;
+};
+
+struct wm_adsp_buffer_region {
+	unsigned int offset;
+	unsigned int cumulative_size;
+	unsigned int mem_type;
+	unsigned int base_addr;
+};
+
+struct wm_adsp_buffer_region_def {
+	unsigned int mem_type;
+	unsigned int base_offset;
+	unsigned int size_offset;
+};
+
+struct wm_adsp_fw_caps {
+	u32 id;
+	struct snd_codec_desc desc;
+	int num_host_regions;
+	struct wm_adsp_buffer_region_def *host_region_defs;
+};
+
+struct wm_adsp_fw_defs {
+	const char *file;
+	const char *binfile;
+	int compr_direction;
+	int num_caps;
+	const struct wm_adsp_fw_caps *caps;
 };
 
 struct wm_adsp {
@@ -38,6 +71,7 @@ struct wm_adsp {
 	int type;
 	struct device *dev;
 	struct regmap *regmap;
+	struct snd_soc_card *card;
 
 	int base;
 	int sysclk_reg;
@@ -53,8 +87,24 @@ struct wm_adsp {
 
 	int fw;
 	bool running;
+	int fw_ver;
 
 	struct regulator *dvfs;
+
+	struct list_head ctl_list;
+
+	u32 host_buf_ptr;
+
+	int max_dsp_read_bytes;
+	u32 dsp_error;
+	u32 *raw_capt_buf;
+	struct circ_buf capt_buf;
+	int capt_buf_size;
+	struct wm_adsp_buffer_region *host_regions;
+	bool buffer_drain_pending;
+
+	int num_firmwares;
+	struct wm_adsp_fw_defs *firmwares;
 };
 
 #define WM_ADSP1(wname, num) \
@@ -76,5 +126,24 @@ int wm_adsp1_event(struct snd_soc_dapm_widget *w,
 		   struct snd_kcontrol *kcontrol, int event);
 int wm_adsp2_event(struct snd_soc_dapm_widget *w,
 		   struct snd_kcontrol *kcontrol, int event);
+
+extern bool wm_adsp_compress_supported(const struct wm_adsp *adsp,
+				       const struct snd_compr_stream *stream);
+extern bool wm_adsp_format_supported(const struct wm_adsp *adsp,
+				     const struct snd_compr_stream *stream,
+				     const struct snd_compr_params *params);
+extern void wm_adsp_get_caps(const struct wm_adsp *adsp,
+			     const struct snd_compr_stream *stream,
+			     struct snd_compr_caps *caps);
+
+extern int wm_adsp_stream_alloc(struct wm_adsp *adsp,
+				const struct snd_compr_params *params);
+extern int wm_adsp_stream_free(struct wm_adsp *adsp);
+extern int wm_adsp_stream_start(struct wm_adsp *adsp);
+
+extern int wm_adsp_stream_handle_irq(struct wm_adsp *adsp);
+extern int wm_adsp_stream_read(struct wm_adsp *adsp, char __user *buf,
+			       size_t count);
+extern int wm_adsp_stream_avail(const struct wm_adsp *adsp);
 
 #endif

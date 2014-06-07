@@ -31,6 +31,8 @@ ENTRY(__cpu_suspend)
 	ldr	r3, =sleep_save_sp
 #ifdef CONFIG_SMP
 	ALT_SMP(mrc p15, 0, lr, c0, c0, 5)
+	ALT_SMP(ubfx r4, lr, #8, #4)
+	ALT_SMP(orr lr, lr, r4, lsl #2)
 	ALT_UP(mov lr, #0)
 	and	lr, lr, #15
 	add	r3, r3, lr, lsl #2
@@ -84,6 +86,8 @@ ENTRY(cpu_resume)
 #ifdef CONFIG_SMP
 	adr	r0, sleep_save_sp
 	ALT_SMP(mrc p15, 0, r1, c0, c0, 5)
+	ALT_SMP(ubfx r2, r1, #8, #4)
+	ALT_SMP(orr r1, r1, r2, lsl #2)
 	ALT_UP(mov r1, #0)
 	and	r1, r1, #15
 	ldr	r0, [r0, r1, lsl #2]	@ stack phys addr

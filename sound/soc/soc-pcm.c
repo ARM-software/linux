@@ -399,6 +399,9 @@ static int soc_pcm_close(struct snd_pcm_substream *substream)
 	cpu_dai->runtime = NULL;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		if (codec_dai->playback_active)
+			goto out;
+
 		if (!rtd->pmdown_time || codec->ignore_pmdown_time ||
 		    rtd->dai_link->ignore_pmdown_time) {
 			/* powered down playback stream now */
@@ -412,11 +415,14 @@ static int soc_pcm_close(struct snd_pcm_substream *substream)
 				msecs_to_jiffies(rtd->pmdown_time));
 		}
 	} else {
+		if (codec_dai->capture_active)
+			goto out;
+
 		/* capture streams can be powered down now */
 		snd_soc_dapm_stream_event(rtd, SNDRV_PCM_STREAM_CAPTURE,
 					  SND_SOC_DAPM_STREAM_STOP);
 	}
-
+out:
 	mutex_unlock(&rtd->pcm_mutex);
 
 	pm_runtime_put(platform->dev);

@@ -94,6 +94,7 @@ struct exynos_adc {
 
 	u32			value;
 	unsigned int            version;
+	bool			phy_ctrl;
 };
 
 static const struct of_device_id exynos_adc_match[] = {
@@ -269,6 +270,11 @@ static int exynos_adc_probe(struct platform_device *pdev)
 
 	info = iio_priv(indio_dev);
 
+	if (of_find_property(np, "samsung,adc-phy-control", NULL))
+		info->phy_ctrl = true;
+	else
+		info->phy_ctrl = false;
+
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	info->regs = devm_request_and_ioremap(&pdev->dev, mem);
 	if (!info->regs) {
@@ -276,11 +282,13 @@ static int exynos_adc_probe(struct platform_device *pdev)
 		goto err_iio;
 	}
 
-	mem = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	info->enable_reg = devm_request_and_ioremap(&pdev->dev, mem);
-	if (!info->enable_reg) {
-		ret = -ENOMEM;
-		goto err_iio;
+	if (info->phy_ctrl) {
+		mem = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+		info->enable_reg = devm_request_and_ioremap(&pdev->dev, mem);
+		if (!info->enable_reg) {
+			ret = -ENOMEM;
+			goto err_iio;
+		}
 	}
 
 	irq = platform_get_irq(pdev, 0);
@@ -302,9 +310,10 @@ static int exynos_adc_probe(struct platform_device *pdev)
 		goto err_iio;
 	}
 
-	writel(1, info->enable_reg);
+	if (info->phy_ctrl)
+		writel(1, info->enable_reg);
 
-	info->clk = devm_clk_get(&pdev->dev, "adc");
+	info->clk = devm_clk_get(&pdev->dev, "gate_adcif");
 	if (IS_ERR(info->clk)) {
 		dev_err(&pdev->dev, "failed getting clock, err = %ld\n",
 							PTR_ERR(info->clk));
@@ -314,10 +323,9 @@ static int exynos_adc_probe(struct platform_device *pdev)
 
 	info->vdd = devm_regulator_get(&pdev->dev, "vdd");
 	if (IS_ERR(info->vdd)) {
-		dev_err(&pdev->dev, "failed getting regulator, err = %ld\n",
+		dev_err(&pdev->dev, "operating without regulator vdd[%ld]\n",
 							PTR_ERR(info->vdd));
-		ret = PTR_ERR(info->vdd);
-		goto err_irq;
+		info->vdd = NULL;
 	}
 
 	info->version = exynos_adc_get_version(pdev);
@@ -340,9 +348,11 @@ static int exynos_adc_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_irq;
 
-	ret = regulator_enable(info->vdd);
-	if (ret)
-		goto err_iio_dev;
+	if (info->vdd) {
+		ret = regulator_enable(info->vdd);
+		if (ret)
+			goto err_iio_dev;
+	}
 
 	clk_prepare_enable(info->clk);
 
@@ -354,12 +364,16 @@ static int exynos_adc_probe(struct platform_device *pdev)
 		goto err_of_populate;
 	}
 
+	dev_info(&pdev->dev, "Probed successfully driver.\n");
+
 	return 0;
 
 err_of_populate:
 	device_for_each_child(&pdev->dev, NULL,
 				exynos_adc_remove_devices);
-	regulator_disable(info->vdd);
+	if (info->vdd)
+		regulator_disable(info->vdd);
+
 	clk_disable_unprepare(info->clk);
 err_iio_dev:
 	iio_device_unregister(indio_dev);
@@ -377,9 +391,14 @@ static int exynos_adc_remove(struct platform_device *pdev)
 
 	device_for_each_child(&pdev->dev, NULL,
 				exynos_adc_remove_devices);
-	regulator_disable(info->vdd);
+	if (info->vdd)
+		regulator_disable(info->vdd);
+
 	clk_disable_unprepare(info->clk);
-	writel(0, info->enable_reg);
+
+	if (info->phy_ctrl)
+		writel(0, info->enable_reg);
+
 	iio_device_unregister(indio_dev);
 	free_irq(info->irq, info);
 	iio_device_free(indio_dev);
@@ -405,8 +424,12 @@ static int exynos_adc_suspend(struct device *dev)
 	}
 
 	clk_disable_unprepare(info->clk);
-	writel(0, info->enable_reg);
-	regulator_disable(info->vdd);
+
+	if (info->phy_ctrl)
+		writel(0, info->enable_reg);
+
+	if (info->vdd)
+		regulator_disable(info->vdd);
 
 	return 0;
 }
@@ -417,11 +440,15 @@ static int exynos_adc_resume(struct device *dev)
 	struct exynos_adc *info = iio_priv(indio_dev);
 	int ret;
 
-	ret = regulator_enable(info->vdd);
-	if (ret)
-		return ret;
+	if (info->vdd) {
+		ret = regulator_enable(info->vdd);
+		if (ret)
+			return ret;
+	}
 
-	writel(1, info->enable_reg);
+	if (info->phy_ctrl)
+		writel(1, info->enable_reg);
+
 	clk_prepare_enable(info->clk);
 
 	exynos_adc_hw_init(info);
