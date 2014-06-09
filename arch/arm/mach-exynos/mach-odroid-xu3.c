@@ -14,7 +14,6 @@
 #include <linux/memblock.h>
 #include <linux/io.h>
 #include <linux/clocksource.h>
-#include <linux/exynos_ion.h>
 
 #include <asm/mach/arch.h>
 #include <mach/regs-pmu.h>
