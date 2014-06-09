@@ -52,7 +52,7 @@ static void __init exynos5_reserve(void)
 #endif
 }
 
-DT_MACHINE_START(ODROIDXU3, "xyref5422")
+DT_MACHINE_START(ODROIDXU3, "ODROID-XU3")
 	.init_irq	= exynos5_init_irq,
 	.smp		= smp_ops(exynos_smp_ops),
 	.map_io		= odroid_dt_map_io,
