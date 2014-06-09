@@ -193,8 +193,7 @@ static int scpi_clk_setup(struct device *dev, struct device_node *np,
 				 struct scpi_clk *) = data;
 	struct clk_onecell_data *clk_data;
 	struct clk **clks;
-	size_t count;
-	int idx;
+	int idx, count;
 
 	count = of_property_count_strings(np, "clock-output-names");
 	if (count < 0) {
@@ -242,6 +241,8 @@ static int scpi_clk_setup(struct device *dev, struct device_node *np,
 		if (IS_ERR(clks[idx])) {
 			dev_err(dev, "failed to register clock '%s'\n",
 				sclk->name);
+			if (PTR_ERR(clks[idx]) == -ENODEV)
+				return -EPROBE_DEFER;
 			return PTR_ERR(clks[idx]);
 		}
 
@@ -292,17 +293,7 @@ static struct platform_driver scpi_clk_driver = {
 	.probe = scpi_clk_probe,
 };
 
-static int __init scpi_clk_init(void)
-{
-	return platform_driver_register(&scpi_clk_driver);
-}
-postcore_initcall(scpi_clk_init);
-
-static void __exit scpi_clk_exit(void)
-{
-	platform_driver_unregister(&scpi_clk_driver);
-}
-module_exit(scpi_clk_exit);
+module_platform_driver(scpi_clk_driver);
 
 MODULE_AUTHOR("Sudeep Holla <sudeep.holla@arm.com>");
 MODULE_DESCRIPTION("ARM SCPI clock driver");

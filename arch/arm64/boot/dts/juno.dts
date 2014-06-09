@@ -50,6 +50,26 @@
 			};
 		};
 
+		idle-states {
+			entry-method = "arm,psci";
+
+			CPU_SLEEP_0: cpu-sleep-0 {
+				compatible = "arm,idle-state";
+				entry-method-param = <0x0010000>;
+				entry-latency-us = <40>;
+				exit-latency-us = <100>;
+				min-residency-us = <150>;
+			};
+
+			CLUSTER_SLEEP_0: cluster-sleep-0 {
+				compatible = "arm,idle-state";
+				entry-method-param = <0x1010000>;
+				entry-latency-us = <500>;
+				exit-latency-us = <1000>;
+				min-residency-us = <2500>;
+			};
+		};
+
 		CPU0:cpu@100 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53","arm,armv8";
@@ -57,6 +77,7 @@
 			enable-method = "psci";
 			clocks = <&scpi_dvfs 1>;
 			clock-names = "vlittle";
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 		};
 
 		CPU1:cpu@101 {
@@ -66,6 +87,7 @@
 			enable-method = "psci";
 			clocks = <&scpi_dvfs 1>;
 			clock-names = "vlittle";
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 		};
 
 		CPU2:cpu@102 {
@@ -75,6 +97,7 @@
 			enable-method = "psci";
 			clocks = <&scpi_dvfs 1>;
 			clock-names = "vlittle";
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 		};
 
 		CPU3:cpu@103 {
@@ -84,6 +107,7 @@
 			enable-method = "psci";
 			clocks = <&scpi_dvfs 1>;
 			clock-names = "vlittle";
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 		};
 
 		CPU4:cpu@0 {
@@ -93,6 +117,7 @@
 			enable-method = "psci";
 			clocks = <&scpi_dvfs 0>;
 			clock-names = "vbig";
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 		};
 
 		CPU5:cpu@1 {
@@ -102,6 +127,7 @@
 			enable-method = "psci";
 			clocks = <&scpi_dvfs 0>;
 			clock-names = "vbig";
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 		};
 	};
 
@@ -144,12 +170,28 @@
 			     <GIC_PPI 10 0xff01>;
 	};
 
+	timer@2a810000 {
+		compatible = "arm,armv7-timer-mem";
+		reg = <0x0 0x2a810000 0x0 0x10000>;
+		clock-frequency = <100000000>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		frame@2a830000 {
+			frame-number = <1>;
+			interrupts = <0 60 4>;
+			reg = <0x0 0x2a830000 0x0 0x10000>;
+		};
+	};
+
 	pmu {
 		compatible = "arm,armv8-pmuv3";
-		interrupts = <GIC_SPI 60 4>,
-			     <GIC_SPI 61 4>,
-			     <GIC_SPI 62 4>,
-			     <GIC_SPI 63 4>;
+		interrupts = <0 18 4>,
+			     <0 22 4>,
+			     <0 26 4>,
+			     <0 30 4>,
+			     <0 02 4>,
+			     <0 06 4>;
 	};
 
 	psci {

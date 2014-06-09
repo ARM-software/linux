@@ -34,6 +34,8 @@ static int scpi_init_opp_table(struct device *cpu_dev)
 	int idx, ret = 0, max_opp;
 	u32 *freqs;
 
+	if ((dev_pm_opp_get_opp_count(cpu_dev)) > 0)
+		return 0;
 	opp = scpi_dvfs_get_opps(domain);
 	if (IS_ERR(opp))
 		return PTR_ERR(opp);
