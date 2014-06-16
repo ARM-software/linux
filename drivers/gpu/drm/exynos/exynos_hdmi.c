@@ -2160,9 +2160,9 @@ static int hdmi_resources_init(struct hdmi_context *hdata)
 	DRM_DEBUG_KMS("HDMI resource init\n");
 
 	/* get clocks, power */
-	res->hdmi = devm_clk_get(dev, "hdmi");
+	res->hdmi = devm_clk_get(dev, "clk_hdmi");
 	if (IS_ERR(res->hdmi)) {
-		DRM_ERROR("failed to get clock 'hdmi'\n");
+		DRM_ERROR("failed to get clock 'clk_hdmi'\n");
 		ret = PTR_ERR(res->hdmi);
 		goto fail;
 	}

@@ -748,9 +748,9 @@ static int mixer_resources_init(struct mixer_context *mixer_ctx)
 
 	spin_lock_init(&mixer_res->reg_slock);
 
-	mixer_res->mixer = devm_clk_get(dev, "mixer");
+	mixer_res->mixer = devm_clk_get(dev, "clk_mixer");
 	if (IS_ERR(mixer_res->mixer)) {
-		dev_err(dev, "failed to get clock 'mixer'\n");
+		dev_err(dev, "failed to get clock 'clk_mixer'\n");
 		return -ENODEV;
 	}
 
