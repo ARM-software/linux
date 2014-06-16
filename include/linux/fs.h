@@ -1865,6 +1865,18 @@ extern struct dentry *mount_pseudo(struct file_system_type *, char *,
 #define fops_put(fops) \
 	do { if (fops) module_put((fops)->owner); } while(0)
 
+/*
+ * This one is to be used *ONLY* from ->open() instances.
+ * fops must be non-NULL, pinned down *and* module dependencies
+ * should be sufficient to pin the caller down as well.
+ */
+#define replace_fops(f, fops) \
+        do {    \
+                struct file *__file = (f); \
+                fops_put(__file->f_op); \
+                BUG_ON(!(__file->f_op = (fops))); \
+        } while(0)
+
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
 extern struct vfsmount *kern_mount_data(struct file_system_type *, void *data);
@@ -2542,6 +2554,9 @@ extern int simple_write_begin(struct file *file, struct address_space *mapping,
 extern int simple_write_end(struct file *file, struct address_space *mapping,
 			loff_t pos, unsigned len, unsigned copied,
 			struct page *page, void *fsdata);
+extern int always_delete_dentry(const struct dentry *);
+extern struct inode *alloc_anon_inode(struct super_block *);
+extern const struct dentry_operations simple_dentry_operations;
 
 extern struct dentry *simple_lookup(struct inode *, struct dentry *, unsigned int flags);
 extern ssize_t generic_read_dir(struct file *, char __user *, size_t, loff_t *);

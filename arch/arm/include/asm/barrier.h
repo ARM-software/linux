@@ -64,5 +64,8 @@
 
 #define set_mb(var, value)	do { var = value; smp_mb(); } while (0)
 
+#define smp_mb__before_atomic() smp_mb()
+#define smp_mb__after_atomic()  smp_mb()
+
 #endif /* !__ASSEMBLY__ */
 #endif /* __ASM_BARRIER_H */

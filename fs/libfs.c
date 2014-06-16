@@ -977,6 +977,40 @@ int noop_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	return 0;
 }
 
+/*
+ * A single inode exists for all anon_inode files. Contrary to pipes,
+ * anon_inode inodes have no associated per-instance data, so we need
+ * only allocate one of them. 
+ */
+struct inode *alloc_anon_inode(struct super_block *s)
+{
+        static const struct address_space_operations anon_aops = {
+                .set_page_dirty = 0,
+        };
+        struct inode *inode = new_inode_pseudo(s);
+ 
+        if (!inode)
+                return ERR_PTR(-ENOMEM);
+  
+        inode->i_ino = get_next_ino();
+        inode->i_mapping->a_ops = &anon_aops;
+   
+        /*
+         * Mark the inode dirty from the very beginning,
+         * that way it will never be moved to the dirty
+         * list because mark_inode_dirty() will think
+         * that it already _is_ on the dirty list.
+         */
+        inode->i_state = I_DIRTY;
+        inode->i_mode = S_IRUSR | S_IWUSR;
+        inode->i_uid = current_fsuid();
+        inode->i_gid = current_fsgid(); 
+        inode->i_flags |= S_PRIVATE;
+        inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+        return inode;
+}
+
+EXPORT_SYMBOL(alloc_anon_inode);
 EXPORT_SYMBOL(dcache_dir_close);
 EXPORT_SYMBOL(dcache_dir_lseek);
 EXPORT_SYMBOL(dcache_dir_open);

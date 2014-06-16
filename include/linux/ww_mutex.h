@@ -15,6 +15,7 @@
 #define __LINUX_WW_MUTEX_H
 
 #include <linux/mutex.h>
+#include <linux/debug_locks.h>
 
 struct ww_class {
 	atomic_long_t stamp;

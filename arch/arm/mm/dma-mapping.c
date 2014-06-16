@@ -1196,74 +1196,99 @@ fs_initcall(dma_debug_do_init);
 
 /* IOMMU */
 
+static int extend_iommu_mapping(struct dma_iommu_mapping *mapping);
+
 static inline dma_addr_t __alloc_iova(struct dma_iommu_mapping *mapping,
-				      size_t size)
+                                      size_t size)
 {
-	unsigned int order = get_order(size);
-	unsigned int align = 0;
-	unsigned int count, start;
-	unsigned long flags;
+        unsigned int order = get_order(size);
+        unsigned int align = 0;
+        unsigned int count, start;
+        size_t mapping_size = mapping->bits << PAGE_SHIFT;
+        unsigned long flags;
+        dma_addr_t iova;
+        int i;
 
-	if (order > CONFIG_ARM_DMA_IOMMU_ALIGNMENT)
-		order = CONFIG_ARM_DMA_IOMMU_ALIGNMENT;
+        if (order > CONFIG_ARM_DMA_IOMMU_ALIGNMENT)
+                order = CONFIG_ARM_DMA_IOMMU_ALIGNMENT;
 
-	count = PAGE_ALIGN(size) >> PAGE_SHIFT;
-	align = (1 << order) - 1;
+        count = PAGE_ALIGN(size) >> PAGE_SHIFT;
+        align = (1 << order) - 1;
 
-	spin_lock_irqsave(&mapping->lock, flags);
-	start = bitmap_find_next_zero_area(mapping->bitmap, mapping->bits, 0,
-					   count, align);
-	if (start > mapping->bits) {
-		spin_unlock_irqrestore(&mapping->lock, flags);
-		return DMA_ERROR_CODE;
-	}
+        spin_lock_irqsave(&mapping->lock, flags);
+        for (i = 0; i < mapping->nr_bitmaps; i++) {
+                start = bitmap_find_next_zero_area(mapping->bitmaps[i],
+                                mapping->bits, 0, count, align);
 
-	bitmap_set(mapping->bitmap, start, count);
-	spin_unlock_irqrestore(&mapping->lock, flags);
+                if (start > mapping->bits)
+                        continue;
 
+                bitmap_set(mapping->bitmaps[i], start, count);
+                break;
+        }
 
-	iova = mapping->base + (mapping->size * i);
-	iova += start << PAGE_SHIFT;
+        /*
+         * No unused range found. Try to extend the existing mapping
+         * and perform a second attempt to reserve an IO virtual
+         * address range of size bytes.
+         */
+        if (i == mapping->nr_bitmaps) {
+                if (extend_iommu_mapping(mapping)) {
+                        spin_unlock_irqrestore(&mapping->lock, flags);
+                        return DMA_ERROR_CODE;
+                }
 
-	return iova;
+                start = bitmap_find_next_zero_area(mapping->bitmaps[i],
+                                mapping->bits, 0, count, align);
+
+                if (start > mapping->bits) {
+                        spin_unlock_irqrestore(&mapping->lock, flags);
+                        return DMA_ERROR_CODE;
+                }
+
+                bitmap_set(mapping->bitmaps[i], start, count);
+        }
+        spin_unlock_irqrestore(&mapping->lock, flags);
+
+        iova = mapping->base + (mapping_size * i);
+        iova += start << PAGE_SHIFT;
+
+        return iova;
 }
 
 static inline void __free_iova(struct dma_iommu_mapping *mapping,
-			       dma_addr_t addr, size_t size)
+                               dma_addr_t addr, size_t size)
 {
-	unsigned int start = (addr - mapping->base) >>
-			     (mapping->order + PAGE_SHIFT);
-	unsigned int count = ((size >> PAGE_SHIFT) +
-			      (1 << mapping->order) - 1) >> mapping->order;
-	unsigned long flags;
+        unsigned int start, count;
+        size_t mapping_size = mapping->bits << PAGE_SHIFT;
+        unsigned long flags;
+        dma_addr_t bitmap_base;
+        u32 bitmap_index;
 
-	dma_addr_t bitmap_base;
-	u32 bitmap_index;
+        if (!size)
+                return;
 
-	if (!size)
-		return;
+        bitmap_index = (u32) (addr - mapping->base) / (u32) mapping_size;
+        BUG_ON(addr < mapping->base || bitmap_index > mapping->extensions);
 
-	bitmap_index = (u32) (addr - mapping->base) / (u32) mapping->size;
-	BUG_ON(addr < mapping->base || bitmap_index > mapping->extensions);
+        bitmap_base = mapping->base + mapping_size * bitmap_index;
 
-	bitmap_base = mapping->base + mapping->size * bitmap_index;
+        start = (addr - bitmap_base) >> PAGE_SHIFT;
 
-	start = (addr - bitmap_base) >>	PAGE_SHIFT;
+        if (addr + size > bitmap_base + mapping_size) {
+                /*
+                 * The address range to be freed reaches into the iova
+                 * range of the next bitmap. This should not happen as
+                 * we don't allow this in __alloc_iova (at the
+                 * moment).
+                 */
+                BUG();
+        } else
+                count = size >> PAGE_SHIFT;
 
-	if (addr + size > bitmap_base + mapping->size) {
-		/*
-		 * The address range to be freed reaches into the iova
-		 * range of the next bitmap. This should not happen as
-		 * we don't allow this in __alloc_iova (at the
-		 * moment).
-		 */
-		BUG();
-	} else
-		count = size >> PAGE_SHIFT;
-
-	spin_lock_irqsave(&mapping->lock, flags);
-	bitmap_clear(mapping->bitmap, start, count);
-	spin_unlock_irqrestore(&mapping->lock, flags);
+        spin_lock_irqsave(&mapping->lock, flags);
+        bitmap_clear(mapping->bitmaps[bitmap_index], start, count);
+        spin_unlock_irqrestore(&mapping->lock, flags);
 }
 
 static struct page **__iommu_alloc_buffer(struct device *dev, size_t size,
@@ -1990,7 +2015,7 @@ struct dma_map_ops iommu_coherent_ops = {
  * arm_iommu_create_mapping
  * @bus: pointer to the bus holding the client device (for IOMMU calls)
  * @base: start address of the valid IO address space
- * @size: maximum size of the valid IO address space
+ * @size: maximum size of the valid IO address space 
  *
  * Creates a mapping structure which holds information about used/unused
  * IO address ranges, which is required to perform memory allocation and
@@ -2002,74 +2027,97 @@ struct dma_map_ops iommu_coherent_ops = {
 struct dma_iommu_mapping *
 arm_iommu_create_mapping(struct bus_type *bus, dma_addr_t base, size_t size)
 {
+        unsigned int bits = size >> PAGE_SHIFT;
+        unsigned int bitmap_size = BITS_TO_LONGS(bits) * sizeof(long);
+        struct dma_iommu_mapping *mapping;
+        int extensions = 1;
+        int err = -ENOMEM; 
 
-	unsigned int bits = size >> PAGE_SHIFT;
-	unsigned int bitmap_size = BITS_TO_LONGS(bits) * sizeof(long);
-	struct dma_iommu_mapping *mapping;
-	int extensions = 1;
-	int err = -ENOMEM;
+        if (!bitmap_size)
+                return ERR_PTR(-EINVAL);
 
-	if (!bitmap_size)
-		return ERR_PTR(-EINVAL);
+        if (bitmap_size > PAGE_SIZE) {
+                extensions = bitmap_size / PAGE_SIZE;
+                bitmap_size = PAGE_SIZE;
+        }
 
-	if (bitmap_size > PAGE_SIZE) {
-		extensions = bitmap_size / PAGE_SIZE;
-		bitmap_size = PAGE_SIZE;
-	}
+        mapping = kzalloc(sizeof(struct dma_iommu_mapping), GFP_KERNEL);
+        if (!mapping)
+                goto err;
 
-	mapping = kzalloc(sizeof(struct dma_iommu_mapping), GFP_KERNEL);
-	if (!mapping)
-		goto err;
+        mapping->bitmap_size = bitmap_size;
+        mapping->bitmaps = kzalloc(extensions * sizeof(unsigned long *),
+                                GFP_KERNEL);
+        if (!mapping->bitmaps)
+                goto err2;
 
-	mapping->bitmap_size = bitmap_size;
-	mapping->bitmaps = kzalloc(extensions * sizeof(unsigned long *),
-				GFP_KERNEL);
-	if (!mapping->bitmaps)
-		goto err2;
+        mapping->bitmaps[0] = kzalloc(bitmap_size, GFP_KERNEL);
+        if (!mapping->bitmaps[0])
+                goto err3;
 
-	mapping->bitmaps[0] = kzalloc(bitmap_size, GFP_KERNEL);
-	if (!mapping->bitmaps[0])
-		goto err3;
+        mapping->nr_bitmaps = 1;
+        mapping->extensions = extensions;
+        mapping->base = base;
+        mapping->bits = BITS_PER_BYTE * bitmap_size;
 
-	mapping->nr_bitmaps = 1;
-	mapping->extensions = extensions;
-	mapping->base = base;
-	mapping->size = bitmap_size << PAGE_SHIFT;
-	mapping->bits = BITS_PER_BYTE * bitmap_size;
+        spin_lock_init(&mapping->lock);
 
-	spin_lock_init(&mapping->lock);
+        mapping->domain = iommu_domain_alloc(bus);
+        if (!mapping->domain)
+                goto err4;   
 
-	mapping->domain = iommu_domain_alloc(bus);
-	if (!mapping->domain)
-		goto err3;
-
-	kref_init(&mapping->kref);
-	return mapping;
+        kref_init(&mapping->kref);
+        return mapping;
+err4:
+        kfree(mapping->bitmaps[0]);
 err3:
-	kfree(mapping->bitmap);
+        kfree(mapping->bitmaps);
 err2:
-	kfree(mapping);
+        kfree(mapping);
 err:
-	return ERR_PTR(err);
+        return ERR_PTR(err);
 }
 EXPORT_SYMBOL_GPL(arm_iommu_create_mapping);
 
+
 static void release_iommu_mapping(struct kref *kref)
 {
-	struct dma_iommu_mapping *mapping =
-		container_of(kref, struct dma_iommu_mapping, kref);
+        int i; 
+        struct dma_iommu_mapping *mapping =
+                container_of(kref, struct dma_iommu_mapping, kref);
 
-	iommu_domain_free(mapping->domain);
-	kfree(mapping->bitmap);
-	kfree(mapping);
+        iommu_domain_free(mapping->domain);
+        for (i = 0; i < mapping->nr_bitmaps; i++)
+                kfree(mapping->bitmaps[i]);
+        kfree(mapping->bitmaps);
+        kfree(mapping);
+}
+
+static int extend_iommu_mapping(struct dma_iommu_mapping *mapping)
+{
+        int next_bitmap;
+ 
+        if (mapping->nr_bitmaps > mapping->extensions)
+                return -EINVAL;
+
+        next_bitmap = mapping->nr_bitmaps;
+        mapping->bitmaps[next_bitmap] = kzalloc(mapping->bitmap_size,
+                                                GFP_ATOMIC);
+        if (!mapping->bitmaps[next_bitmap])
+                return -ENOMEM;
+
+        mapping->nr_bitmaps++;
+
+        return 0;
 }
 
 void arm_iommu_release_mapping(struct dma_iommu_mapping *mapping)
 {
-	if (mapping)
-		kref_put(&mapping->kref, release_iommu_mapping);
+        if (mapping)
+                kref_put(&mapping->kref, release_iommu_mapping);
 }
 EXPORT_SYMBOL_GPL(arm_iommu_release_mapping);
+
 
 /**
  * arm_iommu_attach_device

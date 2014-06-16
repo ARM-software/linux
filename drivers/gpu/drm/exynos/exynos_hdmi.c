@@ -35,6 +35,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_gpio.h>
+#include <linux/of_i2c.h>
 #include <linux/hdmi.h>
 #include <linux/component.h>
 #include <linux/mfd/syscon.h>

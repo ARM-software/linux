@@ -14,7 +14,8 @@
 #include <linux/spinlock_types.h>
 #include <linux/linkage.h>
 #include <linux/lockdep.h>
-
+#include <asm/processor.h>
+#include <asm/current.h>
 #include <linux/atomic.h>
 
 /*

@@ -24,6 +24,7 @@
 #define __DRM_EDID_H__
 
 #include <linux/types.h>
+#include <linux/hdmi.h>
 
 #define EDID_LENGTH 128
 #define DDC_ADDR 0x50
