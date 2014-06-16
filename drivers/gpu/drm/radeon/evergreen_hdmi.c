@@ -32,6 +32,12 @@
 #include "evergreend.h"
 #include "atom.h"
 
+extern void dce6_afmt_write_speaker_allocation(struct drm_encoder *encoder);
+extern void dce6_afmt_write_sad_regs(struct drm_encoder *encoder);
+extern void dce6_afmt_select_pin(struct drm_encoder *encoder);
+extern void dce6_afmt_write_latency_fields(struct drm_encoder *encoder,
+					   struct drm_display_mode *mode);
+
 /*
  * update the N and CTS parameters for a given pixel clock rate
  */
@@ -52,6 +58,83 @@ static void evergreen_hdmi_update_ACR(struct drm_encoder *encoder, uint32_t cloc
 
 	WREG32(HDMI_ACR_48_0 + offset, HDMI_ACR_CTS_48(acr.cts_48khz));
 	WREG32(HDMI_ACR_48_1 + offset, acr.n_48khz);
+}
+
+static void dce4_afmt_write_latency_fields(struct drm_encoder *encoder,
+					   struct drm_display_mode *mode)
+{
+	struct radeon_device *rdev = encoder->dev->dev_private;
+	struct drm_connector *connector;
+	struct radeon_connector *radeon_connector = NULL;
+	u32 tmp = 0;
+
+	list_for_each_entry(connector, &encoder->dev->mode_config.connector_list, head) {
+		if (connector->encoder == encoder) {
+			radeon_connector = to_radeon_connector(connector);
+			break;
+		}
+	}
+
+	if (!radeon_connector) {
+		DRM_ERROR("Couldn't find encoder's connector\n");
+		return;
+	}
+
+	if (mode->flags & DRM_MODE_FLAG_INTERLACE) {
+		if (connector->latency_present[1])
+			tmp = VIDEO_LIPSYNC(connector->video_latency[1]) |
+				AUDIO_LIPSYNC(connector->audio_latency[1]);
+		else
+			tmp = VIDEO_LIPSYNC(255) | AUDIO_LIPSYNC(255);
+	} else {
+		if (connector->latency_present[0])
+			tmp = VIDEO_LIPSYNC(connector->video_latency[0]) |
+				AUDIO_LIPSYNC(connector->audio_latency[0]);
+		else
+			tmp = VIDEO_LIPSYNC(255) | AUDIO_LIPSYNC(255);
+	}
+	WREG32(AZ_F0_CODEC_PIN0_CONTROL_RESPONSE_LIPSYNC, tmp);
+}
+
+static void dce4_afmt_write_speaker_allocation(struct drm_encoder *encoder)
+{
+	struct radeon_device *rdev = encoder->dev->dev_private;
+	struct drm_connector *connector;
+	struct radeon_connector *radeon_connector = NULL;
+	u32 tmp;
+	u8 *sadb;
+	int sad_count;
+
+	list_for_each_entry(connector, &encoder->dev->mode_config.connector_list, head) {
+		if (connector->encoder == encoder) {
+			radeon_connector = to_radeon_connector(connector);
+			break;
+		}
+	}
+
+	if (!radeon_connector) {
+		DRM_ERROR("Couldn't find encoder's connector\n");
+		return;
+	}
+
+	sad_count = drm_edid_to_speaker_allocation(radeon_connector->edid, &sadb);
+	if (sad_count <= 0) {
+		DRM_ERROR("Couldn't read Speaker Allocation Data Block: %d\n", sad_count);
+		return;
+	}
+
+	/* program the speaker allocation */
+	tmp = RREG32(AZ_F0_CODEC_PIN0_CONTROL_CHANNEL_SPEAKER);
+	tmp &= ~(DP_CONNECTION | SPEAKER_ALLOCATION_MASK);
+	/* set HDMI mode */
+	tmp |= HDMI_CONNECTION;
+	if (sad_count)
+		tmp |= SPEAKER_ALLOCATION(sadb[0]);
+	else
+		tmp |= SPEAKER_ALLOCATION(5); /* stereo */
+	WREG32(AZ_F0_CODEC_PIN0_CONTROL_CHANNEL_SPEAKER, tmp);
+
+	kfree(sadb);
 }
 
 static void evergreen_hdmi_write_sad_regs(struct drm_encoder *encoder)
@@ -78,8 +161,10 @@ static void evergreen_hdmi_write_sad_regs(struct drm_encoder *encoder)
 	};
 
 	list_for_each_entry(connector, &encoder->dev->mode_config.connector_list, head) {
-		if (connector->encoder == encoder)
+		if (connector->encoder == encoder) {
 			radeon_connector = to_radeon_connector(connector);
+			break;
+		}
 	}
 
 	if (!radeon_connector) {
@@ -88,7 +173,7 @@ static void evergreen_hdmi_write_sad_regs(struct drm_encoder *encoder)
 	}
 
 	sad_count = drm_edid_to_sad(radeon_connector->edid, &sads);
-	if (sad_count < 0) {
+	if (sad_count <= 0) {
 		DRM_ERROR("Couldn't read SADs: %d\n", sad_count);
 		return;
 	}
@@ -96,20 +181,30 @@ static void evergreen_hdmi_write_sad_regs(struct drm_encoder *encoder)
 
 	for (i = 0; i < ARRAY_SIZE(eld_reg_to_type); i++) {
 		u32 value = 0;
+		u8 stereo_freqs = 0;
+		int max_channels = -1;
 		int j;
 
 		for (j = 0; j < sad_count; j++) {
 			struct cea_sad *sad = &sads[j];
 
 			if (sad->format == eld_reg_to_type[i][1]) {
-				value = MAX_CHANNELS(sad->channels) |
-					DESCRIPTOR_BYTE_2(sad->byte2) |
-					SUPPORTED_FREQUENCIES(sad->freq);
+				if (sad->channels > max_channels) {
+					value = MAX_CHANNELS(sad->channels) |
+						DESCRIPTOR_BYTE_2(sad->byte2) |
+						SUPPORTED_FREQUENCIES(sad->freq);
+					max_channels = sad->channels;
+				}
+
 				if (sad->format == HDMI_AUDIO_CODING_TYPE_PCM)
-					value |= SUPPORTED_FREQUENCIES_STEREO(sad->freq);
-				break;
+					stereo_freqs |= sad->freq;
+				else
+					break;
 			}
 		}
+
+		value |= SUPPORTED_FREQUENCIES_STEREO(stereo_freqs);
+
 		WREG32(eld_reg_to_type[i][0], value);
 	}
 
@@ -148,9 +243,35 @@ static void evergreen_audio_set_dto(struct drm_encoder *encoder, u32 clock)
 	struct radeon_encoder_atom_dig *dig = radeon_encoder->enc_priv;
 	struct radeon_crtc *radeon_crtc = to_radeon_crtc(encoder->crtc);
 	u32 base_rate = 24000;
+	u32 max_ratio = clock / base_rate;
+	u32 dto_phase;
+	u32 dto_modulo = clock;
+	u32 wallclock_ratio;
+	u32 dto_cntl;
 
 	if (!dig || !dig->afmt)
 		return;
+
+	if (ASIC_IS_DCE6(rdev)) {
+		dto_phase = 24 * 1000;
+	} else {
+		if (max_ratio >= 8) {
+			dto_phase = 192 * 1000;
+			wallclock_ratio = 3;
+		} else if (max_ratio >= 4) {
+			dto_phase = 96 * 1000;
+			wallclock_ratio = 2;
+		} else if (max_ratio >= 2) {
+			dto_phase = 48 * 1000;
+			wallclock_ratio = 1;
+		} else {
+			dto_phase = 24 * 1000;
+			wallclock_ratio = 0;
+		}
+		dto_cntl = RREG32(DCCG_AUDIO_DTO0_CNTL) & ~DCCG_AUDIO_DTO_WALLCLOCK_RATIO_MASK;
+		dto_cntl |= DCCG_AUDIO_DTO_WALLCLOCK_RATIO(wallclock_ratio);
+		WREG32(DCCG_AUDIO_DTO0_CNTL, dto_cntl);
+	}
 
 	/* XXX two dtos; generally use dto0 for hdmi */
 	/* Express [24MHz / target pixel clock] as an exact rational
@@ -158,8 +279,8 @@ static void evergreen_audio_set_dto(struct drm_encoder *encoder, u32 clock)
 	 * is the numerator, DCCG_AUDIO_DTOx_MODULE is the denominator
 	 */
 	WREG32(DCCG_AUDIO_DTO_SOURCE, DCCG_AUDIO_DTO0_SOURCE_SEL(radeon_crtc->crtc_id));
-	WREG32(DCCG_AUDIO_DTO0_PHASE, base_rate * 100);
-	WREG32(DCCG_AUDIO_DTO0_MODULE, clock * 100);
+	WREG32(DCCG_AUDIO_DTO0_PHASE, dto_phase);
+	WREG32(DCCG_AUDIO_DTO0_MODULE, dto_modulo);
 }
 
 
@@ -172,10 +293,13 @@ void evergreen_hdmi_setmode(struct drm_encoder *encoder, struct drm_display_mode
 	struct radeon_device *rdev = dev->dev_private;
 	struct radeon_encoder *radeon_encoder = to_radeon_encoder(encoder);
 	struct radeon_encoder_atom_dig *dig = radeon_encoder->enc_priv;
+	struct drm_connector *connector = radeon_get_connector_for_encoder(encoder);
 	u8 buffer[HDMI_INFOFRAME_HEADER_SIZE + HDMI_AVI_INFOFRAME_SIZE];
 	struct hdmi_avi_infoframe frame;
 	uint32_t offset;
 	ssize_t err;
+	uint32_t val;
+	int bpc = 8;
 
 	if (!dig || !dig->afmt)
 		return;
@@ -185,12 +309,56 @@ void evergreen_hdmi_setmode(struct drm_encoder *encoder, struct drm_display_mode
 		return;
 	offset = dig->afmt->offset;
 
+	/* hdmi deep color mode general control packets setup, if bpc > 8 */
+	if (encoder->crtc) {
+		struct radeon_crtc *radeon_crtc = to_radeon_crtc(encoder->crtc);
+		bpc = radeon_crtc->bpc;
+	}
+
+	/* disable audio prior to setting up hw */
+	if (ASIC_IS_DCE6(rdev)) {
+		dig->afmt->pin = dce6_audio_get_pin(rdev);
+		dce6_audio_enable(rdev, dig->afmt->pin, false);
+	} else {
+		dig->afmt->pin = r600_audio_get_pin(rdev);
+		r600_audio_enable(rdev, dig->afmt->pin, false);
+	}
+
 	evergreen_audio_set_dto(encoder, mode->clock);
 
 	WREG32(HDMI_VBI_PACKET_CONTROL + offset,
 	       HDMI_NULL_SEND); /* send null packets when required */
 
 	WREG32(AFMT_AUDIO_CRC_CONTROL + offset, 0x1000);
+
+	val = RREG32(HDMI_CONTROL + offset);
+	val &= ~HDMI_DEEP_COLOR_ENABLE;
+	val &= ~HDMI_DEEP_COLOR_DEPTH_MASK;
+
+	switch (bpc) {
+		case 0:
+		case 6:
+		case 8:
+		case 16:
+		default:
+			DRM_DEBUG("%s: Disabling hdmi deep color for %d bpc.\n",
+					 connector->name, bpc);
+			break;
+		case 10:
+			val |= HDMI_DEEP_COLOR_ENABLE;
+			val |= HDMI_DEEP_COLOR_DEPTH(HDMI_30BIT_DEEP_COLOR);
+			DRM_DEBUG("%s: Enabling hdmi deep color 30 for 10 bpc.\n",
+					 connector->name);
+			break;
+		case 12:
+			val |= HDMI_DEEP_COLOR_ENABLE;
+			val |= HDMI_DEEP_COLOR_DEPTH(HDMI_36BIT_DEEP_COLOR);
+			DRM_DEBUG("%s: Enabling hdmi deep color 36 for 12 bpc.\n",
+					 connector->name);
+			break;
+	}
+
+	WREG32(HDMI_CONTROL + offset, val);
 
 	WREG32(HDMI_VBI_PACKET_CONTROL + offset,
 	       HDMI_NULL_SEND | /* send null packets when required */
@@ -218,8 +386,13 @@ void evergreen_hdmi_setmode(struct drm_encoder *encoder, struct drm_display_mode
 
 	/* fglrx clears sth in AFMT_AUDIO_PACKET_CONTROL2 here */
 
-	WREG32(HDMI_ACR_PACKET_CONTROL + offset,
-	       HDMI_ACR_AUTO_SEND); /* allow hw to sent ACR packets when required */
+	if (bpc > 8)
+		WREG32(HDMI_ACR_PACKET_CONTROL + offset,
+		       HDMI_ACR_AUTO_SEND); /* allow hw to sent ACR packets when required */
+	else
+		WREG32(HDMI_ACR_PACKET_CONTROL + offset,
+		       HDMI_ACR_SOURCE | /* select SW CTS value */
+		       HDMI_ACR_AUTO_SEND); /* allow hw to sent ACR packets when required */
 
 	evergreen_hdmi_update_ACR(encoder, mode->clock);
 
@@ -237,13 +410,25 @@ void evergreen_hdmi_setmode(struct drm_encoder *encoder, struct drm_display_mode
 	       AFMT_60958_CS_CHANNEL_NUMBER_6(7) |
 	       AFMT_60958_CS_CHANNEL_NUMBER_7(8));
 
-	/* fglrx sets 0x0001005f | (x & 0x00fc0000) in 0x5f78 here */
+	if (ASIC_IS_DCE6(rdev)) {
+		dce6_afmt_write_speaker_allocation(encoder);
+	} else {
+		dce4_afmt_write_speaker_allocation(encoder);
+	}
 
 	WREG32(AFMT_AUDIO_PACKET_CONTROL2 + offset,
 	       AFMT_AUDIO_CHANNEL_ENABLE(0xff));
 
 	/* fglrx sets 0x40 in 0x5f80 here */
-	evergreen_hdmi_write_sad_regs(encoder);
+
+	if (ASIC_IS_DCE6(rdev)) {
+		dce6_afmt_select_pin(encoder);
+		dce6_afmt_write_sad_regs(encoder);
+		dce6_afmt_write_latency_fields(encoder, mode);
+	} else {
+		evergreen_hdmi_write_sad_regs(encoder);
+		dce4_afmt_write_latency_fields(encoder, mode);
+	}
 
 	err = drm_hdmi_avi_infoframe_from_display_mode(&frame, mode);
 	if (err < 0) {
@@ -275,6 +460,12 @@ void evergreen_hdmi_setmode(struct drm_encoder *encoder, struct drm_display_mode
 	WREG32(AFMT_RAMP_CONTROL1 + offset, 0x007FFFFF);
 	WREG32(AFMT_RAMP_CONTROL2 + offset, 0x00000001);
 	WREG32(AFMT_RAMP_CONTROL3 + offset, 0x00000001);
+
+	/* enable audio after to setting up hw */
+	if (ASIC_IS_DCE6(rdev))
+		dce6_audio_enable(rdev, dig->afmt->pin, true);
+	else
+		r600_audio_enable(rdev, dig->afmt->pin, true);
 }
 
 void evergreen_hdmi_enable(struct drm_encoder *encoder, bool enable)

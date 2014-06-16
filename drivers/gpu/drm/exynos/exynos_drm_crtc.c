@@ -132,19 +132,20 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	 */
 	memcpy(&crtc->mode, adjusted_mode, sizeof(*adjusted_mode));
 
-	crtc_w = crtc->fb->width - x;
-	crtc_h = crtc->fb->height - y;
+	crtc_w = crtc->primary->fb->width - x;
+	crtc_h = crtc->primary->fb->height - y;
 
 	if (manager->ops->mode_set)
 		manager->ops->mode_set(manager, &crtc->mode);
 
-	ret = exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
+	ret = exynos_plane_mode_set(plane, crtc, crtc->primary->fb, 0, 0, crtc_w, crtc_h,
 				    x, y, crtc_w, crtc_h);
 	if (ret)
 		return ret;
 
 	plane->crtc = crtc;
-	plane->fb = crtc->fb;
+	plane->fb = crtc->primary->fb;
+	drm_framebuffer_reference(plane->fb);
 
 	return 0;
 }
@@ -164,10 +165,10 @@ static int exynos_drm_crtc_mode_set_commit(struct drm_crtc *crtc, int x, int y,
 		return -EPERM;
 	}
 
-	crtc_w = crtc->fb->width - x;
-	crtc_h = crtc->fb->height - y;
+	crtc_w = crtc->primary->fb->width - x;
+	crtc_h = crtc->primary->fb->height - y;
 
-	ret = exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
+	ret = exynos_plane_mode_set(plane, crtc, crtc->primary->fb, 0, 0, crtc_w, crtc_h,
 				    x, y, crtc_w, crtc_h);
 	if (ret)
 		return ret;
@@ -211,13 +212,14 @@ static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
 };
 
 static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
-				      struct drm_framebuffer *fb,
-				      struct drm_pending_vblank_event *event)
+				     struct drm_framebuffer *fb,
+				     struct drm_pending_vblank_event *event,
+				     uint32_t page_flip_flags)
 {
 	struct drm_device *dev = crtc->dev;
 	struct exynos_drm_private *dev_priv = dev->dev_private;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	struct drm_framebuffer *old_fb = crtc->fb;
+	struct drm_framebuffer *old_fb = crtc->primary->fb;
 	int ret = -EINVAL;
 
 	/* when the page flip is requested, crtc's dpms should be on */
@@ -248,11 +250,11 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		atomic_set(&exynos_crtc->pending_flip, 1);
 		spin_unlock_irq(&dev->event_lock);
 
-		crtc->fb = fb;
+		crtc->primary->fb = fb;
 		ret = exynos_drm_crtc_mode_set_commit(crtc, crtc->x, crtc->y,
 						    NULL);
 		if (ret) {
-			crtc->fb = old_fb;
+			crtc->primary->fb = old_fb;
 
 			spin_lock_irq(&dev->event_lock);
 			drm_vblank_put(dev, exynos_crtc->pipe);
@@ -366,6 +368,7 @@ int exynos_drm_crtc_create(struct exynos_drm_manager *manager)
 		return -ENOMEM;
 	}
 
+	manager->crtc = &exynos_crtc->drm_crtc;
 	crtc = &exynos_crtc->drm_crtc;
 
 	private->crtc[manager->pipe] = crtc;
@@ -488,4 +491,20 @@ void exynos_drm_crtc_complete_scanout(struct drm_framebuffer *fb)
 		if (manager->ops->wait_for_vblank)
 			manager->ops->wait_for_vblank(manager);
 	}
+}
+
+int exynos_drm_crtc_get_pipe_from_type(struct drm_device *drm_dev,
+					unsigned int out_type)
+{
+	struct drm_crtc *crtc;
+
+	list_for_each_entry(crtc, &drm_dev->mode_config.crtc_list, head) {
+		struct exynos_drm_crtc *exynos_crtc;
+
+		exynos_crtc = to_exynos_crtc(crtc);
+		if (exynos_crtc->manager->type == out_type)
+			return exynos_crtc->manager->pipe;
+	}
+
+	return -EPERM;
 }

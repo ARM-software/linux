@@ -109,7 +109,8 @@ static int sis_drm_alloc(struct drm_device *dev, struct drm_file *file,
 	if (pool == AGP_TYPE) {
 		retval = drm_mm_insert_node(&dev_priv->agp_mm,
 					    &item->mm_node,
-					    mem->size, 0);
+					    mem->size, 0,
+					    DRM_MM_SEARCH_DEFAULT);
 		offset = item->mm_node.start;
 	} else {
 #if defined(CONFIG_FB_SIS) || defined(CONFIG_FB_SIS_MODULE)
@@ -121,7 +122,8 @@ static int sis_drm_alloc(struct drm_device *dev, struct drm_file *file,
 #else
 		retval = drm_mm_insert_node(&dev_priv->vram_mm,
 					    &item->mm_node,
-					    mem->size, 0);
+					    mem->size, 0,
+					    DRM_MM_SEARCH_DEFAULT);
 		offset = item->mm_node.start;
 #endif
 	}
@@ -264,7 +266,7 @@ int sis_idle(struct drm_device *dev)
 	 * because its polling frequency is too low.
 	 */
 
-	end = jiffies + (DRM_HZ * 3);
+	end = jiffies + (HZ * 3);
 
 	for (i = 0; i < 4; ++i) {
 		do {
@@ -357,4 +359,4 @@ const struct drm_ioctl_desc sis_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(SIS_FB_INIT, sis_fb_init, DRM_AUTH | DRM_MASTER | DRM_ROOT_ONLY),
 };
 
-int sis_max_ioctl = DRM_ARRAY_SIZE(sis_ioctls);
+int sis_max_ioctl = ARRAY_SIZE(sis_ioctls);

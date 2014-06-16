@@ -65,7 +65,6 @@ static const struct file_operations udl_driver_fops = {
 	.read = drm_read,
 	.unlocked_ioctl	= drm_ioctl,
 	.release = drm_release,
-	.fasync = drm_fasync,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = drm_compat_ioctl,
 #endif
@@ -78,7 +77,6 @@ static struct drm_driver driver = {
 	.unload = udl_driver_unload,
 
 	/* gem hooks */
-	.gem_init_object = udl_gem_init_object,
 	.gem_free_object = udl_gem_free_object,
 	.gem_vm_ops = &udl_gem_vm_ops,
 

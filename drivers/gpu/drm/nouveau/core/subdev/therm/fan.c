@@ -211,6 +211,23 @@ nouveau_therm_fan_safety_checks(struct nouveau_therm *therm)
 }
 
 int
+nouveau_therm_fan_init(struct nouveau_therm *therm)
+{
+	return 0;
+}
+
+int
+nouveau_therm_fan_fini(struct nouveau_therm *therm, bool suspend)
+{
+	struct nouveau_therm_priv *priv = (void *)therm;
+	struct nouveau_timer *ptimer = nouveau_timer(therm);
+
+	if (suspend)
+		ptimer->alarm_cancel(ptimer, &priv->fan->alarm);
+	return 0;
+}
+
+int
 nouveau_therm_fan_ctor(struct nouveau_therm *therm)
 {
 	struct nouveau_therm_priv *priv = (void *)therm;
@@ -222,7 +239,8 @@ nouveau_therm_fan_ctor(struct nouveau_therm *therm)
 	/* attempt to locate a drivable fan, and determine control method */
 	ret = gpio->find(gpio, 0, DCB_GPIO_FAN, 0xff, &func);
 	if (ret == 0) {
-		if (func.log[0] & DCB_GPIO_LOG_DIR_IN) {
+		/* FIXME: is this really the place to perform such checks ? */
+		if (func.line != 16 && func.log[0] & DCB_GPIO_LOG_DIR_IN) {
 			nv_debug(therm, "GPIO_FAN is in input mode\n");
 			ret = -EINVAL;
 		} else {
@@ -240,6 +258,9 @@ nouveau_therm_fan_ctor(struct nouveau_therm *therm)
 	}
 
 	nv_info(therm, "FAN control: %s\n", priv->fan->type);
+
+	/* read the current speed, it is useful when resuming */
+	priv->fan->percent = nouveau_therm_fan_get(therm);
 
 	/* attempt to detect a tachometer connection */
 	ret = gpio->find(gpio, 0, DCB_GPIO_FAN_SENSE, 0xff, &priv->fan->tach);

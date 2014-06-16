@@ -12,15 +12,15 @@
 
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/of.h>
-
-#include <video/exynos_dp.h>
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+#include <linux/component.h>
 #include <linux/phy/phy.h>
 #include <video/of_display_timing.h>
 #include <video/of_videomode.h>
@@ -28,12 +28,18 @@
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/bridge/ptn3460.h>
 
 #include "exynos_drm_drv.h"
 #include "exynos_dp_core.h"
 
 #define ctx_from_connector(c)	container_of(c, struct exynos_dp_device, \
 					connector)
+
+struct bridge_init {
+	struct i2c_client *client;
+	struct device_node *node;
+};
 
 static int exynos_dp_init_dp(struct exynos_dp_device *dp)
 {
@@ -138,15 +144,15 @@ static int exynos_dp_read_edid(struct exynos_dp_device *dp)
 			return -EIO;
 		}
 
-		exynos_dp_read_byte_from_dpcd(dp, DPCD_ADDR_TEST_REQUEST,
+		exynos_dp_read_byte_from_dpcd(dp, DP_TEST_REQUEST,
 					&test_vector);
-		if (test_vector & DPCD_TEST_EDID_READ) {
+		if (test_vector & DP_TEST_LINK_EDID_READ) {
 			exynos_dp_write_byte_to_dpcd(dp,
-				DPCD_ADDR_TEST_EDID_CHECKSUM,
+				DP_TEST_EDID_CHECKSUM,
 				edid[EDID_BLOCK_LENGTH + EDID_CHECKSUM]);
 			exynos_dp_write_byte_to_dpcd(dp,
-				DPCD_ADDR_TEST_RESPONSE,
-				DPCD_TEST_EDID_CHECKSUM_WRITE);
+				DP_TEST_RESPONSE,
+				DP_TEST_EDID_CHECKSUM_WRITE);
 		}
 	} else {
 		dev_info(dp->dev, "EDID data does not include any extensions.\n");
@@ -168,15 +174,15 @@ static int exynos_dp_read_edid(struct exynos_dp_device *dp)
 		}
 
 		exynos_dp_read_byte_from_dpcd(dp,
-			DPCD_ADDR_TEST_REQUEST,
+			DP_TEST_REQUEST,
 			&test_vector);
-		if (test_vector & DPCD_TEST_EDID_READ) {
+		if (test_vector & DP_TEST_LINK_EDID_READ) {
 			exynos_dp_write_byte_to_dpcd(dp,
-				DPCD_ADDR_TEST_EDID_CHECKSUM,
+				DP_TEST_EDID_CHECKSUM,
 				edid[EDID_CHECKSUM]);
 			exynos_dp_write_byte_to_dpcd(dp,
-				DPCD_ADDR_TEST_RESPONSE,
-				DPCD_TEST_EDID_CHECKSUM_WRITE);
+				DP_TEST_RESPONSE,
+				DP_TEST_EDID_CHECKSUM_WRITE);
 		}
 	}
 
@@ -190,8 +196,8 @@ static int exynos_dp_handle_edid(struct exynos_dp_device *dp)
 	int i;
 	int retval;
 
-	/* Read DPCD DPCD_ADDR_DPCD_REV~RECEIVE_PORT1_CAP_1 */
-	retval = exynos_dp_read_bytes_from_dpcd(dp, DPCD_ADDR_DPCD_REV,
+	/* Read DPCD DP_DPCD_REV~RECEIVE_PORT1_CAP_1 */
+	retval = exynos_dp_read_bytes_from_dpcd(dp, DP_DPCD_REV,
 				12, buf);
 	if (retval)
 		return retval;
@@ -211,14 +217,14 @@ static void exynos_dp_enable_rx_to_enhanced_mode(struct exynos_dp_device *dp,
 {
 	u8 data;
 
-	exynos_dp_read_byte_from_dpcd(dp, DPCD_ADDR_LANE_COUNT_SET, &data);
+	exynos_dp_read_byte_from_dpcd(dp, DP_LANE_COUNT_SET, &data);
 
 	if (enable)
-		exynos_dp_write_byte_to_dpcd(dp, DPCD_ADDR_LANE_COUNT_SET,
-			DPCD_ENHANCED_FRAME_EN |
+		exynos_dp_write_byte_to_dpcd(dp, DP_LANE_COUNT_SET,
+			DP_LANE_COUNT_ENHANCED_FRAME_EN |
 			DPCD_LANE_COUNT_SET(data));
 	else
-		exynos_dp_write_byte_to_dpcd(dp, DPCD_ADDR_LANE_COUNT_SET,
+		exynos_dp_write_byte_to_dpcd(dp, DP_LANE_COUNT_SET,
 			DPCD_LANE_COUNT_SET(data));
 }
 
@@ -227,7 +233,7 @@ static int exynos_dp_is_enhanced_mode_available(struct exynos_dp_device *dp)
 	u8 data;
 	int retval;
 
-	exynos_dp_read_byte_from_dpcd(dp, DPCD_ADDR_MAX_LANE_COUNT, &data);
+	exynos_dp_read_byte_from_dpcd(dp, DP_MAX_LANE_COUNT, &data);
 	retval = DPCD_ENHANCED_FRAME_CAP(data);
 
 	return retval;
@@ -247,8 +253,8 @@ static void exynos_dp_training_pattern_dis(struct exynos_dp_device *dp)
 	exynos_dp_set_training_pattern(dp, DP_NONE);
 
 	exynos_dp_write_byte_to_dpcd(dp,
-		DPCD_ADDR_TRAINING_PATTERN_SET,
-		DPCD_TRAINING_PATTERN_DISABLED);
+		DP_TRAINING_PATTERN_SET,
+		DP_TRAINING_PATTERN_DISABLE);
 }
 
 static void exynos_dp_set_lane_lane_pre_emphasis(struct exynos_dp_device *dp,
@@ -292,7 +298,7 @@ static int exynos_dp_link_start(struct exynos_dp_device *dp)
 	/* Setup RX configuration */
 	buf[0] = dp->link_train.link_rate;
 	buf[1] = dp->link_train.lane_count;
-	retval = exynos_dp_write_bytes_to_dpcd(dp, DPCD_ADDR_LINK_BW_SET,
+	retval = exynos_dp_write_bytes_to_dpcd(dp, DP_LINK_BW_SET,
 				2, buf);
 	if (retval)
 		return retval;
@@ -319,16 +325,16 @@ static int exynos_dp_link_start(struct exynos_dp_device *dp)
 
 	/* Set RX training pattern */
 	retval = exynos_dp_write_byte_to_dpcd(dp,
-			DPCD_ADDR_TRAINING_PATTERN_SET,
-			DPCD_SCRAMBLING_DISABLED | DPCD_TRAINING_PATTERN_1);
+			DP_TRAINING_PATTERN_SET,
+			DP_LINK_SCRAMBLING_DISABLE | DP_TRAINING_PATTERN_1);
 	if (retval)
 		return retval;
 
 	for (lane = 0; lane < lane_count; lane++)
-		buf[lane] = DPCD_PRE_EMPHASIS_PATTERN2_LEVEL0 |
-			    DPCD_VOLTAGE_SWING_PATTERN1_LEVEL0;
+		buf[lane] = DP_TRAIN_PRE_EMPHASIS_0 |
+			    DP_TRAIN_VOLTAGE_SWING_400;
 
-	retval = exynos_dp_write_bytes_to_dpcd(dp, DPCD_ADDR_TRAINING_LANE0_SET,
+	retval = exynos_dp_write_bytes_to_dpcd(dp, DP_TRAINING_LANE0_SET,
 			lane_count, buf);
 
 	return retval;
@@ -349,7 +355,7 @@ static int exynos_dp_clock_recovery_ok(u8 link_status[2], int lane_count)
 
 	for (lane = 0; lane < lane_count; lane++) {
 		lane_status = exynos_dp_get_lane_status(link_status, lane);
-		if ((lane_status & DPCD_LANE_CR_DONE) == 0)
+		if ((lane_status & DP_LANE_CR_DONE) == 0)
 			return -EINVAL;
 	}
 	return 0;
@@ -361,13 +367,13 @@ static int exynos_dp_channel_eq_ok(u8 link_status[2], u8 link_align,
 	int lane;
 	u8 lane_status;
 
-	if ((link_align & DPCD_INTERLANE_ALIGN_DONE) == 0)
+	if ((link_align & DP_INTERLANE_ALIGN_DONE) == 0)
 		return -EINVAL;
 
 	for (lane = 0; lane < lane_count; lane++) {
 		lane_status = exynos_dp_get_lane_status(link_status, lane);
-		lane_status &= DPCD_CHANNEL_EQ_BITS;
-		if (lane_status != DPCD_CHANNEL_EQ_BITS)
+		lane_status &= DP_CHANNEL_EQ_BITS;
+		if (lane_status != DP_CHANNEL_EQ_BITS)
 			return -EINVAL;
 	}
 
@@ -465,9 +471,9 @@ static void exynos_dp_get_adjust_training_lane(struct exynos_dp_device *dp,
 				DPCD_PRE_EMPHASIS_SET(pre_emphasis);
 
 		if (voltage_swing == VOLTAGE_LEVEL_3)
-			training_lane |= DPCD_MAX_SWING_REACHED;
+			training_lane |= DP_TRAIN_MAX_SWING_REACHED;
 		if (pre_emphasis == PRE_EMPHASIS_LEVEL_3)
-			training_lane |= DPCD_MAX_PRE_EMPHASIS_REACHED;
+			training_lane |= DP_TRAIN_MAX_PRE_EMPHASIS_REACHED;
 
 		dp->link_train.training_lane[lane] = training_lane;
 	}
@@ -484,12 +490,12 @@ static int exynos_dp_process_clock_recovery(struct exynos_dp_device *dp)
 	lane_count = dp->link_train.lane_count;
 
 	retval =  exynos_dp_read_bytes_from_dpcd(dp,
-			DPCD_ADDR_LANE0_1_STATUS, 2, link_status);
+			DP_LANE0_1_STATUS, 2, link_status);
 	if (retval)
 		return retval;
 
 	retval =  exynos_dp_read_bytes_from_dpcd(dp,
-			DPCD_ADDR_ADJUST_REQUEST_LANE0_1, 2, adjust_request);
+			DP_ADJUST_REQUEST_LANE0_1, 2, adjust_request);
 	if (retval)
 		return retval;
 
@@ -498,9 +504,9 @@ static int exynos_dp_process_clock_recovery(struct exynos_dp_device *dp)
 		exynos_dp_set_training_pattern(dp, TRAINING_PTN2);
 
 		retval = exynos_dp_write_byte_to_dpcd(dp,
-				DPCD_ADDR_TRAINING_PATTERN_SET,
-				DPCD_SCRAMBLING_DISABLED |
-				DPCD_TRAINING_PATTERN_2);
+				DP_TRAINING_PATTERN_SET,
+				DP_LINK_SCRAMBLING_DISABLE |
+				DP_TRAINING_PATTERN_2);
 		if (retval)
 			return retval;
 
@@ -540,7 +546,7 @@ static int exynos_dp_process_clock_recovery(struct exynos_dp_device *dp)
 			dp->link_train.training_lane[lane], lane);
 
 	retval = exynos_dp_write_bytes_to_dpcd(dp,
-			DPCD_ADDR_TRAINING_LANE0_SET, lane_count,
+			DP_TRAINING_LANE0_SET, lane_count,
 			dp->link_train.training_lane);
 	if (retval)
 		return retval;
@@ -559,7 +565,7 @@ static int exynos_dp_process_equalizer_training(struct exynos_dp_device *dp)
 	lane_count = dp->link_train.lane_count;
 
 	retval = exynos_dp_read_bytes_from_dpcd(dp,
-			DPCD_ADDR_LANE0_1_STATUS, 2, link_status);
+			DP_LANE0_1_STATUS, 2, link_status);
 	if (retval)
 		return retval;
 
@@ -569,12 +575,12 @@ static int exynos_dp_process_equalizer_training(struct exynos_dp_device *dp)
 	}
 
 	retval = exynos_dp_read_bytes_from_dpcd(dp,
-			DPCD_ADDR_ADJUST_REQUEST_LANE0_1, 2, adjust_request);
+			DP_ADJUST_REQUEST_LANE0_1, 2, adjust_request);
 	if (retval)
 		return retval;
 
 	retval = exynos_dp_read_byte_from_dpcd(dp,
-			DPCD_ADDR_LANE_ALIGN_STATUS_UPDATED, &link_align);
+			DP_LANE_ALIGN_STATUS_UPDATED, &link_align);
 	if (retval)
 		return retval;
 
@@ -616,7 +622,7 @@ static int exynos_dp_process_equalizer_training(struct exynos_dp_device *dp)
 		exynos_dp_set_lane_link_training(dp,
 			dp->link_train.training_lane[lane], lane);
 
-	retval = exynos_dp_write_bytes_to_dpcd(dp, DPCD_ADDR_TRAINING_LANE0_SET,
+	retval = exynos_dp_write_bytes_to_dpcd(dp, DP_TRAINING_LANE0_SET,
 			lane_count, dp->link_train.training_lane);
 
 	return retval;
@@ -631,7 +637,7 @@ static void exynos_dp_get_max_rx_bandwidth(struct exynos_dp_device *dp,
 	 * For DP rev.1.1, Maximum link rate of Main Link lanes
 	 * 0x06 = 1.62 Gbps, 0x0a = 2.7 Gbps
 	 */
-	exynos_dp_read_byte_from_dpcd(dp, DPCD_ADDR_MAX_LINK_RATE, &data);
+	exynos_dp_read_byte_from_dpcd(dp, DP_MAX_LINK_RATE, &data);
 	*bandwidth = data;
 }
 
@@ -644,7 +650,7 @@ static void exynos_dp_get_max_rx_lane_count(struct exynos_dp_device *dp,
 	 * For DP rev.1.1, Maximum number of Main Link lanes
 	 * 0x01 = 1 lane, 0x02 = 2 lanes, 0x04 = 4 lanes
 	 */
-	exynos_dp_read_byte_from_dpcd(dp, DPCD_ADDR_MAX_LANE_COUNT, &data);
+	exynos_dp_read_byte_from_dpcd(dp, DP_MAX_LANE_COUNT, &data);
 	*lane_count = DPCD_MAX_LANE_COUNT(data);
 }
 
@@ -816,20 +822,20 @@ static void exynos_dp_enable_scramble(struct exynos_dp_device *dp, bool enable)
 		exynos_dp_enable_scrambling(dp);
 
 		exynos_dp_read_byte_from_dpcd(dp,
-			DPCD_ADDR_TRAINING_PATTERN_SET,
+			DP_TRAINING_PATTERN_SET,
 			&data);
 		exynos_dp_write_byte_to_dpcd(dp,
-			DPCD_ADDR_TRAINING_PATTERN_SET,
-			(u8)(data & ~DPCD_SCRAMBLING_DISABLED));
+			DP_TRAINING_PATTERN_SET,
+			(u8)(data & ~DP_LINK_SCRAMBLING_DISABLE));
 	} else {
 		exynos_dp_disable_scrambling(dp);
 
 		exynos_dp_read_byte_from_dpcd(dp,
-			DPCD_ADDR_TRAINING_PATTERN_SET,
+			DP_TRAINING_PATTERN_SET,
 			&data);
 		exynos_dp_write_byte_to_dpcd(dp,
-			DPCD_ADDR_TRAINING_PATTERN_SET,
-			(u8)(data | DPCD_SCRAMBLING_DISABLED));
+			DP_TRAINING_PATTERN_SET,
+			(u8)(data | DP_LINK_SCRAMBLING_DISABLE));
 	}
 }
 
@@ -905,8 +911,8 @@ static void exynos_dp_hotplug(struct work_struct *work)
 		dev_err(dp->dev, "unable to config video\n");
 }
 
-#ifdef CONFIG_OF
-static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
+static enum drm_connector_status exynos_dp_detect(
+				struct drm_connector *connector, bool force)
 {
 	return connector_status_connected;
 }
@@ -946,12 +952,6 @@ static int exynos_dp_get_modes(struct drm_connector *connector)
 	return 1;
 }
 
-static int exynos_dp_mode_valid(struct drm_connector *connector,
-			struct drm_display_mode *mode)
-{
-	return MODE_OK;
-}
-
 static struct drm_encoder *exynos_dp_best_encoder(
 			struct drm_connector *connector)
 {
@@ -962,17 +962,35 @@ static struct drm_encoder *exynos_dp_best_encoder(
 
 static struct drm_connector_helper_funcs exynos_dp_connector_helper_funcs = {
 	.get_modes = exynos_dp_get_modes,
-	.mode_valid = exynos_dp_mode_valid,
 	.best_encoder = exynos_dp_best_encoder,
 };
 
-static int exynos_dp_initialize(struct exynos_drm_display *display,
-				struct drm_device *drm_dev)
+static bool find_bridge(const char *compat, struct bridge_init *bridge)
 {
-	struct exynos_dp_device *dp = display->ctx;
+	bridge->client = NULL;
+	bridge->node = of_find_compatible_node(NULL, NULL, compat);
+	if (!bridge->node)
+		return false;
 
-	dp->drm_dev = drm_dev;
+	bridge->client = of_find_i2c_device_by_node(bridge->node);
+	if (!bridge->client)
+		return false;
 
+	return true;
+}
+
+/* returns the number of bridges attached */
+static int exynos_drm_attach_lcd_bridge(struct drm_device *dev,
+		struct drm_encoder *encoder)
+{
+	struct bridge_init bridge;
+	int ret;
+
+	if (find_bridge("nxp,ptn3460", &bridge)) {
+		ret = ptn3460_init(dev, encoder, bridge.client, bridge.node);
+		if (!ret)
+			return 1;
+	}
 	return 0;
 }
 
@@ -984,6 +1002,12 @@ static int exynos_dp_create_connector(struct exynos_drm_display *display,
 	int ret;
 
 	dp->encoder = encoder;
+
+	/* Pre-empt DP connector creation if there's a bridge */
+	ret = exynos_drm_attach_lcd_bridge(dp->drm_dev, encoder);
+	if (ret)
+		return 0;
+
 	connector->polled = DRM_CONNECTOR_POLL_HPD;
 
 	ret = drm_connector_init(dp->drm_dev, connector,
@@ -1063,12 +1087,11 @@ static void exynos_dp_dpms(struct exynos_drm_display *display, int mode)
 		break;
 	default:
 		break;
-	};
+	}
 	dp->dpms_mode = mode;
 }
 
 static struct exynos_drm_display_ops exynos_dp_display_ops = {
-	.initialize = exynos_dp_initialize,
 	.create_connector = exynos_dp_create_connector,
 	.dpms = exynos_dp_dpms,
 };
@@ -1081,22 +1104,12 @@ static struct exynos_drm_display exynos_dp_display = {
 static struct video_info *exynos_dp_dt_parse_pdata(struct device *dev)
 {
 	struct device_node *dp_node = dev->of_node;
-	struct exynos_dp_platdata *pd;
 	struct video_info *dp_video_config;
 
-	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
-	if (!pd) {
-		dev_err(dev, "memory allocation for pdata failed\n");
-		return ERR_PTR(-ENOMEM);
-	}
 	dp_video_config = devm_kzalloc(dev,
 				sizeof(*dp_video_config), GFP_KERNEL);
-
-	if (!dp_video_config) {
-		dev_err(dev, "memory allocation for video config failed\n");
+	if (!dp_video_config)
 		return ERR_PTR(-ENOMEM);
-	}
-	pd->video_info = dp_video_config;
 
 	dp_video_config->h_sync_polarity =
 		of_property_read_bool(dp_node, "hsync-active-high");
@@ -1143,7 +1156,7 @@ static struct video_info *exynos_dp_dt_parse_pdata(struct device *dev)
 		return ERR_PTR(-EINVAL);
 	}
 
-	return pd;
+	return dp_video_config;
 }
 
 static int exynos_dp_dt_parse_phydata(struct exynos_dp_device *dp)
@@ -1154,8 +1167,8 @@ static int exynos_dp_dt_parse_phydata(struct exynos_dp_device *dp)
 
 	dp_phy_node = of_find_node_by_name(dp_phy_node, "dptx-phy");
 	if (!dp_phy_node) {
-		dev_err(dp->dev, "could not find dptx-phy node\n");
-		return -ENODEV;
+		dp->phy = devm_phy_get(dp->dev, "dp");
+		return PTR_ERR_OR_ZERO(dp->phy);
 	}
 
 	if (of_property_read_u32(dp_phy_node, "reg", &phy_base)) {
@@ -1197,100 +1210,31 @@ static int exynos_dp_dt_parse_panel(struct exynos_dp_device *dp)
 	return 0;
 }
 
-static void exynos_dp_phy_init(struct exynos_dp_device *dp)
+static int exynos_dp_bind(struct device *dev, struct device *master, void *data)
 {
-	u32 reg;
-
-	reg = __raw_readl(dp->phy_addr);
-	reg |= dp->enable_mask;
-	__raw_writel(reg, dp->phy_addr);
-}
-
-static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
-{
-	u32 reg;
-
-	reg = __raw_readl(dp->phy_addr);
-	reg &= ~(dp->enable_mask);
-	__raw_writel(reg, dp->phy_addr);
-}
-#else
-static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
-{
-	return NULL;
-}
-
-static int exynos_dp_dt_parse_phydata(struct exynos_dp_device *dp)
-{
-	return -EINVAL;
-}
-
-static void exynos_dp_phy_init(struct exynos_dp_device *dp)
-{
-	return;
-}
-
-static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
-{
-	return;
-}
-#endif /* CONFIG_OF */
-
-void exynos_dp_poweron(struct exynos_dp_device *dp)
-{
-	exynos_dp_phy_init(dp);
-
-	clk_prepare_enable(dp->clock);
-
-	exynos_dp_init_dp(dp);
-
-	enable_irq(dp->irq);
-}
-
-void exynos_dp_poweroff(struct exynos_dp_device *dp)
-{
-	disable_irq(dp->irq);
-
-	flush_work(&dp->hotplug_work);
-
-	exynos_dp_phy_exit(dp);
-
-	clk_disable_unprepare(dp->clock);
-}
-
-static int exynos_dp_probe(struct platform_device *pdev)
-{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct drm_device *drm_dev = data;
 	struct resource *res;
 	struct exynos_dp_device *dp;
-	struct exynos_dp_platdata *pdata;
+	unsigned int irq_flags;
 
 	int ret = 0;
 
 	dp = devm_kzalloc(&pdev->dev, sizeof(struct exynos_dp_device),
 				GFP_KERNEL);
-	if (!dp) {
-		dev_err(&pdev->dev, "no memory for device data\n");
+	if (!dp)
 		return -ENOMEM;
-	}
 
 	dp->dev = &pdev->dev;
 	dp->dpms_mode = DRM_MODE_DPMS_OFF;
 
-	if (pdev->dev.of_node) {
-		pdata = exynos_dp_dt_parse_pdata(&pdev->dev);
-		if (IS_ERR(pdata))
-			return PTR_ERR(pdata);
+	dp->video_info = exynos_dp_dt_parse_pdata(&pdev->dev);
+	if (IS_ERR(dp->video_info))
+		return PTR_ERR(dp->video_info);
 
-		ret = exynos_dp_dt_parse_phydata(dp);
-		if (ret)
-			return ret;
-	} else {
-		pdata = pdev->dev.platform_data;
-		if (!pdata) {
-			dev_err(&pdev->dev, "no platform data\n");
-			return -EINVAL;
-		}
-	}
+	ret = exynos_dp_dt_parse_phydata(dp);
+	if (ret)
+		return ret;
 
 	ret = exynos_dp_dt_parse_panel(dp);
 	if (ret)
@@ -1310,7 +1254,30 @@ static int exynos_dp_probe(struct platform_device *pdev)
 	if (IS_ERR(dp->reg_base))
 		return PTR_ERR(dp->reg_base);
 
-	dp->irq = platform_get_irq(pdev, 0);
+	dp->hpd_gpio = of_get_named_gpio(dev->of_node, "samsung,hpd-gpio", 0);
+
+	if (gpio_is_valid(dp->hpd_gpio)) {
+		/*
+		 * Set up the hotplug GPIO from the device tree as an interrupt.
+		 * Simply specifying a different interrupt in the device tree
+		 * doesn't work since we handle hotplug rather differently when
+		 * using a GPIO.  We also need the actual GPIO specifier so
+		 * that we can get the current state of the GPIO.
+		 */
+		ret = devm_gpio_request_one(&pdev->dev, dp->hpd_gpio, GPIOF_IN,
+					    "hpd_gpio");
+		if (ret) {
+			dev_err(&pdev->dev, "failed to get hpd gpio\n");
+			return ret;
+		}
+		dp->irq = gpio_to_irq(dp->hpd_gpio);
+		irq_flags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
+	} else {
+		dp->hpd_gpio = -ENODEV;
+		dp->irq = platform_get_irq(pdev, 0);
+		irq_flags = 0;
+	}
+
 	if (dp->irq == -ENXIO) {
 		dev_err(&pdev->dev, "failed to get irq\n");
 		return -ENODEV;
@@ -1318,49 +1285,65 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	INIT_WORK(&dp->hotplug_work, exynos_dp_hotplug);
 
-	dp->video_info = pdata->video_info;
-
-	if (pdev->dev.of_node) {
-		if (dp->phy_addr)
-			exynos_dp_phy_init(dp);
-	} else {
-		if (pdata->phy_init)
-			pdata->phy_init();
-	}
+	exynos_dp_phy_init(dp);
 
 	exynos_dp_init_dp(dp);
 
-	ret = devm_request_irq(&pdev->dev, dp->irq, exynos_dp_irq_handler, 0,
-				"exynos-dp", dp);
+	ret = devm_request_irq(&pdev->dev, dp->irq, exynos_dp_irq_handler,
+			irq_flags, "exynos-dp", dp);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request irq\n");
 		return ret;
 	}
 	disable_irq(dp->irq);
 
+	dp->drm_dev = drm_dev;
 	exynos_dp_display.ctx = dp;
 
 	platform_set_drvdata(pdev, &exynos_dp_display);
-	exynos_drm_display_register(&exynos_dp_display);
 
-	return 0;
+	return exynos_drm_create_enc_conn(drm_dev, &exynos_dp_display);
+}
+
+static void exynos_dp_unbind(struct device *dev, struct device *master,
+				void *data)
+{
+	struct exynos_drm_display *display = dev_get_drvdata(dev);
+	struct exynos_dp_device *dp = display->ctx;
+	struct drm_encoder *encoder = dp->encoder;
+
+	exynos_dp_dpms(display, DRM_MODE_DPMS_OFF);
+
+	encoder->funcs->destroy(encoder);
+	drm_connector_cleanup(&dp->connector);
+}
+
+static const struct component_ops exynos_dp_ops = {
+	.bind	= exynos_dp_bind,
+	.unbind	= exynos_dp_unbind,
+};
+
+static int exynos_dp_probe(struct platform_device *pdev)
+{
+	int ret;
+
+	ret = exynos_drm_component_add(&pdev->dev, EXYNOS_DEVICE_TYPE_CONNECTOR,
+					exynos_dp_display.type);
+	if (ret)
+		return ret;
+
+	ret = component_add(&pdev->dev, &exynos_dp_ops);
+	if (ret)
+		exynos_drm_component_del(&pdev->dev,
+						EXYNOS_DEVICE_TYPE_CONNECTOR);
+
+	return ret;
 }
 
 static int exynos_dp_remove(struct platform_device *pdev)
 {
-	struct exynos_dp_platdata *pdata = pdev->dev.platform_data;
-	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
-	flush_work(&dp->hotplug_work);
-
-	if (pdev->dev.of_node) {
-		if (dp->phy_addr)
-			exynos_dp_phy_exit(dp);
-	} else {
-		if (pdata->phy_exit)
-			pdata->phy_exit();
-	}
-
-	clk_disable_unprepare(dp->clock);
+	component_del(&pdev->dev, &exynos_dp_ops);
+	exynos_drm_component_del(&pdev->dev, EXYNOS_DEVICE_TYPE_CONNECTOR);
 
 	return 0;
 }
@@ -1368,45 +1351,19 @@ static int exynos_dp_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM_SLEEP
 static int exynos_dp_suspend(struct device *dev)
 {
-	struct exynos_dp_platdata *pdata = dev->platform_data;
-	struct exynos_dp_device *dp = dev_get_drvdata(dev);
+	struct platform_device *pdev = to_platform_device(dev);
+	struct exynos_drm_display *display = platform_get_drvdata(pdev);
 
-	disable_irq(dp->irq);
-
-	flush_work(&dp->hotplug_work);
-
-	if (dev->of_node) {
-		if (dp->phy_addr)
-			exynos_dp_phy_exit(dp);
-	} else {
-		if (pdata->phy_exit)
-			pdata->phy_exit();
-	}
-
-	clk_disable_unprepare(dp->clock);
-
+	exynos_dp_dpms(display, DRM_MODE_DPMS_OFF);
 	return 0;
 }
 
 static int exynos_dp_resume(struct device *dev)
 {
-	struct exynos_dp_platdata *pdata = dev->platform_data;
-	struct exynos_dp_device *dp = dev_get_drvdata(dev);
+	struct platform_device *pdev = to_platform_device(dev);
+	struct exynos_drm_display *display = platform_get_drvdata(pdev);
 
-	if (dev->of_node) {
-		if (dp->phy_addr)
-			exynos_dp_phy_init(dp);
-	} else {
-		if (pdata->phy_init)
-			pdata->phy_init();
-	}
-
-	clk_prepare_enable(dp->clock);
-
-	exynos_dp_init_dp(dp);
-
-	enable_irq(dp->irq);
-
+	exynos_dp_dpms(display, DRM_MODE_DPMS_ON);
 	return 0;
 }
 #endif
@@ -1427,7 +1384,7 @@ struct platform_driver dp_driver = {
 		.name	= "exynos-dp",
 		.owner	= THIS_MODULE,
 		.pm	= &exynos_dp_pm_ops,
-		.of_match_table = of_match_ptr(exynos_dp_match),
+		.of_match_table = exynos_dp_match,
 	},
 };
 

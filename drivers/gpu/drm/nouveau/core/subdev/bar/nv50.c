@@ -25,9 +25,10 @@
 #include <core/gpuobj.h>
 
 #include <subdev/timer.h>
-#include <subdev/bar.h>
 #include <subdev/fb.h>
 #include <subdev/vm.h>
+
+#include "priv.h"
 
 struct nv50_bar_priv {
 	struct nouveau_bar base;
@@ -53,7 +54,6 @@ nv50_bar_kmap(struct nouveau_bar *bar, struct nouveau_mem *mem,
 		return ret;
 
 	nouveau_vm_map(vma, mem);
-	nv50_vm_flush_engine(nv_subdev(bar), 6);
 	return 0;
 }
 
@@ -69,7 +69,6 @@ nv50_bar_umap(struct nouveau_bar *bar, struct nouveau_mem *mem,
 		return ret;
 
 	nouveau_vm_map(vma, mem);
-	nv50_vm_flush_engine(nv_subdev(bar), 6);
 	return 0;
 }
 
@@ -77,7 +76,6 @@ static void
 nv50_bar_unmap(struct nouveau_bar *bar, struct nouveau_vma *vma)
 {
 	nouveau_vm_unmap(vma);
-	nv50_vm_flush_engine(nv_subdev(bar), 6);
 	nouveau_vm_put(vma);
 }
 
@@ -141,11 +139,13 @@ nv50_bar_ctor(struct nouveau_object *parent, struct nouveau_object *engine,
 
 	/* BAR3 */
 	start = 0x0100000000ULL;
-	limit = start + pci_resource_len(device->pdev, 3);
+	limit = start + nv_device_resource_len(device, 3);
 
 	ret = nouveau_vm_new(device, start, limit, start, &vm);
 	if (ret)
 		return ret;
+
+	atomic_inc(&vm->engref[NVDEV_SUBDEV_BAR]);
 
 	ret = nouveau_gpuobj_new(nv_object(priv), heap,
 				 ((limit-- - start) >> 12) * 8, 0x1000,
@@ -173,11 +173,13 @@ nv50_bar_ctor(struct nouveau_object *parent, struct nouveau_object *engine,
 
 	/* BAR1 */
 	start = 0x0000000000ULL;
-	limit = start + pci_resource_len(device->pdev, 1);
+	limit = start + nv_device_resource_len(device, 1);
 
 	ret = nouveau_vm_new(device, start, limit--, start, &vm);
 	if (ret)
 		return ret;
+
+	atomic_inc(&vm->engref[NVDEV_SUBDEV_BAR]);
 
 	ret = nouveau_vm_ref(vm, &priv->bar1_vm, priv->pgd);
 	nouveau_vm_ref(NULL, &vm, NULL);
@@ -229,7 +231,7 @@ static int
 nv50_bar_init(struct nouveau_object *object)
 {
 	struct nv50_bar_priv *priv = (void *)object;
-	int ret;
+	int ret, i;
 
 	ret = nouveau_bar_init(&priv->base);
 	if (ret)
@@ -237,12 +239,18 @@ nv50_bar_init(struct nouveau_object *object)
 
 	nv_mask(priv, 0x000200, 0x00000100, 0x00000000);
 	nv_mask(priv, 0x000200, 0x00000100, 0x00000100);
-	nv50_vm_flush_engine(nv_subdev(priv), 6);
+	nv_wr32(priv, 0x100c80, 0x00060001);
+	if (!nv_wait(priv, 0x100c80, 0x00000001, 0x00000000)) {
+		nv_error(priv, "vm flush timeout\n");
+		return -EBUSY;
+	}
 
 	nv_wr32(priv, 0x001704, 0x00000000 | priv->mem->addr >> 12);
 	nv_wr32(priv, 0x001704, 0x40000000 | priv->mem->addr >> 12);
 	nv_wr32(priv, 0x001708, 0x80000000 | priv->bar1->node->offset >> 4);
 	nv_wr32(priv, 0x00170c, 0x80000000 | priv->bar3->node->offset >> 4);
+	for (i = 0; i < 8; i++)
+		nv_wr32(priv, 0x001900 + (i * 4), 0x00000000);
 	return 0;
 }
 
