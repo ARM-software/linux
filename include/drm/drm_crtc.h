@@ -644,6 +644,12 @@ struct drm_plane_funcs {
 			    struct drm_property *property, uint64_t val);
 };
 
+enum drm_plane_type {
+        DRM_PLANE_TYPE_OVERLAY,
+        DRM_PLANE_TYPE_PRIMARY,
+        DRM_PLANE_TYPE_CURSOR, 
+};
+
 /**
  * drm_plane - central DRM plane control structure
  * @dev: DRM device this plane belongs to
@@ -684,6 +690,7 @@ struct drm_plane {
 	void *helper_private;
 
 	struct drm_object_properties properties;
+	enum drm_plane_type type;
 };
 
 /**
@@ -1094,5 +1101,11 @@ extern int drm_format_num_planes(uint32_t format);
 extern int drm_format_plane_cpp(uint32_t format, int plane);
 extern int drm_format_horz_chroma_subsampling(uint32_t format);
 extern int drm_format_vert_chroma_subsampling(uint32_t format);
+
+/* Plane list iterator for legacy (overlay only) planes. */
+#define drm_for_each_legacy_plane(plane, planelist) \
+        list_for_each_entry(plane, planelist, head) \
+                        if (plane->type == DRM_PLANE_TYPE_OVERLAY)
+                        
 
 #endif /* __DRM_CRTC_H__ */

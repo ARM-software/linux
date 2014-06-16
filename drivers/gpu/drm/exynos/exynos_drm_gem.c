@@ -353,7 +353,7 @@ static struct drm_file *exynos_drm_find_drm_file(struct drm_device *drm_dev,
 	return ERR_PTR(-EFAULT);
 }
 
-static int exynos_drm_gem_mmap_buffer(struct file *filp,
+int exynos_drm_gem_mmap_buffer(struct file *filp,
 				      struct vm_area_struct *vma)
 {
 	struct drm_gem_object *obj = filp->private_data;
