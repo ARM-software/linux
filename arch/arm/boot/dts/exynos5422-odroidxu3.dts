@@ -463,16 +463,9 @@
 		samsung,i2c-max-bus-freq = <400000>;
 		status = "okay";
 
-		/* hdmi edid dirver */
-		hdmi_ddc@50 {
-			compatible = "samsung,exynos5-hdmiddc";
+		hdmiddc@50 {
+			compatible = "samsung,exynos4210-hdmiddc";
 			reg = <0x50>;
-		};
-
-		/* hdmi hdcp dirver */
-		hdcp@3A {
-			compatible = "samsung,exynos5-hdcp_driver";
-			reg = <0x3A>;
 		};
 	};
 
@@ -709,16 +702,33 @@
         };
 	};
 
-	reg_hdmi_en: fixedregulator@0 {
-		compatible = "regulator-fixed";
-		regulator-name = "hdmi-en";
+	regulators {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		main_dc_reg: regulator@0 {
+			compatible = "regulator-fixed";
+			reg = <0>;
+			regulator-name = "MAIN_DC";
+		};
+
+		reg_hdmi_en: regulator@1 {
+			compatible = "regulator-fixed";
+			reg = <2>;
+			regulator-name = "hdmi-en";
+		};
 	};
-	
-	hdmi {
-		hpd-gpio = <&gpx3 7 2>;
+
+	hdmi@14530000 {
+		status = "okay";
+		hpd-gpio = <&gpx3 7 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&hdmi_hpd_irq>;
 		vdd_osc-supply = <&ldo10_reg>;
 		vdd_pll-supply = <&ldo8_reg>;
 		vdd-supply = <&ldo8_reg>;
+		hdmi-en-supply = <&reg_hdmi_en>;
 	};
 	
 };

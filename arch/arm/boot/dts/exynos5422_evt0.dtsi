@@ -1102,23 +1102,40 @@
 		pinctrl-1 = <&pcm2_bus>;
 		status = "disabled";
 	};
+	
+	pmu_system_controller: system-controller@10040000 {
+		compatible = "samsung,exynos5420-pmu", "syscon";
+		reg = <0x10040000 0x5000>;
+	};
+
+	sysreg_system_controller: syscon@10050000 {
+		compatible = "samsung,exynos5-sysreg", "syscon";
+		reg = <0x10050000 0x5000>;
+	};
 
 	/* TVOUT : mixer driver */
 	mixer: mixer@14450000 {
-		compatible = "samsung,exynos5-mixer";
+		compatible = "samsung,exynos5420-mixer";
 		reg = <0x14450000 0x10000>;
 		interrupts = <0 94 0>;
 		clocks = <&clock 1324>, <&clock 1059>;
 		clock-names = "clk_mixer", "sclk_hdmi";
 	};
 	
-	hdmi {
-		compatible = "samsung,exynos5-hdmi";
+	hdmi: hdmi@14530000 {
+		compatible = "samsung,exynos5420-hdmi";
 		reg = <0x14530000 0x80000>;
 		interrupts = <0 95 0>;
 		clocks = <&clock 2108>, <&clock 28>, <&clock 1059>, <&clock 1058>, <&clock 1323>;
 		clock-names = "mout_hdmi", "sclk_hdmiphy", "sclk_hdmi", "sclk_pixel", "clk_hdmi";
+		phy = <&hdmiphy>;
+		samsung,syscon-phandle = <&pmu_system_controller>;
+		status = "enabled";
 	};
+	
+	hdmiphy: hdmiphy@145D0000 {
+		reg = <0x145D0000 0x20>;
+	};	
 
 	spi_3: spi@131a0000 {
 		compatible = "samsung,exynos5410-spi";
@@ -1203,23 +1220,26 @@
 	pd_disp1: pd-disp1@0x100440c0 {
 		compatible = "samsung,exynos-pd";
 		reg = <0x100440c0 0x20>;
+		status = "enabled";
 
 		spd_fimd: spd-fimd@100440c0 {
 			compatible = "samsung,exynos-spd";
 			bts-status = "enabled";
+			status = "enabled";
 		};
 
 		spd_mixer: spd-mixer@100440c0 {
 			compatible = "samsung,exynos-spd";
 			bts-status = "enabled";
+			status = "enabled";
 		};
 
 		spd_hdmi: spd-hdmi@100440c0 {
 			compatible = "samsung,exynos-spd";
-			bts-status = "disabled";
+			bts-status = "enabled";
+			status = "enabled";
 		};
 	};
-
 
 	pd_maudio: pd-maudio@100440e0 {
 		compatible = "samsung,exynos-pd";
