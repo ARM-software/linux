@@ -21,7 +21,7 @@
 	};
 
 	chosen {
-		bootargs = "console=ttySAC2,115200";
+		bootargs = "console=ttySAC2,115200 vmalloc=512M";
 	};
 
 	fixed-rate-clocks {
