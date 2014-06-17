@@ -345,6 +345,7 @@ static int adf_intf_simple_post_config(struct adf_interface *intf,
 	struct sync_fence *complete_fence;
 	int complete_fence_fd;
 	struct adf_buffer buf;
+	size_t i;
 	int ret = 0;
 
 	complete_fence_fd = get_unused_fd();
@@ -365,6 +366,11 @@ static int adf_intf_simple_post_config(struct adf_interface *intf,
 		ret = PTR_ERR(complete_fence);
 		goto err_put_user;
 	}
+
+	/* adf_device_post has taken an extra reference on the dma_bufs */
+	for (i = 0; i < ARRAY_SIZE(buf.dma_bufs); i++)
+		if (buf.dma_bufs[i])
+			dma_buf_put(buf.dma_bufs[i]);
 
 	sync_fence_install(complete_fence, complete_fence_fd);
 	return 0;
