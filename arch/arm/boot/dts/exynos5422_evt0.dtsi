@@ -614,7 +614,7 @@
 	};
 
 	mali {
-		compatible = "arm,mali";
+		compatible = "arm,mali", "arm,malit6xx";
 		reg = <0x11800000 0x5000>;
 		interrupts = <0 219 0>, <0 74 0>, <0 117 0>;
 		clocks = <&clock 10>, <&clock 2007>, <&clock 2002>,
