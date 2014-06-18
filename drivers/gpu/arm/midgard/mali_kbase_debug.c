@@ -37,29 +37,3 @@ void kbasep_debug_assert_call_hook(void)
 }
 KBASE_EXPORT_SYMBOL(kbasep_debug_assert_call_hook);
 
-/**
- * @brief Contains the module names (modules in the same order as for the kbase_module enumeration)
- * @sa kbasep_module_to_str
- */
-static const char *CONST kbasep_str_modules[] = {
-	"UNKNOWN",     /**< Unknown module */
-	"BASE_MMU",    /**< Base MMU */
-	"BASE_JD",     /**< Base Job Dispatch */
-	"BASE_JM",     /**< Base Job Manager */
-	"BASE_CORE",   /**< Base Core */
-	"BASE_MEM",    /**< Base Memory */
-	"BASE_EVENT",  /**< Base Event */
-	"BASE_CTX",    /**< Base Context */
-	"BASE_PM"      /**< Base Power Management */
-};
-
-#define MODULE_STRING_ARRAY_SIZE (sizeof(kbasep_str_modules)/sizeof(kbasep_str_modules[0]))
-
-const char *kbasep_debug_module_to_str(const kbase_module module)
-{
-	if (MODULE_STRING_ARRAY_SIZE <= module)
-		return "";
-
-	return kbasep_str_modules[module];
-}
-KBASE_EXPORT_SYMBOL(kbasep_debug_module_to_str);

@@ -42,11 +42,11 @@
 #endif				/* CONFIG_KDS */
 
 #ifdef CONFIG_SYNC
-#include <../../../../staging/android/sync.h>
+#include <linux/sync.h>
 #endif				/* CONFIG_SYNC */
 
 /** Enable SW tracing when set */
-#ifdef CONFIG_MALI_T6XX_ENABLE_TRACE
+#ifdef CONFIG_MALI_MIDGARD_ENABLE_TRACE
 #define KBASE_TRACE_ENABLE 1
 #endif
 
@@ -148,22 +148,16 @@ typedef struct kbase_device kbase_device;
 #define KBASE_LOCK_REGION_MAX_SIZE (63)
 #define KBASE_LOCK_REGION_MIN_SIZE (11)
 
-/* MALI_SEC */
-#ifdef CONFIG_MALI_EXYNOS_TRACE
-#define KBASE_TRACE_SIZE_LOG2 10	/* 1024 entries */
-#else
 #define KBASE_TRACE_SIZE_LOG2 8	/* 256 entries */
-#endif
 #define KBASE_TRACE_SIZE (1 << KBASE_TRACE_SIZE_LOG2)
 #define KBASE_TRACE_MASK ((1 << KBASE_TRACE_SIZE_LOG2)-1)
 
-#ifdef SLSI_INTEGRATION
-#define CTX_UNINITIALIZED 0xffffffff
-#define CTX_INITIALIZED 0x1
-#define CTX_DESTROYED 0x2
-#endif
-
 #include "mali_kbase_js_defs.h"
+
+#define KBASEP_FORCE_REPLAY_DISABLED 0
+
+/* Maximum force replay limit when randomization is enabled */
+#define KBASEP_FORCE_REPLAY_RANDOM_LIMIT 16
 
 /**
  * @brief States to model state machine processed by kbasep_js_job_check_ref_cores(), which
@@ -255,10 +249,6 @@ struct kbase_jd_atom {
 #ifdef CONFIG_SYNC
 	struct sync_fence *fence;
 	struct sync_fence_waiter sync_waiter;
-#ifdef SLSI_INTEGRATION
-	struct mutex fence_mt;
-	struct timer_list fence_timer;
-#endif
 #endif				/* CONFIG_SYNC */
 
 	/* Note: refer to kbasep_js_atom_retained_state, which will take a copy of some of the following members */
@@ -284,6 +274,10 @@ struct kbase_jd_atom {
 	int slot_nr;
 
 	u32 atom_flags;
+
+	/* Number of times this atom has been retried. Used by replay soft job.
+	 */
+	int retry_count;
 };
 
 /*
@@ -432,11 +426,6 @@ typedef enum {
 } kbase_instr_state;
 
 typedef struct kbasep_mem_device {
-#ifdef CONFIG_UMP
-	u32 ump_device_id;	/* Which UMP device this GPU should be mapped to.
-				   Read-only, copied from platform configuration on startup. */
-#endif				/* CONFIG_UMP */
-
 	atomic_t used_pages;   /* Tracks usage of OS shared memory. Updated
 				   when OS memory is allocated/freed. */
 
@@ -471,11 +460,7 @@ typedef struct kbase_trace {
 	u64 atom_udata[2];
 	u64 gpu_addr;
 	unsigned long info_val;
-#ifdef CONFIG_MALI_EXYNOS_TRACE
-	kbase_trace_code code;
-#else
 	u8 code;
-#endif
 	u8 jobslot;
 	u8 refcount;
 	u8 flags;
@@ -572,11 +557,36 @@ typedef struct kbasep_kctx_list_element {
 	kbase_context    *kctx;
 } kbasep_kctx_list_element;
 
+#define DEVNAME_SIZE	16
+
 struct kbase_device {
 	/** jm_slots is protected by kbasep_js_device_data::runpool_irq::lock */
 	kbase_jm_slot jm_slots[BASE_JM_MAX_NR_SLOTS];
 	s8 slot_submit_count_irq[BASE_JM_MAX_NR_SLOTS];
-	kbase_os_device osdev;
+
+	struct list_head entry;
+	struct device *dev;
+	struct miscdevice mdev;
+	u64 reg_start;
+	size_t reg_size;
+	void __iomem *reg;
+	struct resource *reg_res;
+	struct {
+		int irq;
+		int flags;
+	} irqs[3];
+	char devname[DEVNAME_SIZE];
+
+#ifdef CONFIG_MALI_NO_MALI
+	void *model;
+	struct kmem_cache *irq_slab;
+	struct workqueue_struct *irq_workq;
+	atomic_t serving_job_irq;
+	atomic_t serving_gpu_irq;
+	atomic_t serving_mmu_irq;
+	spinlock_t reg_op_lock;
+#endif				/* CONFIG_MALI_NO_MALI */
+
 	kbase_pm_device_data pm;
 	kbasep_js_device_data js_data;
 	kbasep_mem_device memdev;
@@ -682,27 +692,29 @@ struct kbase_device {
 	spinlock_t              trace_lock;
 	u16                     trace_first_out;
 	u16                     trace_next_in;
-#ifdef CONFIG_MALI_EXYNOS_TRACE
-	kbase_trace            trace_rbuf[KBASE_TRACE_SIZE];
-#else
 	kbase_trace            *trace_rbuf;
-#endif
 #endif
 
 #if MALI_CUSTOMER_RELEASE == 0
 	/* This is used to override the current job scheduler values for
 	 * KBASE_CONFIG_ATTR_JS_STOP_STOP_TICKS_SS
+	 * KBASE_CONFIG_ATTR_JS_STOP_STOP_TICKS_CL
 	 * KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_SS
+	 * KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_CL
 	 * KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_NSS
 	 * KBASE_CONFIG_ATTR_JS_RESET_TICKS_SS
+	 * KBASE_CONFIG_ATTR_JS_RESET_TICKS_CL
 	 * KBASE_CONFIG_ATTR_JS_RESET_TICKS_NSS.
 	 *
 	 * These values are set via the js_timeouts sysfs file.
 	 */
 	u32 js_soft_stop_ticks;
+	u32 js_soft_stop_ticks_cl;
 	u32 js_hard_stop_ticks_ss;
+	u32 js_hard_stop_ticks_cl;
 	u32 js_hard_stop_ticks_nss;
 	u32 js_reset_ticks_ss;
+	u32 js_reset_ticks_cl;
 	u32 js_reset_ticks_nss;
 #endif
 
@@ -718,7 +730,7 @@ struct kbase_device {
 	struct list_head        kctx_list;
 	struct mutex            kctx_list_lock;
 
-#ifdef CONFIG_MALI_T6XX_RT_PM
+#ifdef CONFIG_MALI_MIDGARD_RT_PM
 	struct delayed_work runtime_pm_workqueue;
 #endif
 
@@ -737,6 +749,24 @@ struct kbase_device {
 
 	/* fbdump profiling controls set by gator */
 	u32 kbase_profiling_controls[FBDUMP_CONTROL_MAX];
+
+
+#if MALI_CUSTOMER_RELEASE == 0
+	/* Number of jobs that are run before a job is forced to fail and
+	 * replay. May be KBASEP_FORCE_REPLAY_DISABLED, to disable forced
+	 * failures. */
+	int force_replay_limit;
+	/* Count of jobs between forced failures. Incremented on each job. A
+	 * job is forced to fail once this is greater than or equal to
+	 * force_replay_limit. */
+	int force_replay_count;
+	/* Core requirement for jobs to be failed and replayed. May be zero. */
+	base_jd_core_req force_replay_core_req;
+	/* MALI_TRUE if force_replay_limit should be randomized. The random
+	 * value will be in the range of 1 - KBASEP_FORCE_REPLAY_RANDOM_LIMIT.
+	 */
+	mali_bool force_replay_random;
+#endif
 };
 
 struct kbase_context {
@@ -756,13 +786,18 @@ struct kbase_context {
 
 	u64 *mmu_teardown_pages;
 
+	phys_addr_t aliasing_sink_page;
+
 	struct mutex            reg_lock; /* To be converted to a rwlock? */
 	struct rb_root          reg_rbtree; /* Red-Black tree of GPU regions (live regions) */
 
 	unsigned long    cookies;
 	struct kbase_va_region *pending_regions[BITS_PER_LONG];
+	
+	wait_queue_head_t event_queue;
+	pid_t tgid;
+	pid_t pid;
 
-	kbase_os_context osctx;
 	kbase_jd_context jctx;
 	atomic_t used_pages;
 	atomic_t         nonmapped_pages;
@@ -799,9 +834,6 @@ struct kbase_context {
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	kbase_trace_kctx_timeline timeline;
 #endif
-#ifdef SLSI_INTEGRATION
-	int ctx_status;
-#endif
 };
 
 typedef enum kbase_reg_access_type {
@@ -823,5 +855,19 @@ typedef enum kbase_share_attr_bits {
 #define KBASE_CLEAN_CACHE_MAX_LOOPS     100000
 /* Maximum number of loops polling the GPU for an AS flush to complete before we assume the GPU has hung */
 #define KBASE_AS_FLUSH_MAX_LOOPS        100000
+
+/* Return values from kbase_replay_process */
+
+/* Replay job has completed */
+#define MALI_REPLAY_STATUS_COMPLETE  0
+/* Replay job is replaying and will continue once replayed jobs have completed.
+ */
+#define MALI_REPLAY_STATUS_REPLAYING 1
+#define MALI_REPLAY_STATUS_MASK      0xff
+/* Caller must call kbasep_js_try_schedule_head_ctx */
+#define MALI_REPLAY_FLAG_JS_RESCHED  0x100
+
+/* Maximum number of times a job can be replayed */
+#define BASEP_JD_REPLAY_LIMIT 15
 
 #endif				/* _KBASE_DEFS_H_ */

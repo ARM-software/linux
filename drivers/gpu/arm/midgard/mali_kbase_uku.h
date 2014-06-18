@@ -46,7 +46,7 @@
 
 #include "mali_kbase_gpuprops_types.h"
 
-#define BASE_UK_VERSION_MAJOR 5
+#define BASE_UK_VERSION_MAJOR 6
 #define BASE_UK_VERSION_MINOR 0
 
 typedef struct kbase_uk_mem_alloc {
@@ -70,6 +70,22 @@ typedef struct kbase_uk_mem_free {
 	/* OUT */
 } kbase_uk_mem_free;
 
+/* used by both aliasing and importing */
+#define KBASE_MEM_NEED_MMAP         (1UL << BASE_MEM_FLAGS_NR_BITS)
+
+typedef struct kbase_uk_mem_alias {
+	uk_header header;
+	/* IN/OUT */
+	u64 flags;
+	/* IN */
+	u64 stride;
+	u64 nents;
+	kbase_pointer ai;
+	/* OUT */
+	u64         gpu_va;
+	u64         va_pages;
+} kbase_uk_mem_alias;
+
 typedef struct kbase_uk_mem_import {
 	uk_header header;
 	/* IN */
@@ -77,7 +93,6 @@ typedef struct kbase_uk_mem_import {
 	u32 type;
 	u32 padding;
 	/* IN/OUT */
-#define KBASE_MEM_IMPORT_MMAP         (1UL << BASE_MEM_FLAGS_NR_BITS)
 #define KBASE_MEM_IMPORT_HAVE_PAGES   (1UL << (BASE_MEM_FLAGS_NR_BITS + 1))
 	u64         flags;
 	/* OUT */
@@ -192,16 +207,15 @@ typedef struct kbase_uk_mem_commit {
 	u32 padding;
 } kbase_uk_mem_commit;
 
-typedef struct kbase_uk_find_cpu_mapping {
+typedef struct kbase_uk_find_cpu_offset {
 	uk_header header;
 	/* IN */
 	mali_addr64 gpu_addr;
 	u64 cpu_addr;
 	u64 size;
 	/* OUT */
-	u64 uaddr;
-	mali_size64 page_off;
-} kbase_uk_find_cpu_mapping;
+	mali_size64 offset;
+} kbase_uk_find_cpu_offset;
 
 #define KBASE_GET_VERSION_BUFFER_SIZE 64
 typedef struct kbase_uk_get_ddk_version {
@@ -283,6 +297,7 @@ typedef enum kbase_uk_function_id {
 	KBASE_FUNC_MEM_QUERY,
 	KBASE_FUNC_MEM_FREE,
 	KBASE_FUNC_MEM_FLAGS_CHANGE,
+	KBASE_FUNC_MEM_ALIAS,
 
 	KBASE_FUNC_JOB_SUBMIT,
 
@@ -297,7 +312,7 @@ typedef enum kbase_uk_function_id {
 	KBASE_FUNC_CPU_PROPS_REG_DUMP,
 	KBASE_FUNC_GPU_PROPS_REG_DUMP,
 
-	KBASE_FUNC_FIND_CPU_MAPPING,
+	KBASE_FUNC_FIND_CPU_OFFSET,
 
 	KBASE_FUNC_GET_VERSION,
 	KBASE_FUNC_EXT_BUFFER_LOCK,
@@ -312,7 +327,9 @@ typedef enum kbase_uk_function_id {
 	KBASE_FUNC_FENCE_VALIDATE,
 	KBASE_FUNC_STREAM_CREATE,
 	KBASE_FUNC_GET_PROFILING_CONTROLS,
-	KBASE_FUNC_SET_PROFILING_CONTROLS /* to be used only for testing purposes, otherwise these controls are set through gator API */
+	KBASE_FUNC_SET_PROFILING_CONTROLS /* to be used only for testing
+					   * purposes, otherwise these controls
+					   * are set through gator API */
 } kbase_uk_function_id;
 
 #endif				/* _KBASE_UKU_H_ */

@@ -30,6 +30,7 @@
 #include "mali_kbase_js_defs.h"
 #include "mali_kbase_js_policy.h"
 #include "mali_kbase_defs.h"
+#include "mali_kbase_debug.h"
 
 #include "mali_kbase_js_ctx_attr.h"
 
@@ -670,7 +671,7 @@ static INLINE void kbasep_js_set_submit_allowed(kbasep_js_device_data *js_devdat
 
 	set_bit = (u16) (1u << kctx->as_nr);
 
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "JS: Setting Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
+	KBASE_LOG(3, kctx->kbdev->dev, "JS: Setting Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
 
 	js_devdata->runpool_irq.submit_allowed |= set_bit;
 }
@@ -695,7 +696,7 @@ static INLINE void kbasep_js_clear_submit_allowed(kbasep_js_device_data *js_devd
 	clear_bit = (u16) (1u << kctx->as_nr);
 	clear_mask = ~clear_bit;
 
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "JS: Clearing Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
+	KBASE_LOG(3, kctx->kbdev->dev, "JS: Clearing Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
 
 	js_devdata->runpool_irq.submit_allowed &= clear_mask;
 }

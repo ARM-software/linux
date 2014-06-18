@@ -52,17 +52,6 @@
 #include <linux/rbtree.h>
 
 /**
- * Relative memory performance indicators. Enum elements should always be defined in slowest to fastest order.
- */
-typedef enum kbase_memory_performance {
-	KBASE_MEM_PERF_SLOW,
-	KBASE_MEM_PERF_NORMAL,
-	KBASE_MEM_PERF_FAST,
-
-	KBASE_MEM_PERF_MAX_VALUE = KBASE_MEM_PERF_FAST
-} kbase_memory_performance;
-
-/**
  * Device wide configuration
  */
 enum {
@@ -73,58 +62,6 @@ enum {
 	 * Default value: NA
 	 * */
 	KBASE_CONFIG_ATTR_INVALID,
-
-	/**
-	 * Memory resource object.
-	 * Multiple resources can be listed.
-	 * The resources will be used in the order listed
-	 * in the configuration attribute list if they have no other
-	 * preferred order based on the memory resource property list
-	 * (see ::kbase_memory_attribute).
-	 *
-	 * Attached value: Pointer to a kbase_memory_resource object.
-	 * Default value: No resources
-	 * */
-
-	KBASE_CONFIG_ATTR_MEMORY_RESOURCE,
-	/**
-	 * Maximum of memory which can be allocated from the OS
-	 * to be used by the GPU (shared memory).
-	 * This must be greater than 0 as the GPU page tables
-	 * are currently stored in a shared memory allocation.
-	 *
-	 * Attached value: number in bytes
-	 * Default value: Limited by available memory
-	 */
-	KBASE_CONFIG_ATTR_MEMORY_OS_SHARED_MAX,
-
-	/**
-	 * Relative performance for the GPU to access
-	 * OS shared memory.
-	 *
-	 * Attached value: ::kbase_memory_performance member
-	 * Default value: ::KBASE_MEM_PERF_NORMAL
-	 */
-	KBASE_CONFIG_ATTR_MEMORY_OS_SHARED_PERF_GPU,
-
-	/**
-	 * Limit (in bytes) the amount of memory a single process
-	 * can allocate across all memory banks (including OS shared memory)
-	 * for use by the GPU.
-	 *
-	 * Attached value: number in bytes
-	 * Default value: Limited by available memory
-	 */
-	KBASE_CONFIG_ATTR_MEMORY_PER_PROCESS_LIMIT,
-
-	/**
-	 * UMP device mapping.
-	 * Which UMP device this GPU should be mapped to.
-	 *
-	 * Attached value: UMP_DEVICE_<device>_SHIFT
-	 * Default value: UMP_DEVICE_W_SHIFT
-	 */
-	KBASE_CONFIG_ATTR_UMP_DEVICE,
 
 	/**
 	 * Maximum frequency GPU will be clocked at. Given in kHz.
@@ -195,7 +132,8 @@ enum {
 	KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS,
 
 	/**
-	 * Job Scheduler minimum number of scheduling ticks before jobs are soft-stopped.
+	 * Job Scheduler minimum number of scheduling ticks before non-CL jobs
+	 * are soft-stopped.
 	 *
 	 * This defines the amount of time a job is allowed to stay on the GPU,
 	 * before it is soft-stopped to allow other jobs to run.
@@ -214,8 +152,8 @@ enum {
 	 * which is somewhere between instant and one tick later.
 	 *
 	 * @note this value is allowed to be greater than
-	 * @ref KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_SS or
-	 * @ref KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_NSS. This effectively disables
+	 * @ref KBASE_CONFIG_ATTR_JS_RESET_TICKS_SS or
+	 * @ref KBASE_CONFIG_ATTR_JS_RESET_TICKS_NSS. This effectively disables
 	 * soft-stop, and just uses hard-stop instead. In this case, this value
 	 * should be much greater than any of the hard stop values (to avoid
 	 * soft-stop-after-hard-stop)
@@ -225,7 +163,39 @@ enum {
 	KBASE_CONFIG_ATTR_JS_SOFT_STOP_TICKS,
 
 	/**
-	 * Job Scheduler minimum number of scheduling ticks before jobs are hard-stopped.
+	 * Job Scheduler minimum number of scheduling ticks before CL jobs
+	 * are soft-stopped.
+	 *
+	 * This defines the amount of time a job is allowed to stay on the GPU,
+	 * before it is soft-stopped to allow other jobs to run.
+	 *
+	 * That is, this defines the 'timeslice' of the job. It is separate
+	 * from the timeslice of the context that contains the job (see
+	 * @ref KBASE_CONFIG_ATTR_JS_CTX_TIMESLICE_NS).
+	 *
+	 * This value is supported by the following scheduling policies:
+	 * - The Completely Fair Share (CFS) policy
+	 *
+	 * Attached value: unsigned 32-bit
+	 *                         kbasep_js_device_data::soft_stop_ticks_cl<br>
+	 * Default value: @ref DEFAULT_JS_SOFT_STOP_TICKS_CL
+	 *
+	 * @note a value of zero means "the quickest time to soft-stop a job",
+	 * which is somewhere between instant and one tick later.
+	 *
+	 * @note this value is allowed to be greater than
+	 * @ref KBASE_CONFIG_ATTR_JS_RESET_TICKS_CL. This effectively
+	 * disables soft-stop, and just uses hard-stop instead. In this case,
+	 * this value should be much greater than any of the hard stop values
+	 * (to avoid soft-stop-after-hard-stop)
+	 *
+	 * @see KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS
+	 */
+	KBASE_CONFIG_ATTR_JS_SOFT_STOP_TICKS_CL,
+
+	/**
+	 * Job Scheduler minimum number of scheduling ticks before non-CL jobs
+	 * are hard-stopped.
 	 *
 	 * This defines the amount of time a job is allowed to spend on the GPU before it
 	 * is killed. Such jobs won't be resumed if killed.
@@ -242,6 +212,25 @@ enum {
 	 * @see KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS
 	 */
 	KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_SS,
+
+	/**
+	 * Job Scheduler minimum number of scheduling ticks before CL jobs are hard-stopped.
+	 *
+	 * This defines the amount of time a job is allowed to spend on the GPU before it
+	 * is killed. Such jobs won't be resumed if killed.
+	 *
+	 * This value is supported by the following scheduling policies:
+	 * - The Completely Fair Share (CFS) policy
+	 *
+	 * Attached value: unsigned 32-bit kbasep_js_device_data::hard_stop_ticks_cl<br>
+	 * Default value: @ref DEFAULT_JS_HARD_STOP_TICKS_CL
+	 *
+	 * @note a value of zero means "the quickest time to hard-stop a job",
+	 * which is somewhere between instant and one tick later.
+	 *
+	 * @see KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS
+	 */
+	KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_CL,
 
 	/**
 	 * Job Scheduler minimum number of scheduling ticks before jobs are hard-stopped
@@ -337,8 +326,8 @@ enum {
 	KBASE_CONFIG_ATTR_JS_CFS_CTX_RUNTIME_MIN_SLICES,
 
 	/**
-	 * Job Scheduler minimum number of scheduling ticks before jobs cause the GPU to be
-	 * reset.
+	 * Job Scheduler minimum number of scheduling ticks before non-CL jobs
+	 * cause the GPU to be reset.
 	 *
 	 * This defines the amount of time a job is allowed to spend on the GPU before it
 	 * is assumed that the GPU has hung and needs to be reset. The assumes that the job
@@ -354,6 +343,25 @@ enum {
 	 * @see KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS
 	 */
 	KBASE_CONFIG_ATTR_JS_RESET_TICKS_SS,
+
+	/**
+	 * Job Scheduler minimum number of scheduling ticks before CL jobs
+	 * cause the GPU to be reset.
+	 *
+	 * This defines the amount of time a job is allowed to spend on the GPU before it 
+	 * is assumed that the GPU has hung and needs to be reset. The assumes that the job
+	 * has been hard-stopped already and so the presence of a job that has remained on
+	 * the GPU for so long indicates that the GPU has in some way hung.
+	 *
+	 * This value is supported by the following scheduling policies:
+	 * - The Completely Fair Share (CFS) policy
+	 *
+	 * Attached value: unsigned 32-bit kbasep_js_device_data::gpu_reset_ticks_cl<br>
+	 * Default value: @ref DEFAULT_JS_RESET_TICKS_CL
+	 *
+	 * @see KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS
+	 */
+	KBASE_CONFIG_ATTR_JS_RESET_TICKS_CL,
 
 	/**
 	 * Job Scheduler minimum number of scheduling ticks before jobs cause the GPU to be
@@ -474,14 +482,6 @@ enum {
 	KBASE_CONFIG_ATTR_AWID_LIMIT,
 
 	/**
-	 * Enable alternative hardware counter capture for the Mali shader cores.
-	 *
-	 * Attached value: mali_bool value
-	 * Default value: @ref MALI_FALSE
-	 */
-	KBASE_CONFIG_ATTR_ALTERNATIVE_HWC,
-
-	/**
 	 * Rate at which dvfs data should be collected.
 	 *
 	 * Attached value: u32 value
@@ -534,44 +534,6 @@ enum {
 
 enum {
 	/**
-	 * Invalid attribute ID (reserve 0).
-	 *
-	 * Attached value: Ignored
-	 * Default value: NA
-	 */
-	KBASE_MEM_ATTR_INVALID,
-
-	/**
-	 * Relative performance for the CPU to access
-	 * the memory resource.
-	 *
-	 * Attached value: ::kbase_memory_performance member
-	 * Default value: ::KBASE_MEM_PERF_NORMAL
-	 */
-	KBASE_MEM_ATTR_PERF_CPU,
-
-	/**
-	 * Relative performance for the GPU to access
-	 * the memory resource.
-	 *
-	 * Attached value: ::kbase_memory_performance member
-	 * Default value: ::KBASE_MEM_PERF_NORMAL
-	 */
-	KBASE_MEM_ATTR_PERF_GPU,
-
-	/**
-	 * End of attribute list indicator.
-	 * The memory resource loader will stop processing any more
-	 * elements when it encounters this attribute.
-	 *
-	 * Attached value: Ignored
-	 * Default value: NA
-	 */
-	KBASE_MEM_ATTR_END = 0x1FFFUL
-};
-
-enum {
-	/**
 	 * Use unrestricted Address ID width on the AXI bus.
 	 */
 	KBASE_AID_32 = 0x0,
@@ -604,18 +566,6 @@ typedef struct kbase_attribute {
 	int id;
 	uintptr_t data;
 } kbase_attribute;
-
-/*
- * @brief Specifies dedicated memory bank
- *
- * Specifies base, size and attributes of a memory bank
- */
-typedef struct kbase_memory_resource {
-	u64 base;
-	u64 size;
-	struct kbase_attribute *attributes;
-	const char *name;
-} kbase_memory_resource;
 
 /* Forward declaration of kbase_device */
 struct kbase_device;

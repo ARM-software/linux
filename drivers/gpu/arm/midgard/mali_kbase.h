@@ -53,6 +53,7 @@
 #include "mali_kbase_mem.h"
 #include "mali_kbase_security.h"
 #include "mali_kbase_utility.h"
+#include <mali_kbase_gpu_memory_debugfs.h>
 #include "mali_kbase_cpuprops.h"
 #include "mali_kbase_gpuprops.h"
 #ifdef CONFIG_GPU_TRACEPOINTS
@@ -123,9 +124,6 @@ void kbase_clean_caches_done(kbase_device *kbdev);
  */
 void kbase_instr_hwcnt_sample_done(kbase_device *kbdev);
 
-mali_error kbase_create_os_context(kbase_os_context * const osctx);
-void kbase_destroy_os_context(kbase_os_context *osctx);
-
 mali_error kbase_jd_init(kbase_context *kctx);
 void kbase_jd_exit(kbase_context *kctx);
 mali_error kbase_jd_submit(kbase_context *kctx, const kbase_uk_job_submit *user_bag);
@@ -135,6 +133,9 @@ void kbase_jd_cancel(kbase_device *kbdev, kbase_jd_atom *katom);
 void kbase_jd_zap_context(kbase_context *kctx);
 mali_bool jd_done_nolock(kbase_jd_atom *katom);
 void kbase_jd_free_external_resources(kbase_jd_atom *katom);
+mali_bool jd_submit_atom(kbase_context *kctx,
+			 const base_jd_atom_v2 *user_atom,
+			 kbase_jd_atom *katom);
 
 mali_error kbase_job_slot_init(kbase_device *kbdev);
 void kbase_job_slot_halt(kbase_device *kbdev);
@@ -158,6 +159,8 @@ mali_error kbase_prepare_soft_job(kbase_jd_atom *katom);
 void kbase_finish_soft_job(kbase_jd_atom *katom);
 void kbase_cancel_soft_job(kbase_jd_atom *katom);
 void kbase_resume_suspended_soft_jobs(kbase_device *kbdev);
+
+int kbase_replay_process(kbase_jd_atom *katom);
 
 /* api used internally for register access. Contains validation and tracing */
 void kbase_reg_write(kbase_device *kbdev, u16 offset, u32 value, kbase_context *kctx);
@@ -337,10 +340,6 @@ static INLINE int kbase_jd_atom_id(kbase_context *kctx, kbase_jd_atom *katom)
 	kbasep_trace_add(kbdev, KBASE_TRACE_CODE(code), ctx, katom, gpu_addr, \
 			0, 0, 0, info_val)
 
-#define KBASE_TRACE_ADD_EXYNOS(kbdev, code, ctx, katom, gpu_addr, info_val)     \
-	kbasep_trace_add(kbdev, KBASE_TRACE_CODE(code), ctx, katom, gpu_addr, \
-			0, 0, 0, info_val)
-
 /** Clear the trace */
 #define KBASE_TRACE_CLEAR(kbdev) \
 	kbasep_trace_clear(kbdev)
@@ -429,17 +428,6 @@ void kbasep_trace_clear(kbase_device *kbdev);
 	} while (0)
 
 #define KBASE_TRACE_ADD(kbdev, code, subcode, ctx, katom, val)\
-	do {\
-		CSTD_UNUSED(kbdev);\
-		CSTD_NOP(code);\
-		CSTD_UNUSED(subcode);\
-		CSTD_UNUSED(ctx);\
-		CSTD_UNUSED(katom);\
-		CSTD_UNUSED(val);\
-		CSTD_NOP(0);\
-	}while(0)
-
-#define KBASE_TRACE_ADD_EXYNOS(kbdev, code, subcode, ctx, katom, val)\
 	do {\
 		CSTD_UNUSED(kbdev);\
 		CSTD_NOP(code);\

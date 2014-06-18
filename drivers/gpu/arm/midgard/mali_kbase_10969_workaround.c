@@ -42,8 +42,9 @@
 
 int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 {
+	struct device *dev = katom->kctx->kbdev->dev;
 	u32   clamped = 0;
-	KBASE_DEBUG_PRINT_WARN(KBASE_JD,"Called TILE_RANGE_FAULT workaround clamping function. \n");
+	dev_warn(dev,"Called TILE_RANGE_FAULT workaround clamping function. \n");
 	if (katom->core_req & BASE_JD_REQ_FS){
 		kbase_va_region * region = kbase_region_tracker_find_region_enclosing_address(katom->kctx, katom->jc );
 
@@ -93,46 +94,47 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 					restartX = job_header[JOB_DESC_FAULT_ADDR_LOW_WORD] & X_COORDINATE_MASK;
 					restartY = job_header[JOB_DESC_FAULT_ADDR_LOW_WORD] & Y_COORDINATE_MASK;
 
-					KBASE_DEBUG_PRINT_WARN(KBASE_JD, "Before Clamping: \n" \
-					                                 "Jobstatus: %08x  \n" \
-					                                 "restartIdx: %08x  \n" \
-					                                 "Fault_addr_low: %08x \n" \
-					                                 "minCoordsX: %08x minCoordsY: %08x \n" \
-					                                 "maxCoordsX: %08x maxCoordsY: %08x \n", 
-					                       job_header[JOB_DESC_STATUS_WORD],
-					                       job_header[JOB_DESC_RESTART_INDEX_WORD],
-					                       job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
-					                       minX,minY,
-					                       maxX,maxY );
+					dev_warn(dev, "Before Clamping: \n" \
+					              "Jobstatus: %08x  \n" \
+					              "restartIdx: %08x  \n" \
+					              "Fault_addr_low: %08x \n" \
+					              "minCoordsX: %08x minCoordsY: %08x \n" \
+					              "maxCoordsX: %08x maxCoordsY: %08x \n", 
+					              job_header[JOB_DESC_STATUS_WORD],
+					              job_header[JOB_DESC_RESTART_INDEX_WORD],
+					              job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
+					              minX,minY,
+					              maxX,maxY );
 
 					/* Set the restart index to the one which generated the fault*/
 					job_header[JOB_DESC_RESTART_INDEX_WORD] = job_header[JOB_DESC_FAULT_ADDR_LOW_WORD];
 
 					if (restartX < minX){
 						job_header[JOB_DESC_RESTART_INDEX_WORD] = (minX) | restartY;
-						KBASE_DEBUG_PRINT_WARN(KBASE_JD,
-						                       "Clamping restart X index to minimum. %08x clamped to %08x \n",
-						                       restartX, minX );
+						dev_warn(dev,
+						         "Clamping restart X index to minimum. %08x clamped to %08x \n",
+						         restartX, minX );
 						clamped =  1;
 					}
 					if (restartY < minY){
 						job_header[JOB_DESC_RESTART_INDEX_WORD] = (minY) | restartX;
-						KBASE_DEBUG_PRINT_WARN(KBASE_JD,
-						                       "Clamping restart Y index to minimum. %08x clamped to %08x \n",
-						                        restartY, minY );
+						dev_warn(dev,
+						         "Clamping restart Y index to minimum. %08x clamped to %08x \n",
+						         restartY, minY );
 						clamped =  1;
 					}
 					if (restartX > maxX){
 						job_header[JOB_DESC_RESTART_INDEX_WORD] = (maxX) | restartY;
-						KBASE_DEBUG_PRINT_WARN(KBASE_JD,
-						                       "Clamping restart X index to maximum. %08x clamped to %08x \n",
-						                        restartX, maxX );
+						dev_warn(dev,
+						         "Clamping restart X index to maximum. %08x clamped to %08x \n",
+						         restartX, maxX );
 						clamped =  1;
 					}
 					if (restartY > maxY){
 						job_header[JOB_DESC_RESTART_INDEX_WORD] = (maxY) | restartX;
-						KBASE_DEBUG_PRINT_WARN(KBASE_JD,"Clamping restart Y index to maximum. %08x clamped to %08x \n",
-						                        restartY, maxY );
+						dev_warn(dev,
+						         "Clamping restart Y index to maximum. %08x clamped to %08x \n",
+						         restartY, maxY );
 						clamped =  1;
 					}
 
@@ -140,17 +142,17 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 						/* Reset the fault address low word and set the job status to STOPPED */
 						job_header[JOB_DESC_FAULT_ADDR_LOW_WORD] = 0x0;
 						job_header[JOB_DESC_STATUS_WORD] = BASE_JD_EVENT_STOPPED;
-						KBASE_DEBUG_PRINT_WARN(KBASE_JD, "After Clamping: \n"                   \
-						                                 "Jobstatus: %08x  \n"                  \
-						                                 "restartIdx: %08x  \n"                 \
-						                                 "Fault_addr_low: %08x \n"              \
-						                                 "minCoordsX: %08x minCoordsY: %08x \n" \
-						                                 "maxCoordsX: %08x maxCoordsY: %08x \n", 
-						                       job_header[JOB_DESC_STATUS_WORD],
-						                       job_header[JOB_DESC_RESTART_INDEX_WORD],
-						                       job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
-						                       minX,minY,
-						                       maxX,maxY );
+						dev_warn(dev, "After Clamping: \n"                   \
+						              "Jobstatus: %08x  \n"                  \
+						              "restartIdx: %08x  \n"                 \
+						              "Fault_addr_low: %08x \n"              \
+						              "minCoordsX: %08x minCoordsY: %08x \n" \
+						              "maxCoordsX: %08x maxCoordsY: %08x \n", 
+						              job_header[JOB_DESC_STATUS_WORD],
+						              job_header[JOB_DESC_RESTART_INDEX_WORD],
+						              job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
+						              minX,minY,
+						              maxX,maxY );
 
 						/* Flush CPU cache to update memory for future GPU reads*/
 						memcpy(page_1, dst, copy_size);

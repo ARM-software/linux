@@ -18,8 +18,7 @@
 
 
 #include <mali_kbase.h>
-
-#define beenthere(f, a...)	pr_debug("%s:" f, __func__, ##a)
+#include <mali_kbase_debug.h>
 
 STATIC base_jd_udata kbase_event_process(kbase_context *kctx, kbase_jd_atom *katom)
 {
@@ -29,28 +28,13 @@ STATIC base_jd_udata kbase_event_process(kbase_context *kctx, kbase_jd_atom *kat
 	KBASE_DEBUG_ASSERT(katom != NULL);
 	KBASE_DEBUG_ASSERT(katom->status == KBASE_JD_ATOM_STATE_COMPLETED);
 
-#ifdef SLSI_INTEGRATION
-	pgd_t *pgd;
-	struct mm_struct *mm = katom->kctx->process_mm;
-
-	if (!kctx || !katom || (katom->status != KBASE_JD_ATOM_STATE_COMPLETED)) {
-		printk("Abnormal situation\n");
-		printk("kctx: 0x%p, katom: 0x%p, katom->status: 0x%x\n", kctx, katom, katom->status);
-		return data;
-	}
-
-	pgd = pgd_offset(mm, (unsigned long)&katom->completed);
-	if (pgd_none(*pgd) || pgd_bad(*pgd)) {
-		printk("Abnormal katom\n");
-		printk("katom->kctx: 0x%p, katom->kctx->osctx.tgid: %d, katom->kctx->process_mm: 0x%p, pgd: 0x%px\n", katom->kctx, katom->kctx->osctx.tgid, katom->kctx->process_mm, pgd);
-		return data;
-	}
-#endif
 	data = katom->udata;
 
 	KBASE_TIMELINE_ATOMS_IN_FLIGHT(kctx, atomic_sub_return(1, &kctx->timeline.jd_atoms_in_flight));
 
+	mutex_lock(&kctx->jctx.lock);
 	katom->status = KBASE_JD_ATOM_STATE_UNUSED;
+	mutex_unlock(&kctx->jctx.lock);
 
 	wake_up(&katom->completed);
 
@@ -86,7 +70,9 @@ int kbase_event_dequeue(kbase_context *ctx, base_jd_event_v2 *uevent)
 			mutex_unlock(&ctx->event_mutex);
 			uevent->event_code = BASE_JD_EVENT_DRV_TERMINATED;
 			memset(&uevent->udata, 0, sizeof(uevent->udata));
-			beenthere("event system closed, returning BASE_JD_EVENT_DRV_TERMINATED(0x%X)\n", BASE_JD_EVENT_DRV_TERMINATED);
+			KBASE_LOG(2, ctx->kbdev->dev,
+				"event system closed, returning BASE_JD_EVENT_DRV_TERMINATED(0x%X)\n",
+				BASE_JD_EVENT_DRV_TERMINATED);
 			return 0;
 		} else {
 			mutex_unlock(&ctx->event_mutex);
@@ -100,7 +86,7 @@ int kbase_event_dequeue(kbase_context *ctx, base_jd_event_v2 *uevent)
 
 	mutex_unlock(&ctx->event_mutex);
 
-	beenthere("event dequeuing %p\n", (void *)atom);
+	KBASE_LOG(2, ctx->kbdev->dev, "event dequeuing %p\n", (void *)atom);
 	uevent->event_code = atom->event_code;
 	uevent->atom_number = (atom - ctx->jctx.atoms);
 	uevent->udata = kbase_event_process(ctx, atom);
@@ -124,6 +110,12 @@ static void kbase_event_post_worker(struct work_struct *data)
 			kbase_event_process(ctx, atom);
 			return;
 		}
+	}
+
+	if (atom->core_req & BASEP_JD_REQ_EVENT_NEVER) {
+		/* Don't report the event */
+		kbase_event_process(ctx, atom);
+		return;
 	}
 
 	mutex_lock(&ctx->event_mutex);

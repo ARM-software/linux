@@ -97,7 +97,9 @@ static const struct file_operations kbasep_trace_timeline_debugfs_fops = {
 
 mali_error kbasep_trace_timeline_debugfs_init(kbase_device *kbdev)
 {
-	kbdev->timeline.dentry = debugfs_create_file("mali_timeline_defs", S_IRUGO, NULL, NULL, &kbasep_trace_timeline_debugfs_fops);
+	kbdev->timeline.dentry = debugfs_create_file("mali_timeline_defs",
+			S_IRUGO, kbdev->mali_debugfs_directory, NULL,
+			&kbasep_trace_timeline_debugfs_fops);
 	if (IS_ERR(kbdev->timeline.dentry))
 		return MALI_ERROR_FUNCTION_FAILED;
 

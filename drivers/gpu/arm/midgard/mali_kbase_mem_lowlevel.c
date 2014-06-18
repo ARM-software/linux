@@ -32,7 +32,7 @@ void kbase_sync_to_memory(phys_addr_t paddr, void *vaddr, size_t sz)
 	__cpuc_flush_dcache_area(vaddr, sz);
 	outer_flush_range(paddr, paddr + sz);
 #elif defined(CONFIG_ARM64)
-	/* FIXME (MID64-46): There's no other suitable cache flush function for ARM64 */
+	/* TODO (MID64-46): There's no other suitable cache flush function for ARM64 */
 	flush_cache_all();
 #elif defined(CONFIG_X86)
 	struct scatterlist scl = { 0, };
@@ -50,7 +50,7 @@ void kbase_sync_to_cpu(phys_addr_t paddr, void *vaddr, size_t sz)
 	__cpuc_flush_dcache_area(vaddr, sz);
 	outer_flush_range(paddr, paddr + sz);
 #elif defined(CONFIG_ARM64)
-	/* FIXME (MID64-46): There's no other suitable cache flush function for ARM64 */
+	/* TODO (MID64-46): There's no other suitable cache flush function for ARM64 */
 	flush_cache_all();
 #elif defined(CONFIG_X86)
 	struct scatterlist scl = { 0, };

@@ -64,19 +64,30 @@ updates and generates duplicate page faults as the page table information used b
 typedef struct kbase_cpu_mapping {
 	struct  list_head mappings_list;
 	struct  kbase_mem_phy_alloc *alloc;
-	struct  vm_area_struct *vma;
 	struct  kbase_context *kctx;
 	struct  kbase_va_region *region;
 	pgoff_t page_off;
 	int     count;
+
+	unsigned long vm_start;
+	unsigned long vm_end;
 } kbase_cpu_mapping;
 
 enum kbase_memory_type {
 	KBASE_MEM_TYPE_NATIVE,
 	KBASE_MEM_TYPE_IMPORTED_UMP,
 	KBASE_MEM_TYPE_IMPORTED_UMM,
+	KBASE_MEM_TYPE_ALIAS,
 	KBASE_MEM_TYPE_TB,
 	KBASE_MEM_TYPE_RAW
+};
+
+/* internal structure, mirroring base_mem_aliasing_info,
+ * but with alloc instead of a gpu va (handle) */
+struct kbase_aliased {
+	struct kbase_mem_phy_alloc *alloc; /* NULL for special, non-NULL for native */
+	u64 offset; /* in pages */
+	u64 length; /* in pages */
 };
 
 /* physical pages tracking object.
@@ -90,6 +101,7 @@ enum kbase_memory_type {
 struct kbase_mem_phy_alloc
 {
 	struct kref           kref; /* number of users of this alloc */
+	atomic_t              gpu_mappings;
 	size_t                nents; /* 0..N */
 	phys_addr_t *         pages; /* N elements, only 0..nents are valid */
 
@@ -114,10 +126,34 @@ struct kbase_mem_phy_alloc
 			struct sg_table *sgt;
 		} umm;
 #endif /* defined(CONFIG_DMA_SHARED_BUFFER) */
+		struct {
+			mali_size64 stride;
+			size_t nents;
+			struct kbase_aliased *aliased;
+		} alias;
 		/* Used by type = (KBASE_MEM_TYPE_NATIVE, KBASE_MEM_TYPE_TB) */
 		struct kbase_context *kctx;
 	} imported;
 };
+
+static inline void kbase_mem_phy_alloc_gpu_mapped(struct kbase_mem_phy_alloc *alloc)
+{
+	KBASE_DEBUG_ASSERT(alloc);
+	/* we only track mappings of NATIVE buffers */
+	if (alloc->type == KBASE_MEM_TYPE_NATIVE)
+		atomic_inc(&alloc->gpu_mappings);
+}
+
+static inline void kbase_mem_phy_alloc_gpu_unmapped(struct kbase_mem_phy_alloc *alloc)
+{
+	KBASE_DEBUG_ASSERT(alloc);
+	/* we only track mappings of NATIVE buffers */
+	if (alloc->type == KBASE_MEM_TYPE_NATIVE)
+		if (0 > atomic_dec_return(&alloc->gpu_mappings)) {
+			pr_err("Mismatched %s:\n", __func__);
+			dump_stack();
+		}
+}
 
 void kbase_mem_kref_free(struct kref * kref);
 
@@ -254,6 +290,7 @@ static INLINE struct kbase_mem_phy_alloc * kbase_alloc_create(size_t nr_pages, e
 		return ERR_PTR(-ENOMEM);
 
 	kref_init(&alloc->kref);
+	atomic_set(&alloc->gpu_mappings, 0);
 	alloc->nents = 0;
 	alloc->pages = (void*)(alloc + 1);
 	INIT_LIST_HEAD(&alloc->mappings);
@@ -378,7 +415,13 @@ void kbase_mmu_term(kbase_context *kctx);
 
 phys_addr_t kbase_mmu_alloc_pgd(kbase_context *kctx);
 void kbase_mmu_free_pgd(kbase_context *kctx);
-mali_error kbase_mmu_insert_pages(kbase_context *kctx, u64 vpfn, phys_addr_t *phys, size_t nr, unsigned long flags);
+mali_error kbase_mmu_insert_pages(kbase_context *kctx, u64 vpfn,
+				  phys_addr_t *phys, size_t nr,
+				  unsigned long flags);
+mali_error kbase_mmu_insert_single_page(kbase_context *kctx, u64 vpfn,
+					phys_addr_t phys, size_t nr,
+					unsigned long flags);
+
 mali_error kbase_mmu_teardown_pages(kbase_context *kctx, u64 vpfn, size_t nr);
 mali_error kbase_mmu_update_pages(kbase_context* kctx, u64 vpfn, phys_addr_t* phys, size_t nr, unsigned long flags);
 
@@ -509,23 +552,31 @@ static INLINE void kbase_process_page_usage_dec( struct kbase_context *kctx, int
 }
 
 /**
- * @brief Find a CPU mapping of a memory allocation containing a given address range
+ * @brief Find the offset of the CPU mapping of a memory allocation containing
+ *        a given address range
  *
- * Searches for a CPU mapping of any part of the region starting at @p gpu_addr that
- * fully encloses the CPU virtual address range specified by @p uaddr and @p size.
- * Returns a failure indication if only part of the address range lies within a
- * CPU mapping, or the address range lies within a CPU mapping of a different region.
+ * Searches for a CPU mapping of any part of the region starting at @p gpu_addr
+ * that fully encloses the CPU virtual address range specified by @p uaddr and
+ * @p size. Returns a failure indication if only part of the address range lies
+ * within a CPU mapping, or the address range lies within a CPU mapping of a
+ * different region.
  *
  * @param[in,out] kctx      The kernel base context used for the allocation.
  * @param[in]     gpu_addr  GPU address of the start of the allocated region
  *                          within which to search.
  * @param[in]     uaddr     Start of the CPU virtual address range.
  * @param[in]     size      Size of the CPU virtual address range (in bytes).
+ * @param[out]    offset    The offset from the start of the allocation to the
+ *                          specified CPU virtual address.
  *
- * @return A pointer to a descriptor of the CPU mapping that fully encloses
- *         the specified address range, or NULL if none was found.
+ * @return MALI_ERROR_NONE if offset was obtained successfully. Error code
+ *         otherwise.
  */
-struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping(kbase_context *kctx, mali_addr64 gpu_addr, unsigned long uaddr, size_t size);
+mali_error kbasep_find_enclosing_cpu_mapping_offset(kbase_context *kctx,
+							mali_addr64 gpu_addr,
+							unsigned long uaddr,
+							size_t size,
+							mali_size64 *offset);
 
 enum hrtimer_restart kbasep_as_poke_timer_callback(struct hrtimer *timer);
 void kbase_as_poking_timer_retain_atom(kbase_device *kbdev, kbase_context *kctx, kbase_jd_atom *katom);

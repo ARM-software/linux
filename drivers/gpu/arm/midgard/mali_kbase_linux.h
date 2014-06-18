@@ -32,39 +32,6 @@
 #include <linux/module.h>
 #include <linux/atomic.h>
 
-typedef struct kbase_os_context {
-	wait_queue_head_t event_queue;
-	pid_t tgid;
-	pid_t pid;
-} kbase_os_context;
-
-#define DEVNAME_SIZE	16
-
-typedef struct kbase_os_device {
-	struct list_head entry;
-	struct device *dev;
-	struct miscdevice mdev;
-	u64 reg_start;
-	size_t reg_size;
-	void __iomem *reg;
-	struct resource *reg_res;
-	struct {
-		int irq;
-		int flags;
-	} irqs[3];
-	char devname[DEVNAME_SIZE];
-
-#ifdef CONFIG_MALI_NO_MALI
-	void *model;
-	struct kmem_cache *irq_slab;
-	struct workqueue_struct *irq_workq;
-	atomic_t serving_job_irq;
-	atomic_t serving_gpu_irq;
-	atomic_t serving_mmu_irq;
-	spinlock_t reg_op_lock;
-#endif				/* CONFIG_MALI_NO_MALI */
-} kbase_os_device;
-
 #if defined(MALI_KERNEL_TEST_API)
 #if (1 == MALI_KERNEL_TEST_API)
 #define KBASE_EXPORT_TEST_API(func)		EXPORT_SYMBOL(func);

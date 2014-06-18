@@ -25,33 +25,6 @@
 #include <mali_kbase.h>
 #include "mali_kbase_js_affinity.h"
 
-#if defined(CONFIG_MALI_DEBUG) && 0	/* disabled to avoid compilation warnings */
-
-STATIC void debug_get_binary_string(const u64 n, char *buff, const int size)
-{
-	unsigned int i;
-	for (i = 0; i < size; i++)
-		buff[i] = ((n >> i) & 1) ? '*' : '-';
-
-	buff[size] = '\0';
-}
-
-#define N_CORES 8
-STATIC void debug_print_affinity_info(const kbase_device *kbdev, const kbase_jd_atom *katom, int js, u64 affinity)
-{
-	char buff[N_CORES + 1];
-	char buff2[N_CORES + 1];
-	base_jd_core_req core_req = katom->atom->core_req;
-	u64 shader_present_bitmap = kbdev->shader_present_bitmap;
-
-	debug_get_binary_string(shader_present_bitmap, buff, N_CORES);
-	debug_get_binary_string(affinity, buff2, N_CORES);
-
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "Job: COH FS  CS   T  CF   V  JS | GPU:12345678 | AFF:12345678");
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "      %s   %s   %s   %s   %s   %s   %u |     %s |     %s", core_req & BASE_JD_REQ_COHERENT_GROUP ? "*" : "-", core_req & BASE_JD_REQ_FS ? "*" : "-", core_req & BASE_JD_REQ_CS ? "*" : "-", core_req & BASE_JD_REQ_T ? "*" : "-", core_req & BASE_JD_REQ_CF ? "*" : "-", core_req & BASE_JD_REQ_V ? "*" : "-", js, buff, buff2);
-}
-
-#endif				/* CONFIG_MALI_DEBUG */
 
 STATIC INLINE mali_bool affinity_job_uses_high_cores(kbase_device *kbdev, kbase_jd_atom *katom)
 {

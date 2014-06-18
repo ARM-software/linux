@@ -22,6 +22,30 @@
 
 #include <linux/bug.h>
 
+extern int mali_debug_level;
+/**
+ * @def KBASEP_LOG(level, ...)
+ * @brief Logs a debug message using dev_dbg().
+ *
+ * Logs a debug message using dev_dbg if the debug level specified for the
+ * message is lower or equal than the current debug level. Use higher
+ * numbers to log messages with increasing verbosity.
+ *
+ * The current debug level is controlled by the module parameter
+ * 'mali_debug_level' which is 0 by default.
+ * 
+ * No special meaning is assigned to debug levels but the recommendation is
+ * 0 = driver init/exit messages
+ * 1 = function entry/exit messages
+ * 2 = function detailed messages
+ * 3 = irq/callback messages
+ * 4 = register read/write messages
+ *
+ * @param level debug level for the message    
+ * @param ... Arguments you would normally pass to dev_dbg()
+ */
+#define KBASE_LOG(level, ...) if ((level) <= mali_debug_level) dev_dbg(__VA_ARGS__)
+
 /** @brief If equals to 0, a trace containing the file, line, and function will be displayed before each message. */
 #define KBASE_DEBUG_SKIP_TRACE 0
 
@@ -36,20 +60,6 @@
 #define KBASE_DEBUG_DISABLE_ASSERTS 1
 #endif
 #endif				/* KBASE_DEBUG_DISABLE_ASSERTS */
-
-typedef enum {
-	KBASE_UNKNOWN = 0, /**< @brief Unknown module */
-	KBASE_MMU,	   /**< @brief ID of Base MMU */
-	KBASE_JD,	   /**< @brief ID of Base Job Dispatch */
-	KBASE_JM,	   /**< @brief ID of Base Job Manager */
-	KBASE_CORE,	   /**< @brief ID of Base Core */
-	KBASE_MEM,	   /**< @brief ID of Base Memory */
-	KBASE_EVENT,	   /**< @brief ID of Base Event */
-	KBASE_CTX,	   /**< @brief ID of Base Context */
-	KBASE_PM,	   /**< @brief ID of Base Power Management */
-	KBASE_DEV, /**< @brief ID of Base Device */
-	KBASE_MODULES_ALL  /**< @brief Select all the modules at once / Also gives the number of modules in the enum */
-} kbase_module;
 
 /** Function type that is called on an KBASE_DEBUG_ASSERT() or KBASE_DEBUG_ASSERT_MSG() */
 typedef void (kbase_debug_assert_hook) (void *);
@@ -88,9 +98,9 @@ typedef struct kbasep_debug_assert_cb {
 #ifdef CONFIG_MALI_DEBUG
 #define KBASEP_DEBUG_ASSERT_OUT(trace, function, ...)\
 		do { \
-			printk(KERN_ERR "Mali<ASSERT>: %s function:%s ", trace, function);\
-			printk(KERN_ERR __VA_ARGS__);\
-			printk(KERN_ERR "\n");\
+			pr_err("Mali<ASSERT>: %s function:%s ", trace, function);\
+			pr_err(__VA_ARGS__);\
+			pr_err("\n");\
 		} while (MALI_FALSE)
 #else
 #define KBASEP_DEBUG_ASSERT_OUT(trace, function, ...) CSTD_NOP()
@@ -136,50 +146,6 @@ typedef struct kbasep_debug_assert_cb {
 #endif				/* KBASE_DEBUG_DISABLE_ASSERTS */
 
 /**
- * @def KBASE_DEBUG_PRINT_WARN(module, trace, ...)
- * @brief (Private) system printing function associated to the @see KBASE_DEBUG_PRINT_WARN event.
- * @param module module ID
- * @param trace location in the code from where the message is printed
- * @param function function from where the message is printed
- * @param ... Format string followed by format arguments.
- * @note function parameter cannot be concatenated with other strings
- */
-#ifdef CONFIG_MALI_DEBUG
-#define KBASE_DEBUG_PRINT_WARN(module, ...)\
-		do {\
-			printk(KERN_WARNING "Mali<WARN, %s>: %s function:%s ", kbasep_debug_module_to_str(module), KBASEP_DEBUG_PRINT_TRACE, KBASEP_DEBUG_PRINT_FUNCTION);\
-			printk(KERN_WARNING __VA_ARGS__);\
-			printk(KERN_WARNING "\n");\
-		} while (MALI_FALSE)
-#else
-#define KBASE_DEBUG_PRINT_WARN(module, ...) CSTD_NOP()
-#endif
-
-#define KBASE_DEBUG_PRINT_ERROR(module, ...)\
-	do {\
-		printk(KERN_ERR "Mali<ERROR, %s>: %s function:%s ", kbasep_debug_module_to_str(module), KBASEP_DEBUG_PRINT_TRACE, KBASEP_DEBUG_PRINT_FUNCTION);\
-		printk(KERN_ERR __VA_ARGS__);\
-		printk(KERN_ERR "\n");\
-	} while (MALI_FALSE)
-
-/*If this is not disabled then Android boot times out*/
-#define KBASE_DEBUG_PRINT_INFO(module, ...) CSTD_NOP()
-
-#define KBASE_DEBUG_PRINT_RAW(module, ...)\
-	do {\
-		printk(__VA_ARGS__);\
-		printk("\n");\
-	} while (MALI_FALSE)
-
-#define KBASE_DEBUG_PRINT_RAW_LEVEL(level, module, ...)\
-	do {\
-		printk(level __VA_ARGS__);\
-		printk(level "\n");\
-	} while (MALI_FALSE)
-
-#define KBASE_DEBUG_PRINT(module, ...) KBASE_DEBUG_PRINT_RAW(module, __VA_ARGS__)
-
-/**
  * @def KBASE_DEBUG_CODE( X )
  * @brief Executes the code inside the macro only in debug mode
  *
@@ -190,6 +156,8 @@ typedef struct kbasep_debug_assert_cb {
 #else
 #define KBASE_DEBUG_CODE(X) CSTD_NOP()
 #endif				/* CONFIG_MALI_DEBUG */
+
+/** @} */
 
 /**
  * @brief Register a function to call on ASSERT
@@ -216,14 +184,5 @@ void kbase_debug_assert_register_hook(kbase_debug_assert_hook *func, void *param
  * responsibility of the registered hook.
  */
 void kbasep_debug_assert_call_hook(void);
-
-/**
- * @brief Convert a module id into a module name.
- *
- * @param module ID of the module to convert
- * @note module names are stored in : @see kbasep_str_modules.
- * @return the name of the given module ID as a string of characters.
- */
-const char *kbasep_debug_module_to_str(const kbase_module module);
 
 #endif				/* _KBASE_DEBUG_H */

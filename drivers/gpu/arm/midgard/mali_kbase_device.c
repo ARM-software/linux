@@ -24,9 +24,6 @@
 
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
-#ifdef CONFIG_MALI_EXYNOS_TRACE
-#include <linux/sched.h>
-#endif
 #include <linux/kernel.h>
 #include <linux/module.h>
 
@@ -58,11 +55,7 @@ STATIC CONST char *kbasep_trace_code_string[] = {
 };
 #endif
 
-#ifdef CONFIG_MALI_EXYNOS_TRACE
-#define DEBUG_MESSAGE_SIZE KBASE_TRACE_SIZE /* MALI_SEC */
-#else
 #define DEBUG_MESSAGE_SIZE 256
-#endif
 
 STATIC mali_error kbasep_trace_init(kbase_device *kbdev);
 STATIC void kbasep_trace_term(kbase_device *kbdev);
@@ -82,12 +75,9 @@ kbase_device *kbase_device_alloc(void)
 
 mali_error kbase_device_init(kbase_device * const kbdev)
 {
-	int i = 0;			/* i used after the for loop, don't reuse ! */
+	int i;			/* i used after the for loop, don't reuse ! */
 
 	spin_lock_init(&kbdev->mmu_mask_change);
-
-	if (kbasep_trace_init(kbdev) != MALI_ERROR_NONE)
-		goto free_reset_workq;
 
 	/* Initialize platform specific context */
 	if (MALI_FALSE == kbasep_platform_device_init(kbdev))
@@ -180,6 +170,9 @@ mali_error kbase_device_init(kbase_device * const kbdev)
 
 	hrtimer_init(&kbdev->reset_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	kbdev->reset_timer.function = kbasep_reset_timer_callback;
+
+	if (kbasep_trace_init(kbdev) != MALI_ERROR_NONE)
+		goto free_reset_workq;
 
 	mutex_init(&kbdev->cacheclean_lock);
 	atomic_set(&kbdev->keep_gpu_powered_count, 0);
@@ -332,7 +325,8 @@ void kbase_reg_write(kbase_device *kbdev, u16 offset, u32 value, kbase_context *
 {
 	KBASE_DEBUG_ASSERT(kbdev->pm.gpu_powered);
 	KBASE_DEBUG_ASSERT(kctx == NULL || kctx->as_nr != KBASEP_AS_NR_INVALID);
-	KBASE_DEBUG_PRINT_INFO(KBASE_CORE, "w: reg %04x val %08x", offset, value);
+	KBASE_DEBUG_ASSERT(kbdev->dev != NULL);
+	KBASE_LOG(4, kbdev->dev, "w: reg %04x val %08x", offset, value);
 	kbase_os_reg_write(kbdev, offset, value);
 	if (kctx && kctx->jctx.tb)
 		kbase_device_trace_register_access(kctx, REG_WRITE, offset, value);
@@ -345,8 +339,9 @@ u32 kbase_reg_read(kbase_device *kbdev, u16 offset, kbase_context *kctx)
 	u32 val;
 	KBASE_DEBUG_ASSERT(kbdev->pm.gpu_powered);
 	KBASE_DEBUG_ASSERT(kctx == NULL || kctx->as_nr != KBASEP_AS_NR_INVALID);
+	KBASE_DEBUG_ASSERT(kbdev->dev != NULL);
 	val = kbase_os_reg_read(kbdev, offset);
-	KBASE_DEBUG_PRINT_INFO(KBASE_CORE, "r: reg %04x val %08x", offset, val);
+	KBASE_LOG(4, kbdev->dev, "r: reg %04x val %08x", offset, val);
 	if (kctx && kctx->jctx.tb)
 		kbase_device_trace_register_access(kctx, REG_READ, offset, val);
 	return val;
@@ -363,9 +358,9 @@ void kbase_report_gpu_fault(kbase_device *kbdev, int multiple)
 	address = (u64) kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_FAULTADDRESS_HI), NULL) << 32;
 	address |= kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_FAULTADDRESS_LO), NULL);
 
-	KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "GPU Fault 0x%08x (%s) at 0x%016llx", status, kbase_exception_name(status), address);
+	dev_warn(kbdev->dev, "GPU Fault 0x%08x (%s) at 0x%016llx", status & 0xFF, kbase_exception_name(status), address);
 	if (multiple)
-		KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "There were multiple GPU faults - some have not been reported\n");
+		dev_warn(kbdev->dev, "There were multiple GPU faults - some have not been reported\n");
 }
 
 void kbase_gpu_interrupt(kbase_device *kbdev, u32 val)
@@ -439,7 +434,6 @@ void kbase_gpu_interrupt(kbase_device *kbdev, u32 val)
 
 STATIC mali_error kbasep_trace_init(kbase_device *kbdev)
 {
-#ifndef CONFIG_MALI_EXYNOS_TRACE /* MALI_SEC */
 	void *rbuf;
 
 	rbuf = kmalloc(sizeof(kbase_trace) * KBASE_TRACE_SIZE, GFP_KERNEL);
@@ -448,7 +442,6 @@ STATIC mali_error kbasep_trace_init(kbase_device *kbdev)
 		return MALI_ERROR_FUNCTION_FAILED;
 
 	kbdev->trace_rbuf = rbuf;
-#endif
 	spin_lock_init(&kbdev->trace_lock);
 	kbasep_trace_debugfs_init(kbdev);
 	return MALI_ERROR_NONE;
@@ -456,11 +449,9 @@ STATIC mali_error kbasep_trace_init(kbase_device *kbdev)
 
 STATIC void kbasep_trace_term(kbase_device *kbdev)
 {
-#ifndef CONFIG_MALI_EXYNOS_TRACE /* MALI_SEC */
 	debugfs_remove(kbdev->trace_dentry);
 	kbdev->trace_dentry= NULL;
 	kfree(kbdev->trace_rbuf);
-#endif
 }
 
 void kbasep_trace_format_msg(kbase_trace *trace_msg, char *buffer, int len)
@@ -494,53 +485,18 @@ void kbasep_trace_format_msg(kbase_trace *trace_msg, char *buffer, int len)
 
 }
 
-void kbasep_trace_dump_msg(kbase_trace *trace_msg)
+void kbasep_trace_dump_msg(kbase_device *kbdev, kbase_trace *trace_msg)
 {
 	char buffer[DEBUG_MESSAGE_SIZE];
 
 	kbasep_trace_format_msg(trace_msg, buffer, DEBUG_MESSAGE_SIZE);
-	KBASE_DEBUG_PRINT(KBASE_CORE, "%s", buffer);
+	KBASE_LOG(1, kbdev->dev, "%s", buffer);
 }
-
-/* MALI_SEC */
-#ifdef CONFIG_MALI_EXYNOS_TRACE
-bool check_trace_code(kbase_trace_code code)
-{
-	unsigned int temp = code;
-	switch(temp) {
-		case KBASE_TRACE_CODE(CORE_CTX_DESTROY):
-		case KBASE_TRACE_CODE(CORE_GPU_SOFT_RESET):
-		case KBASE_TRACE_CODE(CORE_GPU_HARD_RESET):
-		case KBASE_TRACE_CODE(JM_SOFTSTOP):
-		case KBASE_TRACE_CODE(JM_HARDSTOP):
-		case KBASE_TRACE_CODE(LSI_GPU_ON):
-		case KBASE_TRACE_CODE(LSI_GPU_OFF):
-		case KBASE_TRACE_CODE(LSI_SUSPEND):
-		case KBASE_TRACE_CODE(LSI_RESUME):
-		case KBASE_TRACE_CODE(LSI_CLOCK_VALUE):
-		case KBASE_TRACE_CODE(LSI_TMU_VALUE):
-		case KBASE_TRACE_CODE(LSI_VOL_VALUE):
-			return true;
-		default:
-			return false;
-	}
-	return true;
-}
-#endif
 
 void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kbase_jd_atom *katom, u64 gpu_addr, u8 flags, int refcount, int jobslot, unsigned long info_val)
 {
 	unsigned long irqflags;
 	kbase_trace *trace_msg;
-
-/* MALI_SEC */
-#ifdef CONFIG_MALI_EXYNOS_TRACE
-	u64 time;
-	unsigned long rem_nsec;
-
-	if (!check_trace_code(code))
-		return;
-#endif
 
 	spin_lock_irqsave(&kbdev->trace_lock, irqflags);
 
@@ -549,15 +505,8 @@ void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kba
 	/* Fill the message */
 	trace_msg->thread_id = task_pid_nr(current);
 	trace_msg->cpu = task_cpu(current);
-/* MALI_SEC */
-#ifdef CONFIG_MALI_EXYNOS_TRACE
-	time = local_clock();
-	rem_nsec = do_div(time, 1000000000);
-	trace_msg->timestamp.tv_sec = time;
-	trace_msg->timestamp.tv_nsec = rem_nsec;
-#else
+
 	getnstimeofday(&trace_msg->timestamp);
-#endif
 
 	trace_msg->code = code;
 	trace_msg->ctx = ctx;
@@ -601,18 +550,18 @@ void kbasep_trace_dump(kbase_device *kbdev)
 	u32 start;
 	u32 end;
 
-	KBASE_DEBUG_PRINT(KBASE_CORE, "Dumping trace:\nsecs,nthread,cpu,code,ctx,katom,gpu_addr,jobslot,refcount,info_val");
+	KBASE_LOG(1, kbdev->dev, "Dumping trace:\nsecs,nthread,cpu,code,ctx,katom,gpu_addr,jobslot,refcount,info_val");
 	spin_lock_irqsave(&kbdev->trace_lock, flags);
 	start = kbdev->trace_first_out;
 	end = kbdev->trace_next_in;
 
 	while (start != end) {
 		kbase_trace *trace_msg = &kbdev->trace_rbuf[start];
-		kbasep_trace_dump_msg(trace_msg);
+		kbasep_trace_dump_msg(kbdev, trace_msg);
 
 		start = (start + 1) & KBASE_TRACE_MASK;
 	}
-	KBASE_DEBUG_PRINT(KBASE_CORE, "TRACE_END");
+	KBASE_LOG(1, kbdev->dev, "TRACE_END");
 
 	spin_unlock_irqrestore(&kbdev->trace_lock, flags);
 
@@ -639,16 +588,14 @@ void *kbasep_trace_seq_start(struct seq_file *s, loff_t *pos)
 
 	if (*pos > KBASE_TRACE_SIZE)
 		return NULL;
-
 	i = state->start + *pos;
 	if ((state->end >= state->start && i >= state->end) ||
 			i >= state->end + KBASE_TRACE_SIZE)
-	return NULL;
+		return NULL;
 
 	i &= KBASE_TRACE_MASK;
 
 	return &state->trace_buf[i];
-
 }
 
 void kbasep_trace_seq_stop(struct seq_file *s, void *data)
@@ -663,10 +610,8 @@ void *kbasep_trace_seq_next(struct seq_file *s, void *data, loff_t *pos)
 	(*pos)++;
 
 	i = (state->start + *pos) & KBASE_TRACE_MASK;
-
-	if (i == state->end) {
+	if (i == state->end)
 		return NULL;
-	}
 
 	return &state->trace_buf[i];
 }
@@ -717,7 +662,9 @@ static const struct file_operations kbasep_trace_debugfs_fops = {
 
 STATIC void kbasep_trace_debugfs_init(kbase_device *kbdev)
 {
-	kbdev->trace_dentry = debugfs_create_file("mali_trace", S_IRUGO, NULL, kbdev, &kbasep_trace_debugfs_fops);
+	kbdev->trace_dentry = debugfs_create_file("mali_trace", S_IRUGO,
+			kbdev->mali_debugfs_directory, kbdev,
+			&kbasep_trace_debugfs_fops);
 }
 #else
 STATIC void kbasep_trace_debugfs_init(kbase_device *kbdev)
@@ -780,7 +727,7 @@ void kbase_set_profiling_control(struct kbase_device *kbdev, u32 control, u32 va
 		kbdev->kbase_profiling_controls[control] = value;
 		break;
 	default:
-		KBASE_DEBUG_PRINT_ERROR(KBASE_DEV, "Profiling control %d not found\n", control);
+		dev_err(kbdev->dev, "Profiling control %d not found\n", control);
 		break;
 	}
 }
@@ -800,7 +747,7 @@ u32 kbase_get_profiling_control(struct kbase_device *kbdev, u32 control)
 		ret_value = kbdev->kbase_profiling_controls[control];
 		break;
 	default:
-		KBASE_DEBUG_PRINT_ERROR(KBASE_DEV, "Profiling control %d not found\n", control);
+		dev_err(kbdev->dev, "Profiling control %d not found\n", control);
 		break;
 	}
 

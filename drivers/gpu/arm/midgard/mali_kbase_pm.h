@@ -122,9 +122,6 @@ typedef struct kbasep_pm_metrics_data {
 
 	void *platform_data;
 	struct kbase_device *kbdev;
-#if defined(SLSI_INTEGRATION) && defined(CL_UTILIZATION_BOOST_BY_TIME_WEIGHT)
-	atomic_t time_compute_jobs, time_vertex_jobs, time_fragment_jobs;
-#endif
 } kbasep_pm_metrics_data;
 
 /** Actions for DVFS.
@@ -836,7 +833,7 @@ void kbase_pm_do_poweron(struct kbase_device *kbdev, mali_bool is_resume);
  */
 void kbase_pm_do_poweroff(struct kbase_device *kbdev, mali_bool is_suspend);
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 
 /**
  * Function provided by platform specific code when DVFS is enabled to allow

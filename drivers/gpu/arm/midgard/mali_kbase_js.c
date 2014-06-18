@@ -485,7 +485,7 @@ mali_error kbasep_js_devdata_init(kbase_device * const kbdev)
 		mali_bool use_workaround_for_security;
 		use_workaround_for_security = (mali_bool) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_SECURE_BUT_LOSS_OF_PERFORMANCE);
 		if (use_workaround_for_security != MALI_FALSE) {
-			KBASE_DEBUG_PRINT(KBASE_JM, "GPU has HW ISSUE 8987, and driver configured for security workaround: 1 address space only");
+			KBASE_LOG(2, kbdev->dev, "GPU has HW ISSUE 8987, and driver configured for security workaround: 1 address space only");
 			kbdev->nr_user_address_spaces = 1;
 		}
 	}
@@ -506,33 +506,39 @@ mali_error kbasep_js_devdata_init(kbase_device * const kbdev)
 	/* Config attributes */
 	js_devdata->scheduling_tick_ns = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS);
 	js_devdata->soft_stop_ticks = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_SOFT_STOP_TICKS);
+	js_devdata->soft_stop_ticks_cl = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_SOFT_STOP_TICKS_CL);
 	js_devdata->hard_stop_ticks_ss = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_SS);
+	js_devdata->hard_stop_ticks_cl = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_CL);
 	js_devdata->hard_stop_ticks_nss = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_NSS);
 	js_devdata->gpu_reset_ticks_ss = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_RESET_TICKS_SS);
+	js_devdata->gpu_reset_ticks_cl = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_RESET_TICKS_CL);
 	js_devdata->gpu_reset_ticks_nss = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_RESET_TICKS_NSS);
 	js_devdata->ctx_timeslice_ns = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_CTX_TIMESLICE_NS);
 	js_devdata->cfs_ctx_runtime_init_slices = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_CFS_CTX_RUNTIME_INIT_SLICES);
 	js_devdata->cfs_ctx_runtime_min_slices = (u32) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_CFS_CTX_RUNTIME_MIN_SLICES);
 
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "JS Config Attribs: ");
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "\tjs_devdata->scheduling_tick_ns:%u", js_devdata->scheduling_tick_ns);
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "\tjs_devdata->soft_stop_ticks:%u", js_devdata->soft_stop_ticks);
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "\tjs_devdata->hard_stop_ticks_ss:%u", js_devdata->hard_stop_ticks_ss);
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "\tjs_devdata->hard_stop_ticks_nss:%u", js_devdata->hard_stop_ticks_nss);
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "\tjs_devdata->gpu_reset_ticks_ss:%u", js_devdata->gpu_reset_ticks_ss);
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "\tjs_devdata->gpu_reset_ticks_nss:%u", js_devdata->gpu_reset_ticks_nss);
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "\tjs_devdata->ctx_timeslice_ns:%u", js_devdata->ctx_timeslice_ns);
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "\tjs_devdata->cfs_ctx_runtime_init_slices:%u", js_devdata->cfs_ctx_runtime_init_slices);
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "\tjs_devdata->cfs_ctx_runtime_min_slices:%u", js_devdata->cfs_ctx_runtime_min_slices);
+	KBASE_LOG(2, kbdev->dev, "JS Config Attribs: ");
+	KBASE_LOG(2, kbdev->dev, "\tscheduling_tick_ns:%u", js_devdata->scheduling_tick_ns);
+	KBASE_LOG(2, kbdev->dev, "\tsoft_stop_ticks:%u", js_devdata->soft_stop_ticks);
+	KBASE_LOG(2, kbdev->dev, "\tsoft_stop_ticks_cl:%u", js_devdata->soft_stop_ticks_cl);
+	KBASE_LOG(2, kbdev->dev, "\thard_stop_ticks_ss:%u", js_devdata->hard_stop_ticks_ss);
+	KBASE_LOG(2, kbdev->dev, "\thard_stop_ticks_cl:%u", js_devdata->hard_stop_ticks_cl);
+	KBASE_LOG(2, kbdev->dev, "\thard_stop_ticks_nss:%u", js_devdata->hard_stop_ticks_nss);
+	KBASE_LOG(2, kbdev->dev, "\tgpu_reset_ticks_ss:%u", js_devdata->gpu_reset_ticks_ss);
+	KBASE_LOG(2, kbdev->dev, "\tgpu_reset_ticks_cl:%u", js_devdata->gpu_reset_ticks_cl);
+	KBASE_LOG(2, kbdev->dev, "\tgpu_reset_ticks_nss:%u", js_devdata->gpu_reset_ticks_nss);
+	KBASE_LOG(2, kbdev->dev, "\tctx_timeslice_ns:%u", js_devdata->ctx_timeslice_ns);
+	KBASE_LOG(2, kbdev->dev, "\tcfs_ctx_runtime_init_slices:%u", js_devdata->cfs_ctx_runtime_init_slices);
+	KBASE_LOG(2, kbdev->dev, "\tcfs_ctx_runtime_min_slices:%u", js_devdata->cfs_ctx_runtime_min_slices);
 
 #if KBASE_DISABLE_SCHEDULING_SOFT_STOPS != 0
-	KBASE_DEBUG_PRINT(KBASE_JM, "Job Scheduling Policy Soft-stops disabled, ignoring value for soft_stop_ticks==%u at %uns per tick. Other soft-stops may still occur.", js_devdata->soft_stop_ticks, js_devdata->scheduling_tick_ns);
+	KBASE_LOG(2, kbdev->dev, "Job Scheduling Policy Soft-stops disabled, ignoring value for soft_stop_ticks==%u at %uns per tick. Other soft-stops may still occur.", js_devdata->soft_stop_ticks, js_devdata->scheduling_tick_ns);
 #endif
 #if KBASE_DISABLE_SCHEDULING_HARD_STOPS != 0
-	KBASE_DEBUG_PRINT(KBASE_JM, "Job Scheduling Policy Hard-stops disabled, ignoring values for hard_stop_ticks_ss==%d and hard_stop_ticks_nss==%u at %uns per tick. Other hard-stops may still occur.", js_devdata->hard_stop_ticks_ss, js_devdata->hard_stop_ticks_nss, js_devdata->scheduling_tick_ns);
+	KBASE_LOG(2, kbdev->dev, "Job Scheduling Policy Hard-stops disabled, ignoring values for hard_stop_ticks_ss==%d and hard_stop_ticks_nss==%u at %uns per tick. Other hard-stops may still occur.", js_devdata->hard_stop_ticks_ss, js_devdata->hard_stop_ticks_nss, js_devdata->scheduling_tick_ns);
 #endif
 #if KBASE_DISABLE_SCHEDULING_SOFT_STOPS != 0 && KBASE_DISABLE_SCHEDULING_HARD_STOPS != 0
-	KBASE_DEBUG_PRINT(KBASE_JM, "Note: The JS policy's tick timer (if coded) will still be run, but do nothing.");
+	KBASE_LOG(2, kbdev->dev, "Note: The JS policy's tick timer (if coded) will still be run, but do nothing.");
 #endif
 
 	/* setup the number of irq throttle cycles base on given time */
@@ -772,12 +778,10 @@ STATIC void kbasep_js_runpool_attempt_fast_start_ctx(kbase_device *kbdev, kbase_
 
 	mutex_lock(&js_devdata->runpool_mutex);
 
-	/* MALI_SEC */
-	/* for prevent test */
 	/* If the runpool is full and either there is no specified context or the specified context is not dying, then
 	   attempt to fast start the specified context or evict the first context with no running jobs. */
-	if (js_kctx_new != NULL && check_is_runpool_full(kbdev, kctx_new) != MALI_FALSE
-		&& !js_kctx_new->ctx.is_dying) {
+	if (check_is_runpool_full(kbdev, kctx_new) && 
+            (!js_kctx_new || (js_kctx_new && !js_kctx_new->ctx.is_dying))) {
 		/* No free address spaces - attempt to evict non-running lower priority context */
 		spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
 		for (evict_as_nr = 0; evict_as_nr < kbdev->nr_hw_address_spaces; evict_as_nr++) {
@@ -910,7 +914,7 @@ mali_bool kbasep_js_add_job(kbase_context *kctx, kbase_jd_atom *atom)
 		} else if (js_kctx_info->ctx.nr_jobs == 1) {
 			/* Handle Refcount going from 0 to 1: schedule the context on the Policy Queue */
 			KBASE_DEBUG_ASSERT(js_kctx_info->ctx.is_scheduled == MALI_FALSE);
-			KBASE_DEBUG_PRINT_INFO(KBASE_JM, "JS: Enqueue Context %p", kctx);
+			KBASE_LOG(1, kbdev->dev, "JS: Enqueue Context %p", kctx);
 
 			mutex_lock(&js_devdata->queue_mutex);
 			kbasep_js_policy_enqueue_ctx(js_policy, kctx);
@@ -1178,7 +1182,7 @@ STATIC kbasep_js_release_result kbasep_js_runpool_release_ctx_internal(kbase_dev
 	/* Make a set of checks to see if the context should be scheduled out */
 	if (new_ref_count == 0 && (kctx->jctx.sched_info.ctx.nr_jobs == 0 || kbasep_js_is_submit_allowed(js_devdata, kctx) == MALI_FALSE)) {
 		/* Last reference, and we've been told to remove this context from the Run Pool */
-		KBASE_DEBUG_PRINT_INFO(KBASE_JM, "JS: RunPool Remove Context %p because as_busy_refcount=%d, jobs=%d, allowed=%d", kctx, new_ref_count, js_kctx_info->ctx.nr_jobs, kbasep_js_is_submit_allowed(js_devdata, kctx));
+		KBASE_LOG(2, kbdev->dev, "JS: RunPool Remove Context %p because as_busy_refcount=%d, jobs=%d, allowed=%d", kctx, new_ref_count, js_kctx_info->ctx.nr_jobs, kbasep_js_is_submit_allowed(js_devdata, kctx));
 
 		kbasep_js_policy_runpool_remove_ctx(js_policy, kctx);
 
@@ -1269,20 +1273,20 @@ void kbasep_js_runpool_requeue_or_kill_ctx(kbase_device *kbdev, kbase_context *k
 	if (js_kctx_info->ctx.is_dying != MALI_FALSE) {
 		/* Dying: don't requeue, but kill all jobs on the context. This happens
 		 * asynchronously */
-		KBASE_DEBUG_PRINT_INFO(KBASE_JM, "JS: ** Killing Context %p on RunPool Remove **", kctx);
+		KBASE_LOG(2, kbdev->dev, "JS: ** Killing Context %p on RunPool Remove **", kctx);
 		kbasep_js_policy_foreach_ctx_job(js_policy, kctx, &kbase_jd_cancel, MALI_TRUE);
 	} else if (js_kctx_info->ctx.nr_jobs > 0) {
 		/* Not dying, has jobs: de-ref core counts from each job before addding
 		 * back to the queue */
 		kbasep_js_policy_foreach_ctx_job(js_policy, kctx, &kbasep_js_job_check_deref_cores, MALI_FALSE);
 
-		KBASE_DEBUG_PRINT_INFO(KBASE_JM, "JS: Requeue Context %p", kctx);
+		KBASE_LOG(1, kbdev->dev, "JS: Requeue Context %p", kctx);
 		mutex_lock(&js_devdata->queue_mutex);
 		kbasep_js_policy_enqueue_ctx(js_policy, kctx);
 		mutex_unlock(&js_devdata->queue_mutex);
 	} else {
 		/* Not dying, no jobs: don't add back to the queue */
-		KBASE_DEBUG_PRINT_INFO(KBASE_JM, "JS: Idling Context %p (not requeued)", kctx);
+		KBASE_LOG(1, kbdev->dev, "JS: Idling Context %p (not requeued)", kctx);
 	}
 
 	if (has_pm_ref) {
@@ -1640,7 +1644,7 @@ mali_bool kbasep_js_try_run_next_job_on_slot_irq_nolock(kbase_device *kbdev, int
 				kbasep_js_ref_permon_check_and_enable_cycle_counter(kbdev, dequeued_atom);
 
 				if (dequeued_atom->event_code == BASE_JD_EVENT_PM_EVENT) {
-					KBASE_DEBUG_PRINT_WARN(KBASE_PM, "Rejecting atom due to BASE_JD_EVENT_PM_EVENT\n");
+					dev_warn(kbdev->dev, "Rejecting atom due to BASE_JD_EVENT_PM_EVENT\n");
 					/* The job has failed due to the specified core group being unavailable */
 					kbase_jd_done(dequeued_atom, js, NULL, 0);
 				} else {
@@ -1737,7 +1741,7 @@ void kbasep_js_try_run_next_job_on_slot_nolock(kbase_device *kbdev, int js)
 					kbasep_js_ref_permon_check_and_enable_cycle_counter(kbdev, dequeued_atom);
 
 					if (dequeued_atom->event_code == BASE_JD_EVENT_PM_EVENT) {
-						KBASE_DEBUG_PRINT_WARN(KBASE_PM, "Rejecting atom due to BASE_JD_EVENT_PM_EVENT\n");
+						dev_warn(kbdev->dev, "Rejecting atom due to BASE_JD_EVENT_PM_EVENT\n");
 						/* The job has failed due to the specified core group being unavailable */
 						kbase_jd_done(dequeued_atom, js, NULL, 0);
 					} else {
@@ -1784,7 +1788,7 @@ void kbasep_js_try_schedule_head_ctx(kbase_device *kbdev)
 	}
 	js_kctx_info = &head_kctx->jctx.sched_info;
 
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "JS: Dequeue Context %p", head_kctx);
+	KBASE_LOG(1, kbdev->dev, "JS: Dequeue Context %p", head_kctx);
 
 	pm_active_err = kbase_pm_context_active_handle_suspend(kbdev, KBASE_PM_SUSPEND_HANDLER_DONT_INCREASE);
 
@@ -1826,14 +1830,23 @@ void kbasep_js_try_schedule_head_ctx(kbase_device *kbdev)
 		if (kbdev->js_soft_stop_ticks != 0)
 			js_devdata->soft_stop_ticks = kbdev->js_soft_stop_ticks;
 
+		if (kbdev->js_soft_stop_ticks_cl != 0)
+			js_devdata->soft_stop_ticks_cl = kbdev->js_soft_stop_ticks_cl;
+
 		if (kbdev->js_hard_stop_ticks_ss != 0)
 			js_devdata->hard_stop_ticks_ss = kbdev->js_hard_stop_ticks_ss;
+
+		if (kbdev->js_hard_stop_ticks_cl != 0)
+			js_devdata->hard_stop_ticks_cl = kbdev->js_hard_stop_ticks_cl;
 
 		if (kbdev->js_hard_stop_ticks_nss != 0)
 			js_devdata->hard_stop_ticks_nss = kbdev->js_hard_stop_ticks_nss;
 
 		if (kbdev->js_reset_ticks_ss != 0)
 			js_devdata->gpu_reset_ticks_ss = kbdev->js_reset_ticks_ss;
+
+		if (kbdev->js_reset_ticks_cl != 0)
+			js_devdata->gpu_reset_ticks_cl = kbdev->js_reset_ticks_cl;
 
 		if (kbdev->js_reset_ticks_nss != 0)
 			js_devdata->gpu_reset_ticks_nss = kbdev->js_reset_ticks_nss;
@@ -1981,10 +1994,6 @@ void kbasep_js_release_privileged_ctx(kbase_device *kbdev, kbase_context *kctx)
 	kbasep_js_runpool_release_ctx(kbdev, kctx);
 }
 
-#if defined(SLSI_INTEGRATION) && defined(CL_UTILIZATION_BOOST_BY_TIME_WEIGHT)
-#define KBASE_PM_TIME_SHIFT			8
-#endif
-
 void kbasep_js_job_done_slot_irq(kbase_jd_atom *katom, int slot_nr,
                                  ktime_t *end_timestamp,
                                  kbasep_js_atom_done_code done_code)
@@ -2029,16 +2038,6 @@ void kbasep_js_job_done_slot_irq(kbase_jd_atom *katom, int slot_nr,
 		tick_diff = ktime_sub(*end_timestamp, katom->start_timestamp);
 
 		microseconds_spent = ktime_to_ns(tick_diff);
-
-#if defined(SLSI_INTEGRATION) && defined(CL_UTILIZATION_BOOST_BY_TIME_WEIGHT)
-		if (katom->core_req & BASE_JD_REQ_ONLY_COMPUTE)
-			atomic_add((microseconds_spent >> KBASE_PM_TIME_SHIFT), &kbdev->pm.metrics.time_compute_jobs);
-		else if (katom->core_req & BASE_JD_REQ_FS)
-			atomic_add((microseconds_spent >> KBASE_PM_TIME_SHIFT), &kbdev->pm.metrics.time_fragment_jobs);
-		else if (katom->core_req & BASE_JD_REQ_CS)
-			atomic_add((microseconds_spent >> KBASE_PM_TIME_SHIFT), &kbdev->pm.metrics.time_vertex_jobs);
-#endif
-
 		do_div(microseconds_spent, 1000);
 
 		/* Round up time spent to the minimum timer resolution */

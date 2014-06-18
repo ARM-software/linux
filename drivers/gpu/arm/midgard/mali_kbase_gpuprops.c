@@ -62,7 +62,7 @@ mali_error kbase_gpuprops_uk_get_props(kbase_context *kctx, kbase_uk_gpuprops * 
 		if (rc == 0) {
 			u32 gpu_speed_khz = gpu_speed_mhz * 1000;
 			if (gpu_speed_khz < kctx->kbdev->gpu_props.props.core_props.gpu_freq_khz_min || gpu_speed_khz > kctx->kbdev->gpu_props.props.core_props.gpu_freq_khz_max)
-				KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "GPU Speed is outside of min/max range (got %lu Khz, min %lu Khz, max %lu Khz)\n", (unsigned long)gpu_speed_khz, (unsigned long)kctx->kbdev->gpu_props.props.core_props.gpu_freq_khz_min, (unsigned long)kctx->kbdev->gpu_props.props.core_props.gpu_freq_khz_max);
+				dev_warn(kctx->kbdev->dev, "GPU Speed is outside of min/max range (got %lu Khz, min %lu Khz, max %lu Khz)\n", (unsigned long)gpu_speed_khz, (unsigned long)kctx->kbdev->gpu_props.props.core_props.gpu_freq_khz_min, (unsigned long)kctx->kbdev->gpu_props.props.core_props.gpu_freq_khz_max);
 		}
 #endif				/* CONFIG_MALI_DEBUG */
 	}
@@ -183,7 +183,7 @@ STATIC void kbase_gpuprops_construct_coherent_groups(base_gpu_props * const prop
 	}
 
 	if (group_present != 0)
-		KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "Too many coherent groups (keeping only %d groups).\n", BASE_MAX_COHERENT_GROUPS);
+		pr_warn("Too many coherent groups (keeping only %d groups).\n", BASE_MAX_COHERENT_GROUPS);
 
 	props->coherency_info.num_groups = num_groups;
 }

@@ -20,7 +20,7 @@
 #include <mali_kbase.h>
 
 #ifdef CONFIG_SYNC
-#include <../../../../staging/android/sync.h>
+#include <linux/sync.h>
 #include <linux/syscalls.h>
 #include "mali_kbase_sync.h"
 #endif
@@ -36,10 +36,6 @@
  * executed within the driver rather than being handed over to the GPU.
  */
 
-#ifdef SLSI_FENCE_INTEGRATION
-static void kbase_fence_timer_init(kbase_jd_atom *katom);
-static void kbase_fence_del_timer(kbase_jd_atom *katom);
-#endif
 static int kbase_dump_cpu_gpu_time(kbase_jd_atom *katom)
 {
 	kbase_va_region *reg;
@@ -196,20 +192,6 @@ static void kbase_fence_wait_worker(struct work_struct *data)
 	katom = container_of(data, kbase_jd_atom, work);
 	kctx = katom->kctx;
 
-#ifdef SLSI_FENCE_INTEGRATION
-#ifdef KBASE_FENCE_TIMEOUT_FAKE_SIGNAL
-	mutex_lock(&katom->fence_mt);
-	if (katom->fence && katom->fence->status == 0) {
-		/* means that it comes via kbase_fence_timeout*/
-		pr_info("kbase_fence_wait_worker cancel async fence[%p]\n", katom->fence);
-		if (sync_fence_cancel_async(katom->fence, &katom->sync_waiter) != 0) {
-			mutex_unlock(&katom->fence_mt);
-			return;
-		}
-	}
-	mutex_unlock(&katom->fence_mt);
-#endif
-#endif
 	complete_soft_job(katom);
 }
 
@@ -252,23 +234,14 @@ static int kbase_fence_wait(kbase_jd_atom *katom)
 
 	sync_fence_waiter_init(&katom->sync_waiter, kbase_fence_wait_callback);
 
-#ifdef SLSI_FENCE_INTEGRATION
-	mutex_lock(&katom->fence_mt);
 	ret = sync_fence_wait_async(katom->fence, &katom->sync_waiter);
 
-	mutex_unlock(&katom->fence_mt);
-#else
-	ret = sync_fence_wait_async(katom->fence, &katom->sync_waiter);
-#endif
 	if (ret == 1) {
 		/* Already signalled */
 		return 0;
 	} else if (ret < 0) {
 		goto cancel_atom;
 	}
-#ifdef SLSI_FENCE_INTEGRATION
-	kbase_fence_timer_init(katom);
-#endif
 	return 1;
 
  cancel_atom:
@@ -283,25 +256,11 @@ static int kbase_fence_wait(kbase_jd_atom *katom)
 
 static void kbase_fence_cancel_wait(kbase_jd_atom *katom)
 {
-#ifdef SLSI_FENCE_INTEGRATION
-	mutex_lock(&katom->fence_mt);
-	if (!katom->fence)
-	{
-		mutex_unlock(&katom->fence_mt);
-		return;
-	}
-#endif
 	if (sync_fence_cancel_async(katom->fence, &katom->sync_waiter) != 0)
 	{
-#ifdef SLSI_FENCE_INTEGRATION
-		mutex_unlock(&katom->fence_mt);
-#endif
 		/* The wait wasn't cancelled - leave the cleanup for kbase_fence_wait_callback */
 		return;
 	}
-#ifdef SLSI_FENCE_INTEGRATION
-	mutex_unlock(&katom->fence_mt);
-#endif
 
 	/* Wait was cancelled - zap the atoms */
 	katom->event_code = BASE_JD_EVENT_JOB_CANCELLED;
@@ -315,26 +274,26 @@ static void kbase_fence_cancel_wait(kbase_jd_atom *katom)
 
 int kbase_process_soft_job(kbase_jd_atom *katom)
 {
-	switch (katom->core_req) {
+	int status;
+	switch (katom->core_req & BASEP_JD_REQ_ATOM_TYPE) {
 	case BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME:
 		return kbase_dump_cpu_gpu_time(katom);
 #ifdef CONFIG_SYNC
 	case BASE_JD_REQ_SOFT_FENCE_TRIGGER:
-#ifdef SLSI_FENCE_INTEGRATION
-		mutex_lock(&katom->fence_mt);
-#endif
 		KBASE_DEBUG_ASSERT(katom->fence != NULL);
 		katom->event_code = kbase_fence_trigger(katom, katom->event_code == BASE_JD_EVENT_DONE ? 0 : -EFAULT);
 		/* Release the reference as we don't need it any more */
 		sync_fence_put(katom->fence);
 		katom->fence = NULL;
-#ifdef SLSI_FENCE_INTEGRATION
-		mutex_unlock(&katom->fence_mt);
-#endif
 		break;
 	case BASE_JD_REQ_SOFT_FENCE_WAIT:
 		return kbase_fence_wait(katom);
 #endif				/* CONFIG_SYNC */
+	case BASE_JD_REQ_SOFT_REPLAY:
+		status = kbase_replay_process(katom);
+		if (status & MALI_REPLAY_FLAG_JS_RESCHED)
+			pr_err("replay called from kbase_process_soft_job - missing resched!\n");
+		return status & MALI_REPLAY_STATUS_MASK;
 	}
 
 	/* Atom is complete */
@@ -343,18 +302,7 @@ int kbase_process_soft_job(kbase_jd_atom *katom)
 
 void kbase_cancel_soft_job(kbase_jd_atom *katom)
 {
-#ifdef SLSI_INTEGRATION
-	pgd_t *pgd;
-	struct mm_struct *mm = katom->kctx->process_mm;
-
-	pgd = pgd_offset(mm, (unsigned long)katom);
-	if (pgd_none(*pgd) || pgd_bad(*pgd)) {
-		printk("Abnormal katom\n");
-		printk("katom->kctx: 0x%p, katom->kctx->osctx.tgid: %d, katom->kctx->process_mm: 0x%p, pgd: 0x%px\n", katom->kctx, katom->kctx->osctx.tgid, katom->kctx->process_mm, pgd);
-		return;
-	}
-#endif
-	switch (katom->core_req) {
+	switch (katom->core_req & BASEP_JD_REQ_ATOM_TYPE) {
 #ifdef CONFIG_SYNC
 	case BASE_JD_REQ_SOFT_FENCE_WAIT:
 		kbase_fence_cancel_wait(katom);
@@ -368,7 +316,7 @@ void kbase_cancel_soft_job(kbase_jd_atom *katom)
 
 mali_error kbase_prepare_soft_job(kbase_jd_atom *katom)
 {
-	switch (katom->core_req) {
+	switch (katom->core_req & BASEP_JD_REQ_ATOM_TYPE) {
 	case BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME:
 		{
 			if(0 != (katom->jc & KBASE_CACHE_ALIGNMENT_MASK))
@@ -387,31 +335,19 @@ mali_error kbase_prepare_soft_job(kbase_jd_atom *katom)
 			if (fd < 0)
 				return MALI_ERROR_FUNCTION_FAILED;
 
-#ifdef SLSI_FENCE_INTEGRATION
-			mutex_lock(&katom->fence_mt);
-#endif
 			katom->fence = sync_fence_fdget(fd);
 
 			if (katom->fence == NULL) {
 				/* The only way the fence can be NULL is if userspace closed it for us.
 				 * So we don't need to clear it up */
-#ifdef SLSI_FENCE_INTEGRATION
-				mutex_unlock(&katom->fence_mt);
-#endif
 				return MALI_ERROR_FUNCTION_FAILED;
 			}
 			fence.basep.fd = fd;
 			if (0 != copy_to_user((__user void *)(uintptr_t) katom->jc, &fence, sizeof(fence))) {
 				katom->fence = NULL;
 				sys_close(fd);
-#ifdef SLSI_FENCE_INTEGRATION
-				mutex_unlock(&katom->fence_mt);
-#endif
 				return MALI_ERROR_FUNCTION_FAILED;
 			}
-#ifdef SLSI_FENCE_INTEGRATION
-			mutex_unlock(&katom->fence_mt);
-#endif
 		}
 		break;
 	case BASE_JD_REQ_SOFT_FENCE_WAIT:
@@ -420,25 +356,15 @@ mali_error kbase_prepare_soft_job(kbase_jd_atom *katom)
 			if (0 != copy_from_user(&fence, (__user void *)(uintptr_t) katom->jc, sizeof(fence)))
 				return MALI_ERROR_FUNCTION_FAILED;
 
-#ifdef SLSI_FENCE_INTEGRATION
-			mutex_lock(&katom->fence_mt);
-#endif
 			/* Get a reference to the fence object */
 			katom->fence = sync_fence_fdget(fence.basep.fd);
 			if (katom->fence == NULL)
-			{
-#ifdef SLSI_FENCE_INTEGRATION
-				mutex_unlock(&katom->fence_mt);
-#endif
 				return MALI_ERROR_FUNCTION_FAILED;
-			}
-
-#ifdef SLSI_FENCE_INTEGRATION
-			mutex_unlock(&katom->fence_mt);
-#endif
 		}
 		break;
 #endif				/* CONFIG_SYNC */
+	case BASE_JD_REQ_SOFT_REPLAY:
+		break;
 	default:
 		/* Unsupported soft-job */
 		return MALI_ERROR_FUNCTION_FAILED;
@@ -448,7 +374,7 @@ mali_error kbase_prepare_soft_job(kbase_jd_atom *katom)
 
 void kbase_finish_soft_job(kbase_jd_atom *katom)
 {
-	switch (katom->core_req) {
+	switch (katom->core_req & BASEP_JD_REQ_ATOM_TYPE) {
 	case BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME:
 		/* Nothing to do */
 		break;
@@ -457,31 +383,14 @@ void kbase_finish_soft_job(kbase_jd_atom *katom)
 		if (katom->fence) {
 			/* The fence has not yet been signalled, so we do it now */
 			kbase_fence_trigger(katom, katom->event_code == BASE_JD_EVENT_DONE ? 0 : -EFAULT);
-#ifdef SLSI_FENCE_INTEGRATION
-			mutex_lock(&katom->fence_mt);
 			sync_fence_put(katom->fence);
 			katom->fence = NULL;
-			mutex_unlock(&katom->fence_mt);
-#else
-			sync_fence_put(katom->fence);
-			katom->fence = NULL;
-#endif
 		}
 		break;
 	case BASE_JD_REQ_SOFT_FENCE_WAIT:
 		/* Release the reference to the fence object */
-#ifdef SLSI_FENCE_INTEGRATION
-		mutex_lock(&katom->fence_mt);
-		if (katom->fence) {
-			sync_fence_put(katom->fence);
-			katom->fence = NULL;
-		}
-		mutex_unlock(&katom->fence_mt);
-		kbase_fence_del_timer(katom);
-#else
-			sync_fence_put(katom->fence);
-			katom->fence = NULL;
-#endif
+		sync_fence_put(katom->fence);
+		katom->fence = NULL;
 		break;
 #endif				/* CONFIG_SYNC */
 	}
@@ -520,6 +429,8 @@ void kbase_resume_suspended_soft_jobs(kbase_device *kbdev)
 			resched |= jd_done_nolock(katom_iter);
 		} else {
 			/* The job has not completed */
+			KBASE_DEBUG_ASSERT((katom_iter->core_req & BASEP_JD_REQ_ATOM_TYPE)
+						  		!= BASE_JD_REQ_SOFT_REPLAY);
 			list_add_tail(&katom_iter->dep_item[0], &kctx->waiting_soft_jobs);
 		}
 
@@ -529,157 +440,3 @@ void kbase_resume_suspended_soft_jobs(kbase_device *kbdev)
 	if (resched)
 		kbasep_js_try_schedule_head_ctx(kbdev);
 }
-
-#ifdef SLSI_FENCE_INTEGRATION
-#define KBASE_FENCE_TIMEOUT 1000
-#define DUMP_CHUNK 256
-
-#ifdef KBASE_FENCE_DUMP
-static const char *kbase_sync_status_str(int status)
-{
-	if (status > 0)
-		return "signaled";
-	else if (status == 0)
-		return "active";
-	else
-		return "error";
-}
-
-static void kbase_sync_print_pt(struct seq_file *s, struct sync_pt *pt, bool fence)
-{
-	int status;
-
-	if (pt == NULL)
-		return;
-	status = pt->status;
-
-	seq_printf(s, "  %s%spt %s",
-		   fence ? pt->parent->name : "",
-		   fence ? "_" : "",
-		   kbase_sync_status_str(status));
-	if (pt->status) {
-		struct timeval tv = ktime_to_timeval(pt->timestamp);
-		seq_printf(s, "@%ld.%06ld", tv.tv_sec, tv.tv_usec);
-	}
-
-	if (pt->parent->ops->timeline_value_str &&
-	    pt->parent->ops->pt_value_str) {
-		char value[64];
-		pt->parent->ops->pt_value_str(pt, value, sizeof(value));
-		seq_printf(s, ": %s", value);
-		if (fence) {
-			pt->parent->ops->timeline_value_str(pt->parent, value,
-						    sizeof(value));
-			seq_printf(s, " / %s", value);
-		}
-	} else if (pt->parent->ops->print_pt) {
-		seq_printf(s, ": ");
-		pt->parent->ops->print_pt(s, pt);
-	}
-
-	seq_printf(s, "\n");
-}
-
-static void kbase_fence_print(struct seq_file *s, struct sync_fence *fence)
-{
-	struct list_head *pos;
-	unsigned long flags;
-
-	seq_printf(s, "[%p] %s: %s\n", fence, fence->name,
-		   kbase_sync_status_str(fence->status));
-
-	list_for_each(pos, &fence->pt_list_head) {
-		struct sync_pt *pt =
-			container_of(pos, struct sync_pt, pt_list);
-		kbase_sync_print_pt(s, pt, true);
-	}
-
-	spin_lock_irqsave(&fence->waiter_list_lock, flags);
-	list_for_each(pos, &fence->waiter_list_head) {
-		struct sync_fence_waiter *waiter =
-			container_of(pos, struct sync_fence_waiter,
-				     waiter_list);
-
-		if (waiter)
-			seq_printf(s, "waiter %pF\n", waiter->callback);
-	}
-	spin_unlock_irqrestore(&fence->waiter_list_lock, flags);
-}
-
-static char kbase_sync_dump_buf[64 * 1024];
-static void kbase_fence_dump(struct sync_fence *fence)
-{
-	int i;
-	struct seq_file s = {
-		.buf = kbase_sync_dump_buf,
-		.size = sizeof(kbase_sync_dump_buf) - 1,
-	};
-
-	kbase_fence_print(&s, fence);
-	for (i = 0; i < s.count; i += DUMP_CHUNK) {
-		if ((s.count - i) > DUMP_CHUNK) {
-			char c = s.buf[i + DUMP_CHUNK];
-			s.buf[i + DUMP_CHUNK] = 0;
-			pr_cont("%s", s.buf + i);
-			s.buf[i + DUMP_CHUNK] = c;
-		} else {
-			s.buf[s.count] = 0;
-			pr_cont("%s", s.buf + i);
-		}
-	}
-}
-#endif
-
-static void kbase_fence_timeout(unsigned long data)
-{
-	kbase_jd_atom *katom = (kbase_jd_atom *)data;
-	KBASE_DEBUG_ASSERT(NULL != katom);
-
-	if (katom == NULL || katom->fence == NULL)
-		return;
-
-	if (katom->fence->status != 0) {
-		kbase_fence_del_timer(katom);
-		return;
-	}
-	pr_info("Release fence is not signaled on [%p] for %d ms\n", katom->fence, KBASE_FENCE_TIMEOUT);
-
-#ifdef KBASE_FENCE_DUMP
-	kbase_fence_dump(katom->fence);
-#endif
-#ifdef KBASE_FENCE_TIMEOUT_FAKE_SIGNAL
-	if (katom->fence)
-		kbase_fence_wait_callback(katom->fence, &katom->sync_waiter);
-#endif
-	return;
-}
-
-static void kbase_fence_timer_init(kbase_jd_atom *katom)
-{
-	const u32 timeout = msecs_to_jiffies(KBASE_FENCE_TIMEOUT);
-
-	KBASE_DEBUG_ASSERT(NULL != katom);
-	if (katom == NULL)
-		return;
-
-	init_timer(&katom->fence_timer);
-	katom->fence_timer.function = kbase_fence_timeout;
-	katom->fence_timer.data = (unsigned long)katom;
-	katom->fence_timer.expires = jiffies + timeout;
-
-	add_timer(&katom->fence_timer);
-	return;
-}
-
-static void kbase_fence_del_timer(kbase_jd_atom *katom)
-{
-	KBASE_DEBUG_ASSERT(NULL != katom);
-	if (katom == NULL)
-		return;
-
-	if (katom->fence_timer.function == kbase_fence_timeout)
-		del_timer(&katom->fence_timer);
-	katom->fence_timer.function = NULL;
-	return;
-}
-#endif

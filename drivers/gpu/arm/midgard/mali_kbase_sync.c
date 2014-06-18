@@ -24,7 +24,7 @@
 
 #ifdef CONFIG_SYNC
 
-#include <../../../../staging/android/sync.h>
+#include <linux/sync.h>
 #include <mali_kbase.h>
 
 struct mali_sync_timeline {
@@ -185,7 +185,7 @@ void kbase_sync_signal_pt(struct sync_pt *pt, int result)
 			 * a malicious user being able to spam dmesg.
 			 */
 #ifdef CONFIG_MALI_DEBUG
-			KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Fences were triggered in a different order to allocation!");
+			pr_err("Fences were triggered in a different order to allocation!");
 #endif				/* CONFIG_MALI_DEBUG */
 			return;
 		}

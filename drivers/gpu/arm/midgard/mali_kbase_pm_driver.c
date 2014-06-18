@@ -26,6 +26,7 @@
 #include <mali_midg_regmap.h>
 #include <mali_kbase_gator.h>
 #include <mali_kbase_pm.h>
+#include <mali_kbase_config_defaults.h>
 
 #if MALI_MOCK_TEST
 #define MOCKABLE(function) function##_original
@@ -758,7 +759,7 @@ static void kbase_pm_hw_issues(kbase_device *kbdev)
 		value |= SC_SDC_DISABLE_OQ_DISCARD;
 
 	/* Enable alternative hardware counter selection if configured. */
-	if (kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_ALTERNATIVE_HWC))
+	if (DEFAULT_ALTERNATIVE_HWC)
 		value |= SC_ALT_COUNTERS;
 
 	/* Use software control of forward pixel kill when needed. See MIDEUR-174. */
@@ -853,14 +854,14 @@ mali_error kbase_pm_init_hw(kbase_device *kbdev, mali_bool enable_irqs )
 	/* No interrupt has been received - check if the RAWSTAT register says the reset has completed */
 	if (kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_IRQ_RAWSTAT), NULL) & RESET_COMPLETED) {
 		/* The interrupt is set in the RAWSTAT; this suggests that the interrupts are not getting to the CPU */
-		KBASE_DEBUG_PRINT_WARN(KBASE_PM, "Reset interrupt didn't reach CPU. Check interrupt assignments.\n");
+		dev_warn(kbdev->dev, "Reset interrupt didn't reach CPU. Check interrupt assignments.\n");
 		/* If interrupts aren't working we can't continue. */
 		destroy_hrtimer_on_stack(&rtdata.timer);
 		goto out;
 	}
 
 	/* The GPU doesn't seem to be responding to the reset so try a hard reset */
-	KBASE_DEBUG_PRINT_ERROR(KBASE_PM, "Failed to soft-reset GPU (timed out after %d ms), now attempting a hard reset\n", RESET_TIMEOUT);
+	dev_err(kbdev->dev, "Failed to soft-reset GPU (timed out after %d ms), now attempting a hard reset\n", RESET_TIMEOUT);
 	KBASE_TRACE_ADD(kbdev, CORE_GPU_HARD_RESET, NULL, NULL, 0u, 0);
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_COMMAND), GPU_COMMAND_HARD_RESET, NULL);
 
@@ -881,7 +882,7 @@ mali_error kbase_pm_init_hw(kbase_device *kbdev, mali_bool enable_irqs )
 
 	destroy_hrtimer_on_stack(&rtdata.timer);
 
-	KBASE_DEBUG_PRINT_ERROR(KBASE_PM, "Failed to hard-reset the GPU (timed out after %d ms)\n", RESET_TIMEOUT);
+	dev_err(kbdev->dev, "Failed to hard-reset the GPU (timed out after %d ms)\n", RESET_TIMEOUT);
 
 	/* The GPU still hasn't reset, give up */
 	return MALI_ERROR_FUNCTION_FAILED;

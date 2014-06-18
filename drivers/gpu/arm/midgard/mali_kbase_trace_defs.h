@@ -220,15 +220,6 @@ int dummy_array[] = {
 
 	KBASE_TRACE_CODE_MAKE_CODE(PM_CURRENT_POLICY_INIT),	/* info_val == policy number */
 	KBASE_TRACE_CODE_MAKE_CODE(PM_CURRENT_POLICY_TERM),	/* info_val == policy number */
-
-/* MALI_SEC */
-	KBASE_TRACE_CODE_MAKE_CODE(LSI_GPU_ON), /* gpu on */
-	KBASE_TRACE_CODE_MAKE_CODE(LSI_GPU_OFF),        /* gpu off */
-	KBASE_TRACE_CODE_MAKE_CODE(LSI_SUSPEND),        /* suspend */
-	KBASE_TRACE_CODE_MAKE_CODE(LSI_RESUME), /* resume */
-	KBASE_TRACE_CODE_MAKE_CODE(LSI_CLOCK_VALUE), /* clock */
-	KBASE_TRACE_CODE_MAKE_CODE(LSI_TMU_VALUE), /* TMU LOCK info */
-	KBASE_TRACE_CODE_MAKE_CODE(LSI_VOL_VALUE), /* voltage */
 /* Unused code just to make it easier to not have a comma at the end.
  * All other codes MUST come before this */
 	KBASE_TRACE_CODE_MAKE_CODE(DUMMY)

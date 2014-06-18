@@ -347,9 +347,12 @@ typedef struct kbasep_js_device_data {
 
 	u32 scheduling_tick_ns;		 /**< Value for KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS */
 	u32 soft_stop_ticks;		 /**< Value for KBASE_CONFIG_ATTR_JS_SOFT_STOP_TICKS */
+	u32 soft_stop_ticks_cl;		 /**< Value for KBASE_CONFIG_ATTR_JS_SOFT_STOP_TICKS_CL */
 	u32 hard_stop_ticks_ss;		 /**< Value for KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_SS */
+	u32 hard_stop_ticks_cl;		 /**< Value for KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_CL */
 	u32 hard_stop_ticks_nss;	 /**< Value for KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_NSS */
 	u32 gpu_reset_ticks_ss;		 /**< Value for KBASE_CONFIG_ATTR_JS_RESET_TICKS_SS */
+	u32 gpu_reset_ticks_cl;		 /**< Value for KBASE_CONFIG_ATTR_JS_RESET_TICKS_CL */
 	u32 gpu_reset_ticks_nss;	 /**< Value for KBASE_CONFIG_ATTR_JS_RESET_TICKS_NSS */
 	u32 ctx_timeslice_ns;		 /**< Value for KBASE_CONFIG_ATTR_JS_CTX_TIMESLICE_NS */
 	u32 cfs_ctx_runtime_init_slices; /**< Value for KBASE_CONFIG_ATTR_JS_CFS_CTX_RUNTIME_INIT_SLICES */

@@ -37,6 +37,11 @@ void kbase_hw_set_features_mask(kbase_device *kbdev)
 	switch (gpu_id) {
 	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 0):
 	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 1):
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 1, 1):
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 1, 9):
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 2, 1):
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 3, 1):
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 1, 0, 0):
 		features = base_hw_features_t76x;
 		break;
 	default:
@@ -85,12 +90,33 @@ mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
 		case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 1):
 			issues = base_hw_issues_t76x_r0p0;
 			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 1, 1):
+			issues = base_hw_issues_t76x_r0p1;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 1, 9):
+			/* TODO: MIDBASE-3084 - confirm hw issue list */
+			issues = base_hw_issues_t76x_r0p1;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 2, 1):
+			issues = base_hw_issues_t76x_r0p2;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 3, 1):
+			/* TODO: MIDBASE-3086 - confirm hw issue list */
+			issues = base_hw_issues_t76x_r0p2;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T76X, 1, 0, 0):
+			issues = base_hw_issues_t76x_r1p0;
+			break;
 		case GPU_ID_MAKE(GPU_ID_PI_T72X, 0, 0, 0):
 		case GPU_ID_MAKE(GPU_ID_PI_T72X, 0, 0, 1):
+		case GPU_ID_MAKE(GPU_ID_PI_T72X, 0, 0, 2):
 			issues = base_hw_issues_t72x_r0p0;
 			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T72X, 1, 0, 0):
+			issues = base_hw_issues_t72x_r1p0;
+			break;
 		default:
-			KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "Unknown GPU ID %x", gpu_id);
+			dev_err(kbdev->dev, "Unknown GPU ID %x", gpu_id);
 			return MALI_ERROR_FUNCTION_FAILED;
 		}
 	} else {
@@ -109,12 +135,12 @@ mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
 			break;
 
 		default:
-			KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "Unknown GPU ID %x", gpu_id);
+			dev_err(kbdev->dev, "Unknown GPU ID %x", gpu_id);
 			return MALI_ERROR_FUNCTION_FAILED;
 		}
 	}
 
-	KBASE_DEBUG_PRINT_INFO(KBASE_CORE, "GPU identified as 0x%04x r%dp%d status %d", (gpu_id & GPU_ID_VERSION_PRODUCT_ID) >> GPU_ID_VERSION_PRODUCT_ID_SHIFT, (gpu_id & GPU_ID_VERSION_MAJOR) >> GPU_ID_VERSION_MAJOR_SHIFT, (gpu_id & GPU_ID_VERSION_MINOR) >> GPU_ID_VERSION_MINOR_SHIFT, (gpu_id & GPU_ID_VERSION_STATUS) >> GPU_ID_VERSION_STATUS_SHIFT);
+	dev_info(kbdev->dev, "GPU identified as 0x%04x r%dp%d status %d", (gpu_id & GPU_ID_VERSION_PRODUCT_ID) >> GPU_ID_VERSION_PRODUCT_ID_SHIFT, (gpu_id & GPU_ID_VERSION_MAJOR) >> GPU_ID_VERSION_MAJOR_SHIFT, (gpu_id & GPU_ID_VERSION_MINOR) >> GPU_ID_VERSION_MINOR_SHIFT, (gpu_id & GPU_ID_VERSION_STATUS) >> GPU_ID_VERSION_STATUS_SHIFT);
 
 	for (; *issues != BASE_HW_ISSUE_END; issues++)
 		set_bit(*issues, &kbdev->hw_issues_mask[0]);

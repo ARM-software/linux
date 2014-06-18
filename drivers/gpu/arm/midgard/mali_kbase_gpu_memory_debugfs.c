@@ -39,10 +39,10 @@ static int kbasep_gpu_memory_seq_show(struct seq_file *sfile, void *data)
 		struct kbase_device *kbdev = NULL;
 		kbasep_kctx_list_element *element;
 
-		kbdev = list_entry(entry, struct kbase_device, osdev.entry);
+		kbdev = list_entry(entry, struct kbase_device, entry);
 		/* output the total memory usage and cap for this device */
 		ret = seq_printf(sfile, "%-16s  %10u\n", \
-				kbdev->osdev.devname, \
+				kbdev->devname, \
 				atomic_read(&(kbdev->memdev.used_pages)));
 		mutex_lock(&kbdev->kctx_list_lock);
 		list_for_each_entry(element, &kbdev->kctx_list, link) {

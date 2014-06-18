@@ -26,6 +26,7 @@
 #define _KBASE_JM_H_
 
 #include <mali_kbase_hw.h>
+#include <mali_kbase_debug.h>
 #include <linux/atomic.h>
 
 /**
@@ -114,7 +115,7 @@ static INLINE kbase_jd_atom *kbasep_jm_dequeue_submit_slot(kbase_jm_slot *slot)
 	slot->submitted_head = (slot->submitted_head + 1) & BASE_JM_SUBMIT_SLOTS_MASK;
 	slot->submitted_nr--;
 
-	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "katom %p new head %u", (void *)katom, (unsigned int)slot->submitted_head);
+	KBASE_LOG(2, katom->kctx->kbdev->dev, "katom %p new head %u", (void *)katom, (unsigned int)slot->submitted_head);
 
 	return katom;
 }
