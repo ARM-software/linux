@@ -11,7 +11,5 @@
 
 
 menu "ARM GPU Configuration"
-source "drivers/gpu/arm/t6xx/kbase/Kconfig"
 source "drivers/gpu/arm/midgard/Kconfig"
-source "drivers/gpu/arm/mali400/Kconfig"
 endmenu
