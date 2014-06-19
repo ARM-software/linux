@@ -102,19 +102,13 @@ struct int_bus_opp_table int_bus_opp_list[] = {
 	{LV_1_1, 480000,  987500, 0},	/* ISP Special Level */
 	{LV_1_2, 460000,  987500, 0},	/* ISP Special Level */
 	{LV_1_3, 440000,  987500, 0},	/* ISP Special Level */
-#ifdef CONFIG_SOC_EXYNOS5422_REV_0
 	{LV_2,   420000,  987500, 0},	/* UHD play */
+#if 0
 	{LV_3,   400000,  987500, 0},
 	{LV_4,   333000,  950000, 0},
 	{LV_5,   222000,  950000, 0},
 	{LV_6,   111000,  950000, 0},
 	{LV_7,    83000,  925000, 0},
-#else
-	{LV_2,   400000,  987500, 0},
-	{LV_3,   333000,  950000, 0},
-	{LV_4,   222000,  950000, 0},
-	{LV_5,   111000,  950000, 0},
-	{LV_6,    83000,  925000, 0},
 #endif
 };
 
@@ -1390,8 +1384,7 @@ static int exynos5_devfreq_int_probe(struct platform_device *pdev)
 	opp = opp_find_freq_floor(dev, &exynos5_int_devfreq_profile.initial_freq);
 	if (IS_ERR(opp)) {
 		rcu_read_unlock();
-		dev_err(dev, "Invalid initial frequency %lu kHz.\n",
-			       exynos5_int_devfreq_profile.initial_freq);
+		dev_err(dev, "Invalid initial frequency %lu kHz.\n", exynos5_int_devfreq_profile.initial_freq);
 		err = PTR_ERR(opp);
 		goto err_opp_add;
 	}
