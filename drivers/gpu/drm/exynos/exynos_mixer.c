@@ -1135,13 +1135,15 @@ int mixer_check_mode(struct drm_display_mode *mode)
 	DRM_DEBUG_KMS("xres=%d, yres=%d, refresh=%d, intl=%d\n",
 		mode->hdisplay, mode->vdisplay, mode->vrefresh,
 		(mode->flags & DRM_MODE_FLAG_INTERLACE) ? 1 : 0);
+	
+	return 0;
 
-	if ((w >= 464 && w <= 720 && h >= 261 && h <= 576) ||
+/*	if ((w >= 464 && w <= 720 && h >= 261 && h <= 576) ||
 		(w >= 1024 && w <= 1280 && h >= 576 && h <= 720) ||
 		(w >= 1664 && w <= 1920 && h >= 936 && h <= 1080))
 		return 0;
 
-	return -EINVAL;
+	return -EINVAL; */
 }
 
 static struct exynos_drm_manager_ops mixer_manager_ops = {
