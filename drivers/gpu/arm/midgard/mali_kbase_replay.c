@@ -100,8 +100,9 @@ static void dump_job_head(kbase_context *kctx, char *head_str, job_head *job)
 
 	if (job->flags & JOB_FLAG_DESC_SIZE) {
 		KBASE_LOG(2, dev, "next               = %llx\n", job->next._64);
-	} else {
-	}	KBASE_LOG(2, dev, "next               = %x\n", job->next._32);
+	 } else {
+		KBASE_LOG(2, dev, "next               = %x\n", job->next._32);
+	}
 #endif
 }
 
