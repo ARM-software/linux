@@ -2663,7 +2663,7 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 			goto out_free_dev;
 		}
 
-#ifdef CONFIG_OF
+#if 0 // #ifdef CONFIG_OF
 		if (!strcmp(irq_res->name, "JOB"))
 			irqtag = JOB_IRQ_TAG;
 		else if (!strcmp(irq_res->name, "MMU"))
