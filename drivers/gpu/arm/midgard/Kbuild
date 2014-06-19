@@ -15,7 +15,7 @@
 
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= "r4p0_pre_wk48"
+MALI_RELEASE_NAME ?= "r4p0-02rel0"
 
 # Paths required for build
 KBASE_PATH = $(src)
@@ -46,27 +46,6 @@ MALI_INSTRUMENTATION_LEVEL ?= 0
 # workaround, i.e. set the define to 0.
 MALI_GCC_WORKAROUND_MIDCOM_4598 ?= 0
 
-# Mali Overlay #
-SOC_NAME ?= 5430
-
-ifeq ($(CONFIG_SOC_EXYNOS5250),y)
-        SOC_NAME=5250
-endif
-ifeq ($(CONFIG_SOC_EXYNOS5412),y)
-        SOC_NAME=5412
-endif
-ifeq ($(CONFIG_SOC_EXYNOS5420),y)
-        SOC_NAME=5420
-endif
-ifeq ($(CONFIG_SOC_EXYNOS5422),y)
-	SOC_NAME=5422
-endif
-ifeq ($(CONFIG_SOC_EXYNOS5430),y)
-	SOC_NAME=5430
-endif
-
-# Mali Overlay #
-
 # Set up our defines, which will be passed to gcc
 DEFINES = \
 	-DMALI_CUSTOMER_RELEASE=$(MALI_CUSTOMER_RELEASE) \
@@ -74,15 +53,10 @@ DEFINES = \
 	-DMALI_UNIT_TEST=$(MALI_UNIT_TEST) \
 	-DMALI_ERROR_INJECT_ON=$(MALI_ERROR_INJECT_ON) \
 	-DMALI_MOCK_TEST=$(MALI_MOCK_TEST) \
-	-DMALI_COVERAGE=$(MALI_COVERAGE) \
+	-DMALI_COVERAGE=$(MALI_COVERAGE) -DSOC_NAME=5422 \
 	-DMALI_INSTRUMENTATION_LEVEL=$(MALI_INSTRUMENTATION_LEVEL) \
 	-DMALI_RELEASE_NAME=\"$(MALI_RELEASE_NAME)\" \
-	-DSOC_NAME=$(SOC_NAME) \
 	-DMALI_GCC_WORKAROUND_MIDCOM_4598=$(MALI_GCC_WORKAROUND_MIDCOM_4598)
-
-ifeq ($(CONFIG_MALI_PLATFORM_FAKE),m)
-	DEFINES += -DMALI_PLATFORM_FAKE_MODULE=1
-endif
 
 ifeq ($(KBUILD_EXTMOD),)
 # in-tree
@@ -134,6 +108,7 @@ SRC := \
 	mali_kbase_core_linux.c \
 	mali_kbase_sync.c \
 	mali_kbase_sync_user.c \
+	mali_kbase_replay.c \
 
 ifeq ($(MALI_CUSTOMER_RELEASE),0)
 SRC += \
@@ -191,8 +166,8 @@ ifeq ($(CONFIG_MALI_PLATFORM_FAKE),y)
 		platform/vexpress/mali_kbase_cpu_vexpress.c
 	endif
 
-	ifeq ($(CONFIG_MALI_PLATFORM_RTSM_VE_AEMV8A),y)
-		SRC += platform/rtsm_ve_aemv8a/mali_kbase_config_vexpress.c
+	ifeq ($(CONFIG_MALI_PLATFORM_RTSM_VE),y)
+		SRC += platform/rtsm_ve/mali_kbase_config_vexpress.c
 	endif
 
 	ifeq ($(CONFIG_MALI_PLATFORM_JUNO),y)
@@ -232,59 +207,6 @@ ifeq ($(CONFIG_MALI_PLATFORM_FAKE),y)
 	endif
 	endif
 endif # CONFIG_MALI_PLATFORM_FAKE=y
-
-ifeq ($(CONFIG_MALI_PLATFORM_FAKE),m)
-	PSRC := mali_kbase_platform_fake.c
-
-	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS),y)
-		PSRC += platform/vexpress/mali_kbase_config_vexpress.c \
-		platform/vexpress/mali_kbase_cpu_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_RTSM_VE_AEMV8A),y)
-		PSRC += platform/rtsm_ve_aemv8a/mali_kbase_config_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_JUNO),y)
-		PSRC += platform/juno/mali_kbase_config_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ),y)
-		PSRC += platform/vexpress_virtex7_40mhz/mali_kbase_config_vexpress.c \
-		platform/vexpress_virtex7_40mhz/mali_kbase_cpu_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_6XVIRTEX7_10MHZ),y)
-		PSRC += platform/vexpress_6xvirtex7_10mhz/mali_kbase_config_vexpress.c \
-		platform/vexpress_6xvirtex7_10mhz/mali_kbase_cpu_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_GOLDFISH),y)
-		PSRC += platform/goldfish/mali_kbase_config_goldfish.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_PBX),y)
-		PSRC += platform/pbx/mali_kbase_config_pbx.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_PANDA),y)
-		PSRC += platform/panda/mali_kbase_config_panda.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
-	ifeq ($(CONFIG_MALI_MIDGARD),m)
-	# remove begin and end quotes from the Kconfig string type
-	platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
-	MALI_PLATFORM_THIRDPARTY_DIR := platform/$(platform_name)
-	include  $(src)/platform/$(platform_name)/Kbuild
-	else ifeq ($(CONFIG_MALI_MIDGARD),y)
-	obj-$(CONFIG_MALI_MIDGARD) += platform/
-	endif
-	endif
-
-	obj-m := mali_platform_fake.o
-	mali_platform_fake-y := $(PSRC:.c=.o)
-endif
 
 ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
 ifeq ($(CONFIG_MALI_MIDGARD),m)
