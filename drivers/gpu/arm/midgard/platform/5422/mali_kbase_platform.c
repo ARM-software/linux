@@ -185,21 +185,3 @@ kbase_platform_config *kbase_get_platform_config(void) {
                 return &e5422_platform_config;
  
 }
-
-/*
-int kbase_platform_early_init(struct platform_device *pdev)
-{
-	kbase_platform_config *config;
-	int attribute_count;
-
-	config = &platform_config;
-	attribute_count = kbasep_get_config_attribute_count(config->attributes);
-
-	return platform_device_add_data(
-#ifndef CONFIG_MALI_PLATFORM_FAKE
-		pdev,
-#endif
-		config->attributes,
-		attribute_count * sizeof(config->attributes[0]));
-}
-*/
