@@ -1215,6 +1215,7 @@
 		compatible = "samsung,exynos-pd";
 		reg = <0x10044080 0x20>;
 		bts-status = "enabled";
+		status = "enabled";
 	};
 
 	pd_disp1: pd-disp1@0x100440c0 {
