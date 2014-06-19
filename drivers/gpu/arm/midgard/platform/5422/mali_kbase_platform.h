@@ -17,11 +17,12 @@
 
 #ifndef _GPU_PLATFORM_H_
 #define _GPU_PLATFORM_H_
+#define SOC_NAME 5422
 
 #define GPU_LOG(level, msg, args...) \
 do { \
 	if (level >= gpu_get_debug_level()) { \
-		printk(KERN_INFO msg, ## args); \
+		pr_emerg( msg, ## args); \
 	} \
 } while (0)
 
@@ -98,7 +99,7 @@ struct exynos_context {
 	struct mutex gpu_clock_lock;
 	struct mutex gpu_dvfs_handler_lock;
 	spinlock_t gpu_dvfs_spinlock;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	int utilization;
 #ifdef CONFIG_CPU_THERMAL_IPA
 	int norm_utilisation;

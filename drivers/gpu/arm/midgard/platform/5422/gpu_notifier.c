@@ -33,7 +33,7 @@ extern struct kbase_device *pkbdev;
 #if defined(CONFIG_EXYNOS_THERMAL)
 static int gpu_tmu_hot_check_and_work(struct kbase_device *kbdev, unsigned long event)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct exynos_context *platform;
 	int lock_clock;
 
@@ -71,20 +71,20 @@ static int gpu_tmu_hot_check_and_work(struct kbase_device *kbdev, unsigned long 
 
 	platform->target_lock_type = TMU_LOCK;
 	gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_MAX_LOCK, lock_clock);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return 0;
 }
 
 static void gpu_tmu_normal_work(struct kbase_device *kbdev)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct exynos_context *platform = (struct exynos_context *)kbdev->platform_context;
 	if (!platform)
 		return;
 
 	platform->target_lock_type = TMU_LOCK;
 	gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_MAX_UNLOCK, 0);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 }
 
 static int gpu_tmu_notifier(struct notifier_block *notifier,
@@ -107,7 +107,6 @@ static int gpu_tmu_notifier(struct notifier_block *notifier,
 		if (gpu_tmu_hot_check_and_work(pkbdev, event))
 			GPU_LOG(DVFS_ERROR, "failed to open device");
 	}
-	KBASE_TRACE_ADD_EXYNOS(pkbdev, LSI_TMU_VALUE, NULL, NULL, 0u, event);
 
 	gpu_control_state_set(pkbdev, GPU_CONTROL_SET_MARGIN, 0);
 
@@ -119,42 +118,29 @@ static struct notifier_block gpu_tmu_nb = {
 };
 #endif /* CONFIG_EXYNOS_THERMAL */
 
-#ifdef CONFIG_MALI_T6XX_RT_PM
+#ifdef CONFIG_MALI_MIDGARD_RT_PM
 static int gpu_pm_notifier(struct notifier_block *nb, unsigned long event, void *cmd)
 {
-	int err = NOTIFY_OK;
-	switch (event) {
-	case PM_SUSPEND_PREPARE:
-		KBASE_TRACE_ADD_EXYNOS(pkbdev, LSI_SUSPEND, NULL, NULL, 0u, 0u);
-		break;
-	case PM_POST_SUSPEND:
-		KBASE_TRACE_ADD_EXYNOS(pkbdev, LSI_RESUME, NULL, NULL, 0u, 0u);
-		break;
-	default:
-		break;
-	}
-	return err;
+	return NOTIFY_OK;
 }
 
 static int gpu_power_on(kbase_device *kbdev)
 {
 	int ret_val;
-	struct kbase_os_device *osdev = &kbdev->osdev;
 
-	if (pm_runtime_status_suspended(osdev->dev))
+	if (pm_runtime_status_suspended(kbdev->dev))
 		ret_val = 1;
 	else
 		ret_val = 0;
 
-	pm_runtime_resume(osdev->dev);
+	pm_runtime_resume(kbdev->dev);
 
 	return ret_val;
 }
 
 static void gpu_power_off(kbase_device *kbdev)
 {
-	struct kbase_os_device *osdev = &kbdev->osdev;
-	pm_schedule_suspend(osdev->dev, RUNTIME_PM_DELAY_TIME);
+	pm_schedule_suspend(kbdev->dev, RUNTIME_PM_DELAY_TIME);
 }
 
 static struct notifier_block gpu_pm_nb = {
@@ -163,13 +149,13 @@ static struct notifier_block gpu_pm_nb = {
 
 static mali_error gpu_device_runtime_init(struct kbase_device *kbdev)
 {
-	pm_suspend_ignore_children(kbdev->osdev.dev, true);
+	pm_suspend_ignore_children(kbdev->dev, true);
 	return MALI_ERROR_NONE;
 }
 
 static void gpu_device_runtime_disable(struct kbase_device *kbdev)
 {
-	pm_runtime_disable(kbdev->osdev.dev);
+	pm_runtime_disable(kbdev->dev);
 }
 
 static int pm_callback_runtime_on(kbase_device *kbdev)
@@ -179,11 +165,10 @@ static int pm_callback_runtime_on(kbase_device *kbdev)
 		return -ENODEV;
 
 	GPU_LOG(DVFS_INFO, "g3d turn on\n");
-	KBASE_TRACE_ADD_EXYNOS(kbdev, LSI_GPU_ON, NULL, NULL, 0u, 0u);
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	gpu_control_state_set(kbdev, GPU_CONTROL_PREPARE_ON, 0);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	gpu_control_state_set(kbdev, GPU_CONTROL_CLOCK_ON, 0);
 	gpu_control_state_set(kbdev, GPU_CONTROL_CHANGE_CLK_VOL, platform->cur_clock);
 
@@ -193,8 +178,6 @@ static int pm_callback_runtime_on(kbase_device *kbdev)
 static void pm_callback_runtime_off(kbase_device *kbdev)
 {
 	GPU_LOG(DVFS_INFO, "g3d turn off\n");
-	KBASE_TRACE_ADD_EXYNOS(kbdev, LSI_GPU_OFF, NULL, NULL, 0u, 0u);
-
 	gpu_control_state_set(kbdev, GPU_CONTROL_CLOCK_OFF, 0);
 }
 
@@ -213,7 +196,7 @@ kbase_pm_callback_conf pm_callbacks = {
 	.power_runtime_off_callback = NULL,
 #endif /* CONFIG_PM_RUNTIME */
 };
-#endif /* CONFIG_MALI_T6XX_RT_PM */
+#endif /* CONFIG_MALI_MIDGARD_RT_PM */
 
 int gpu_notifier_init(kbase_device *kbdev)
 {
@@ -229,20 +212,20 @@ int gpu_notifier_init(kbase_device *kbdev)
 	platform->tmu_status = false;
 #endif /* CONFIG_EXYNOS_THERMAL */
 
-#ifdef CONFIG_MALI_T6XX_RT_PM
+#ifdef CONFIG_MALI_MIDGARD_RT_PM
 	if (register_pm_notifier(&gpu_pm_nb))
 		return MALI_FALSE;
-#endif /* CONFIG_MALI_T6XX_RT_PM */
+#endif /* CONFIG_MALI_MIDGARD_RT_PM */
 
-	pm_runtime_enable(kbdev->osdev.dev);
+	pm_runtime_enable(kbdev->dev);
 
 	return MALI_TRUE;
 }
 
 void gpu_notifier_term(void)
 {
-#ifdef CONFIG_MALI_T6XX_RT_PM
+#ifdef CONFIG_MALI_MIDGARD_RT_PM
 	unregister_pm_notifier(&gpu_pm_nb);
-#endif /* CONFIG_MALI_T6XX_RT_PM */
+#endif /* CONFIG_MALI_MIDGARD_RT_PM */
 	return;
 }

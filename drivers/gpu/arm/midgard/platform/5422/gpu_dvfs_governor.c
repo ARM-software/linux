@@ -29,12 +29,12 @@
 #include "gpu_ipa.h"
 #endif /* CONFIG_CPU_THERMAL_IPA */
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 typedef void (*GET_NEXT_FREQ)(struct kbase_device *kbdev, int utilization);
 GET_NEXT_FREQ gpu_dvfs_get_next_freq;
 
 static char *governor_list[G3D_MAX_GOVERNOR_NUM] = {"Default", "Static", "Booster"};
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 #define GPU_DVFS_TABLE_SIZE(X)  ARRAY_SIZE(X)
 #define CPU_MAX PM_QOS_CPU_FREQ_MAX_DEFAULT_VALUE
@@ -77,7 +77,7 @@ static gpu_dvfs_info gpu_dvfs_infotbl_default[] = {
 static int gpu_abb_infobl_default[] = {900000, 900000, 950000, 1000000, 1075000, 1175000};
 #endif /* SOC_NAME */
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 static int gpu_dvfs_governor_default(struct kbase_device *kbdev, int utilization)
 {
 	struct exynos_context *platform;
@@ -182,7 +182,7 @@ static int gpu_dvfs_governor_booster(struct kbase_device *kbdev, int utilization
 
 	return 0;
 }
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 static int gpu_dvfs_update_asv_table(struct exynos_context *platform, int governor_type)
 {
@@ -211,16 +211,16 @@ static int gpu_dvfs_update_asv_table(struct exynos_context *platform, int govern
 int gpu_dvfs_governor_init(struct kbase_device *kbdev, int governor_type)
 {
 	unsigned long flags;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	int i, total = 0;
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
 	if (!platform)
 		return -ENODEV;
 
 	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	switch (governor_type) {
 	case G3D_DVFS_GOVERNOR_DEFAULT:
 		gpu_dvfs_get_next_freq = (GET_NEXT_FREQ)&gpu_dvfs_governor_default;
@@ -291,7 +291,7 @@ int gpu_dvfs_governor_init(struct kbase_device *kbdev, int governor_type)
 	platform->devfreq_g3d_asv_abb = gpu_abb_infobl_default;
 #endif /* SOC_NAME */
 	platform->step = gpu_dvfs_get_level(platform, MALI_DVFS_START_FREQ);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 	platform->cur_clock = platform->table[platform->step].clock;
 
@@ -303,22 +303,22 @@ int gpu_dvfs_governor_init(struct kbase_device *kbdev, int governor_type)
 	return 1;
 }
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 int gpu_dvfs_init_time_in_state(struct exynos_context *platform)
 {
-#ifdef CONFIG_MALI_T6XX_DEBUG_SYS
+#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 	int i;
 
 	for (i = 0; i < platform->table_size; i++)
 		platform->table[i].time = 0;
-#endif /* CONFIG_MALI_T6XX_DEBUG_SYS */
+#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
 	return 0;
 }
 
 int gpu_dvfs_update_time_in_state(struct exynos_context *platform, int freq)
 {
-#ifdef CONFIG_MALI_T6XX_DEBUG_SYS
+#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 	u64 current_time;
 	static u64 prev_time;
 	int level = gpu_dvfs_get_level(platform, freq);
@@ -331,7 +331,7 @@ int gpu_dvfs_update_time_in_state(struct exynos_context *platform, int freq)
 		platform->table[level].time += current_time-prev_time;
 
 	prev_time = current_time;
-#endif /* CONFIG_MALI_T6XX_DEBUG_SYS */
+#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
 	return 0;
 }
@@ -349,7 +349,7 @@ int gpu_dvfs_decide_next_level(struct kbase_device *kbdev, int utilization)
 
 	return 0;
 }
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 int gpu_dvfs_get_level(struct exynos_context *platform, int freq)
 {

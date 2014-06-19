@@ -19,6 +19,9 @@ import re
 import sys
 Import('env')
 
+if Glob('tests/sconscript'):
+	SConscript( 'tests/sconscript' )
+
 mock_test = 0
 
 if env['v'] != '1':
@@ -73,25 +76,22 @@ else:
 	else:
 		env['kernel_test'] = 0
 
-	if env['platform_fake_module'] == '0':
-		makeAction=Action("cd ${SOURCE.dir} && make PLATFORM=${platform} MALI_ERROR_INJECT_ON=${error_inject} MALI_ANDROID=${android} MALI_KERNEL_TEST_API=${kernel_test} MALI_UNIT_TEST=${unit} MALI_RELEASE_NAME=\"${mali_release_name}\" MALI_MOCK_TEST=%s MALI_CUSTOMER_RELEASE=${release} MALI_INSTRUMENTATION_LEVEL=${instr} MALI_COVERAGE=${coverage} %s && cp mali_kbase.ko $STATIC_LIB_PATH/mali_kbase.ko" % (mock_test, env.kernel_get_config_defines(fake_platform_device)), '$MAKECOMSTR')
-		cmd = env.Command('$STATIC_LIB_PATH/mali_kbase.ko', kbase_src, [makeAction])
-	else:
-		makeAction=Action("cd ${SOURCE.dir} && make PLATFORM=${platform} MALI_ERROR_INJECT_ON=${error_inject} MALI_ANDROID=${android} MALI_KERNEL_TEST_API=${kernel_test} MALI_UNIT_TEST=${unit} MALI_RELEASE_NAME=\"${mali_release_name}\" MALI_MOCK_TEST=%s MALI_CUSTOMER_RELEASE=${release} MALI_INSTRUMENTATION_LEVEL=${instr} MALI_COVERAGE=${coverage} %s && cp mali_kbase.ko $STATIC_LIB_PATH/mali_kbase.ko && cp mali_platform_fake.ko $STATIC_LIB_PATH/mali_platform_fake.ko" % (mock_test, env.kernel_get_config_defines(fake_platform_device)), '$MAKECOMSTR')
-		cmd = env.Command(['$STATIC_LIB_PATH/mali_kbase.ko', '$STATIC_LIB_PATH/mali_platform_fake.ko'], kbase_src, [makeAction])
+	makeAction=Action("cd ${SOURCE.dir} && make PLATFORM=${platform} MALI_ERROR_INJECT_ON=${error_inject} MALI_ANDROID=${android} MALI_KERNEL_TEST_API=${kernel_test} MALI_UNIT_TEST=${unit} MALI_RELEASE_NAME=\"${mali_release_name}\" MALI_MOCK_TEST=%s MALI_CUSTOMER_RELEASE=${release} MALI_INSTRUMENTATION_LEVEL=${instr} MALI_COVERAGE=${coverage} %s && cp mali_kbase.ko $STATIC_LIB_PATH/mali_kbase.ko" % (mock_test, env.kernel_get_config_defines(fake_platform_device)), '$MAKECOMSTR')
+	cmd = env.Command('$STATIC_LIB_PATH/mali_kbase.ko', kbase_src, [makeAction])
 
 # Add a dependency on kds.ko.
 # Only necessary when KDS is not built into the kernel.
 #
-linux_config_file = os.path.normpath(os.environ['KDIR']) + '/.config'
-search_term = '^[\ ]*CONFIG_KDS[\ ]*=[\ ]*y'
-kds_in_kernel = 0
-for line in open(linux_config_file, 'r'):
-	if re.search(search_term, line):
-        # KDS in kernel.
-		kds_in_kernel = 1
-if not kds_in_kernel:
-	env.Depends('$STATIC_LIB_PATH/mali_kbase.ko', '$STATIC_LIB_PATH/kds.ko')
+if env['os'] != 'android':
+	linux_config_file = os.path.normpath(os.environ['KDIR']) + '/.config'
+	search_term = '^[\ ]*CONFIG_KDS[\ ]*=[\ ]*y'
+	kds_in_kernel = 0
+	for line in open(linux_config_file, 'r'):
+		if re.search(search_term, line):
+	        # KDS in kernel.
+			kds_in_kernel = 1
+	if not kds_in_kernel:
+		env.Depends('$STATIC_LIB_PATH/mali_kbase.ko', '$STATIC_LIB_PATH/kds.ko')
 
 # need Module.symvers from ump.ko build
 if int(env['ump']) == 1:

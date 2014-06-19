@@ -27,7 +27,7 @@
 #endif /* CONFIG_CPU_THERMAL_IPA */
 #include "gpu_custom_interface.h"
 
-#ifdef CONFIG_MALI_T6XX_DEBUG_SYS
+#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 static int gpu_get_asv_table(struct kbase_device *kbdev, char *buf, size_t buf_size)
 {
 	int i, cnt = 0;
@@ -75,7 +75,7 @@ static int gpu_get_dvfs_table(struct kbase_device *kbdev, char *buf, size_t buf_
 static ssize_t show_time_in_state(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 	int i;
@@ -106,13 +106,13 @@ static ssize_t show_time_in_state(struct device *dev, struct device_attribute *a
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not see\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return ret;
 }
 
 static ssize_t set_time_in_state(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 
 	kbdev = dev_get_drvdata(dev);
@@ -122,7 +122,7 @@ static ssize_t set_time_in_state(struct device *dev, struct device_attribute *at
 	gpu_dvfs_handler_control(kbdev, GPU_HANDLER_INIT_TIME_IN_STATE, 0);
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not set\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return count;
 }
 
@@ -236,7 +236,7 @@ static ssize_t show_vol(struct device *dev, struct device_attribute *attr, char 
 static ssize_t show_utilization(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 
@@ -259,14 +259,14 @@ static ssize_t show_utilization(struct device *dev, struct device_attribute *att
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not see\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return ret;
 }
 
 static ssize_t show_dvfs(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 
@@ -290,13 +290,13 @@ static ssize_t show_dvfs(struct device *dev, struct device_attribute *attr, char
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not see\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return ret;
 }
 
 static ssize_t set_dvfs(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	kbdev = dev_get_drvdata(dev);
 
@@ -309,7 +309,7 @@ static ssize_t set_dvfs(struct device *dev, struct device_attribute *attr, const
 		gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_ON, 0);
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not set\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return count;
 }
 
@@ -362,7 +362,7 @@ static ssize_t show_dvfs_table(struct device *dev, struct device_attribute *attr
 static ssize_t show_max_lock_dvfs(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 	unsigned long flags;
@@ -395,13 +395,13 @@ static ssize_t show_max_lock_dvfs(struct device *dev, struct device_attribute *a
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not see\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return ret;
 }
 
 static ssize_t set_max_lock_dvfs(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	int ret, clock = 0;
 	struct exynos_context *platform;
@@ -440,14 +440,14 @@ static ssize_t set_max_lock_dvfs(struct device *dev, struct device_attribute *at
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS is disabled. You can not set\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return count;
 }
 
 static ssize_t show_min_lock_dvfs(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 	unsigned long flags;
@@ -480,13 +480,13 @@ static ssize_t show_min_lock_dvfs(struct device *dev, struct device_attribute *a
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS is disabled. You can not see\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return ret;
 }
 
 static ssize_t set_min_lock_dvfs(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	int ret, clock = 0;
 	struct exynos_context *platform;
@@ -525,14 +525,14 @@ static ssize_t set_min_lock_dvfs(struct device *dev, struct device_attribute *at
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not set\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return count;
 }
 
 static ssize_t show_tmu(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev = dev_get_drvdata(dev);
 	struct exynos_context *platform = (struct exynos_context *)kbdev->platform_context;
 	if (!platform)
@@ -552,13 +552,13 @@ static ssize_t show_tmu(struct device *dev, struct device_attribute *attr, char 
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not set\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return ret;
 }
 
 static ssize_t set_tmu_control(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev = dev_get_drvdata(dev);
 	struct exynos_context *platform = (struct exynos_context *)kbdev->platform_context;
 	if (!platform)
@@ -576,7 +576,7 @@ static ssize_t set_tmu_control(struct device *dev, struct device_attribute *attr
 		platform->tmu_status = true;
 	else
 		GPU_LOG(DVFS_WARNING, "invalid val -only [0 or 1] is accepted\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return count;
 }
 
@@ -604,7 +604,7 @@ static ssize_t show_power_state(struct device *dev, struct device_attribute *att
 static ssize_t show_governor(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 
@@ -628,13 +628,13 @@ static ssize_t show_governor(struct device *dev, struct device_attribute *attr, 
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not see\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return ret;
 }
 
 static ssize_t set_governor(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 	int ret;
@@ -664,14 +664,14 @@ static ssize_t set_governor(struct device *dev, struct device_attribute *attr, c
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not set\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return count;
 }
 
 static ssize_t show_wakeup_lock(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 
@@ -694,13 +694,13 @@ static ssize_t show_wakeup_lock(struct device *dev, struct device_attribute *att
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not see\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return ret;
 }
 
 static ssize_t set_wakeup_lock(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 
@@ -720,7 +720,7 @@ static ssize_t set_wakeup_lock(struct device *dev, struct device_attribute *attr
 		GPU_LOG(DVFS_WARNING, "invalid val -only [0 or 1] is accepted\n");
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not set\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return count;
 }
 
@@ -764,7 +764,7 @@ static ssize_t set_debug_level(struct device *dev, struct device_attribute *attr
 static ssize_t show_polling_speed(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 
@@ -787,13 +787,13 @@ static ssize_t show_polling_speed(struct device *dev, struct device_attribute *a
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not see\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return ret;
 }
 
 static ssize_t set_polling_speed(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 	int ret, polling_speed;
@@ -822,7 +822,7 @@ static ssize_t set_polling_speed(struct device *dev, struct device_attribute *at
 	}
 #else
 	GPU_LOG(DVFS_WARNING, "G3D DVFS build config is disabled. You can not set\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return count;
 }
 
@@ -837,7 +837,7 @@ static ssize_t show_norm_utilization(struct device *dev, struct device_attribute
 
 	if (!kbdev)
 		return -ENODEV;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	ret += snprintf(buf+ret, PAGE_SIZE-ret, "%d", gpu_ipa_dvfs_get_norm_utilisation(kbdev));
 #else
 	ret += snprintf(buf+ret, PAGE_SIZE-ret, "-1");
@@ -869,7 +869,7 @@ static ssize_t show_utilization_stats(struct device *dev, struct device_attribut
 	if (!kbdev)
 		return -ENODEV;
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	gpu_ipa_dvfs_get_utilisation_stats(&stats);
 
 	ret += snprintf(buf+ret, PAGE_SIZE-ret, "util=%d norm_util=%d norm_freq=%d time_busy=%u time_idle=%u time_tick=%d",
@@ -1041,4 +1041,4 @@ void gpu_remove_sysfs_file(struct device *dev)
 	device_remove_file(dev, &dev_attr_debug_level);
 	device_remove_file(dev, &dev_attr_polling_speed);
 }
-#endif /* CONFIG_MALI_T6XX_DEBUG_SYS */
+#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */

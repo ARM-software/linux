@@ -61,17 +61,17 @@ static int gpu_get_target_freq(void)
 	if (!platform)
 		return -ENODEV;
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	gpu_dvfs_decide_next_level(kbdev, platform->utilization);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 	freq = platform->table[platform->step].clock;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	if ((platform->max_lock > 0) && (freq > platform->max_lock))
 		freq = platform->max_lock;
 	else if ((platform->min_lock > 0) && (freq < platform->min_lock))
 		freq = platform->min_lock;
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 	return freq;
 }
@@ -109,16 +109,16 @@ static DECLARE_WORK(gpu_dvfs_work, gpu_dvfs_event_proc);
 
 int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	unsigned long flags;
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
     struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
 	if (!platform) {
 		GPU_LOG(DVFS_ERROR, "platform context is not initialized\n");
 		return -ENODEV;
 	}
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
 #ifdef CONFIG_CPU_THERMAL_IPA
 	if (platform->time_tick < GPU_DVFS_TIME_INTERVAL) {
@@ -137,7 +137,7 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation)
 	gpu_ipa_dvfs_calc_norm_utilisation(kbdev);
 #endif /* CONFIG_CPU_THERMAL_IPA */
 	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 #if defined(SLSI_INTEGRATION) && defined(CL_UTILIZATION_BOOST_BY_TIME_WEIGHT)
 	atomic_set(&kbdev->pm.metrics.time_compute_jobs, 0);
@@ -155,7 +155,7 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation)
 
 int gpu_dvfs_handler_init(struct kbase_device *kbdev)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
 	if (!platform)
 		return -ENODEV;
@@ -172,13 +172,13 @@ int gpu_dvfs_handler_init(struct kbase_device *kbdev)
 #endif /* CONFIG_CPU_THERMAL_IPA */
 
 	GPU_LOG(DVFS_INFO, "g3d dvfs handler initialized\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return 0;
 }
 
 int gpu_dvfs_handler_deinit(struct kbase_device *kbdev)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
 	if (!platform)
 		return -ENODEV;
@@ -191,11 +191,11 @@ int gpu_dvfs_handler_deinit(struct kbase_device *kbdev)
 		platform->dvfs_status = false;
 
 	GPU_LOG(DVFS_INFO, "g3d dvfs handler de-initialized\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	return 0;
 }
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 static int gpu_dvfs_on_off(struct kbase_device *kbdev, bool enable)
 {
 	unsigned long flags;
@@ -230,16 +230,16 @@ static int gpu_dvfs_on_off(struct kbase_device *kbdev, bool enable)
 	}
 	return 0;
 }
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 int gpu_dvfs_handler_control(struct kbase_device *kbdev, gpu_dvfs_handler_command command, int param)
 {
 	int ret = 0;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	int i;
 	bool dirty = false;
 	unsigned long flags;
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	struct exynos_context *platform;
 
 	platform = (struct exynos_context *)kbdev->platform_context;
@@ -247,7 +247,7 @@ int gpu_dvfs_handler_control(struct kbase_device *kbdev, gpu_dvfs_handler_comman
 		return -ENODEV;
 
 	switch (command) {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	case GPU_HANDLER_DVFS_ON:
 		mutex_lock(&platform->gpu_dvfs_handler_lock);
 		gpu_dvfs_on_off(kbdev, true);
@@ -396,7 +396,7 @@ int gpu_dvfs_handler_control(struct kbase_device *kbdev, gpu_dvfs_handler_comman
 	case GPU_HANDLER_DVFS_GET_LEVEL:
 		ret = gpu_dvfs_get_level(platform, param);
 		break;
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	case GPU_HANDLER_DVFS_GET_VOLTAGE:
 		ret = gpu_dvfs_get_voltage(platform, param);
 		break;

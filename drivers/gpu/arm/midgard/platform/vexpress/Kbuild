@@ -1,5 +1,5 @@
 #
-# (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -14,8 +14,5 @@
 
 
 
-ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
-# remove begin and end quotes from the Kconfig string type
-	platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
-	obj-y += $(platform_name)/
-endif
+obj-y += mali_kbase_config_vexpress.o
+obj-y += mali_kbase_cpu_vexpress.o

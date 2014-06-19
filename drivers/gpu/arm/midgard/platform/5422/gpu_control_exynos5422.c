@@ -233,7 +233,6 @@ int gpu_set_clock(struct exynos_context *platform, int freq)
 	} while (tmp & 0x10000);
 
 	gpu_update_clock(platform);
-	KBASE_TRACE_ADD_EXYNOS(pkbdev, LSI_CLOCK_VALUE, NULL, NULL, 0u, g3d_rate/MHZ);
 	GPU_LOG(DVFS_DEBUG, "[G3D] clock set: %ld\n", g3d_rate / MHZ);
 	GPU_LOG(DVFS_DEBUG, "[G3D] clock get: %d\n", platform->cur_clock);
 err:
@@ -264,43 +263,43 @@ static int gpu_get_clock(kbase_device *kbdev)
 		return -1;
 	}
 
-	platform->mout_vpll_ctrl = clk_get(kbdev->osdev.dev, "mout_vpll_ctrl"); /* same as sclk_vpll */
+	platform->mout_vpll_ctrl = clk_get(kbdev->dev, "mout_vpll_ctrl"); /* same as sclk_vpll */
 	if (IS_ERR(platform->mout_vpll_ctrl)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_vpll_ctrl]\n");
 		return -1;
 	}
 
-	platform->mout_dpll_ctrl = clk_get(kbdev->osdev.dev, "mout_dpll_ctrl"); /* same as sclk_dpll */
+	platform->mout_dpll_ctrl = clk_get(kbdev->dev, "mout_dpll_ctrl"); /* same as sclk_dpll */
 	if (IS_ERR(platform->mout_dpll_ctrl)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_dpll_ctrl]\n");
 		return -1;
 	}
 
-	platform->mout_aclk_g3d = clk_get(kbdev->osdev.dev, "mout_aclk_g3d"); /* set parents v or d pll */
+	platform->mout_aclk_g3d = clk_get(kbdev->dev, "mout_aclk_g3d"); /* set parents v or d pll */
 	if (IS_ERR(platform->mout_aclk_g3d)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_aclk_g3d]\n");
 		return -1;
 	}
 
-	platform->dout_aclk_g3d = clk_get(kbdev->osdev.dev, "dout_aclk_g3d"); /* divider usage */
+	platform->dout_aclk_g3d = clk_get(kbdev->dev, "dout_aclk_g3d"); /* divider usage */
 	if (IS_ERR(platform->dout_aclk_g3d)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [dout_aclk_g3d]\n");
 		return -1;
 	}
 
-	platform->mout_aclk_g3d_sw = clk_get(kbdev->osdev.dev, "mout_aclk_g3d_sw");
+	platform->mout_aclk_g3d_sw = clk_get(kbdev->dev, "mout_aclk_g3d_sw");
 	if (IS_ERR(platform->mout_aclk_g3d_sw)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_aclk_g3d_sw]\n");
 		return -1;
 	}
 
-	platform->mout_aclk_g3d_user = clk_get(kbdev->osdev.dev, "mout_aclk_g3d_user");
+	platform->mout_aclk_g3d_user = clk_get(kbdev->dev, "mout_aclk_g3d_user");
 	if (IS_ERR(platform->mout_aclk_g3d_user)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_aclk_g3d_user]\n");
 		return -1;
 	}
 
-	platform->clk_g3d_ip = clk_get(kbdev->osdev.dev, "clk_g3d_ip");
+	platform->clk_g3d_ip = clk_get(kbdev->dev, "clk_g3d_ip");
 	clk_prepare_enable(platform->clk_g3d_ip);
 	if (IS_ERR(platform->clk_g3d_ip)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [clk_g3d_ip]\n");
@@ -364,7 +363,6 @@ int gpu_set_voltage(struct exynos_context *platform, int vol)
 	_vol = vol;
 
 	gpu_update_voltage(platform);
-	KBASE_TRACE_ADD_EXYNOS(pkbdev, LSI_VOL_VALUE, NULL, NULL, 0u, vol);
 	GPU_LOG(DVFS_DEBUG, "[G3D] voltage set:%d\n", vol);
 	GPU_LOG(DVFS_DEBUG, "[G3D] voltage get:%d\n", platform->cur_voltage);
 

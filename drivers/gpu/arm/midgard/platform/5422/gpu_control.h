@@ -81,9 +81,9 @@ typedef enum {
 #error SOC_NAME should be specified.
 #endif /* SOC_NAME */
 
-#ifdef CONFIG_MALI_T6XX_RT_PM
+#ifdef CONFIG_MALI_MIDGARD_RT_PM
 #define RUNTIME_PM_DELAY_TIME 100
-#endif /* CONFIG_MALI_T6XX_RT_PM */
+#endif /* CONFIG_MALI_MIDGARD_RT_PM */
 
 /* GPU DVFS HANDLER */
 #if SOC_NAME == 5422

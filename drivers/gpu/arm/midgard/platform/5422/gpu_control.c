@@ -27,7 +27,7 @@
 
 struct kbase_device *pkbdev;
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 static int gpu_pm_qos_command(struct exynos_context *platform, gpu_pmqos_state state);
 #endif
 static int gpu_set_clk_vol(struct kbase_device *kbdev, int clock, int voltage);
@@ -35,9 +35,9 @@ static int gpu_set_clk_vol(struct kbase_device *kbdev, int clock, int voltage);
 int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, int param)
 {
 	int ret = 0, voltage;
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	unsigned long flags;
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
 	if (!platform)
 		return -ENODEV;
@@ -46,7 +46,7 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 	switch (state) {
 	case GPU_CONTROL_CLOCK_ON:
 		ret = gpu_clock_on(platform);
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 		if (!kbdev->pm.metrics.timer_active) {
 			spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
 			kbdev->pm.metrics.timer_active = true;
@@ -54,10 +54,10 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 			hrtimer_start(&kbdev->pm.metrics.timer, HR_TIMER_DELAY_MSEC(platform->polling_speed), HRTIMER_MODE_REL);
 		}
 		gpu_dvfs_handler_control(kbdev, GPU_HANDLER_UPDATE_TIME_IN_STATE, 0);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 		break;
 	case GPU_CONTROL_CLOCK_OFF:
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 		if (platform->dvfs_status && kbdev->pm.metrics.timer_active) {
 			spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
 			kbdev->pm.metrics.timer_active = false;
@@ -66,12 +66,12 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 		}
 		gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_RESET);
 		gpu_dvfs_handler_control(kbdev, GPU_HANDLER_UPDATE_TIME_IN_STATE, platform->cur_clock);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 		ret = gpu_clock_off(platform);
 		break;
 	case GPU_CONTROL_CHANGE_CLK_VOL:
 		ret = gpu_set_clk_vol(kbdev, param, gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_GET_VOLTAGE, param));
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 		if (ret == 0) {
 			ret = gpu_dvfs_handler_control(kbdev, GPU_HANDLER_DVFS_GET_LEVEL, platform->cur_clock);
 			if (ret >= 0) {
@@ -84,10 +84,10 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 		}
 		if (gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_SET) < -1)
 			GPU_LOG(DVFS_ERROR, "failed to set the PM_QOS\n");
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 		break;
 	case GPU_CONTROL_PREPARE_ON:
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 		spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
 		if ((platform->dvfs_status && platform->wakeup_lock) &&
 				(platform->table[platform->step].clock < MALI_DVFS_START_FREQ))
@@ -100,7 +100,7 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 
 		platform->down_requirement = platform->table[platform->step].stay_count;
 		spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 		break;
 	case GPU_CONTROL_IS_POWER_ON:
 		ret = gpu_is_power_on();
@@ -118,16 +118,16 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 	return ret;
 }
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 #ifdef CONFIG_BUS_DEVFREQ
 static struct pm_qos_request exynos5_g3d_mif_qos;
 static struct pm_qos_request exynos5_g3d_int_qos;
 static struct pm_qos_request exynos5_g3d_cpu_kfc_min_qos;
 static struct pm_qos_request exynos5_g3d_cpu_egl_max_qos;
 #endif /* CONFIG_BUS_DEVFREQ */
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 static int gpu_pm_qos_command(struct exynos_context *platform, gpu_pmqos_state state)
 {
 #ifdef CONFIG_BUS_DEVFREQ
@@ -163,7 +163,7 @@ static int gpu_pm_qos_command(struct exynos_context *platform, gpu_pmqos_state s
 #endif /* CONFIG_BUS_DEVFREQ */
 	return 0;
 }
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 static int gpu_set_clk_vol(struct kbase_device *kbdev, int clock, int voltage)
 {
@@ -238,9 +238,9 @@ int gpu_control_module_init(kbase_device *kbdev)
 	}
 #endif /* CONFIG_REGULATOR */
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_INIT);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 	return 0;
 #ifdef CONFIG_REGULATOR
@@ -264,8 +264,8 @@ void gpu_control_module_term(kbase_device *kbdev)
 	gpu_regulator_disable(platform);
 #endif /* CONFIG_REGULATOR */
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_DEINIT);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 }
 

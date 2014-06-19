@@ -27,18 +27,6 @@
 #include "gpu_dvfs_governor.h"
 #include "gpu_control.h"
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
-static kbase_io_resources io_resources = {
-	.job_irq_number   = JOB_IRQ_NUMBER,
-	.mmu_irq_number   = MMU_IRQ_NUMBER,
-	.gpu_irq_number   = GPU_IRQ_NUMBER,
-	.io_memory_region = {
-		.start = EXYNOS5_PA_G3D,
-		.end   = EXYNOS5_PA_G3D + (4096 * 5) - 1
-	}
-};
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0) */
-
 static int gpu_debug_level;
 
 void gpu_set_debug_level(int level)
@@ -56,9 +44,9 @@ int gpu_get_debug_level(void)
  **/
 static mali_bool kbase_platform_exynos5_init(kbase_device *kbdev)
 {
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	unsigned long flags;
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	struct exynos_context *platform;
 
 	platform = kmalloc(sizeof(struct exynos_context), GFP_KERNEL);
@@ -85,29 +73,29 @@ static mali_bool kbase_platform_exynos5_init(kbase_device *kbdev)
 
 	/* dvfs gobernor init*/
 	gpu_dvfs_governor_init(kbdev, G3D_DVFS_GOVERNOR_DEFAULT);
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	spin_lock_irqsave(&platform->gpu_dvfs_spinlock, flags);
 	platform->wakeup_lock = 0;
 	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 	/* dvfs handler init*/
 	gpu_dvfs_handler_init(kbdev);
 
 	if (!gpu_notifier_init(kbdev))
 		goto notifier_init_fail;
 
-#ifdef CONFIG_MALI_T6XX_DEBUG_SYS
-	if (gpu_create_sysfs_file(kbdev->osdev.dev))
+#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
+	if (gpu_create_sysfs_file(kbdev->dev))
 		goto sysfs_init_fail;
-#endif /* CONFIG_MALI_T6XX_DEBUG_SYS */
+#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
 	return MALI_TRUE;
 
 clock_init_fail:
 notifier_init_fail:
-#ifdef CONFIG_MALI_T6XX_DEBUG_SYS
+#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 sysfs_init_fail:
-#endif /* CONFIG_MALI_T6XX_DEBUG_SYS */
+#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 	kfree(platform);
 
 	return MALI_FALSE;
@@ -123,18 +111,18 @@ static void kbase_platform_exynos5_term(kbase_device *kbdev)
 
 	gpu_notifier_term();
 
-#ifdef CONFIG_MALI_T6XX_DVFS
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	gpu_dvfs_handler_deinit(kbdev);
-#endif /* CONFIG_MALI_T6XX_DVFS */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 	gpu_control_module_term(kbdev);
 
 	kfree(kbdev->platform_context);
 	kbdev->platform_context = 0;
 
-#ifdef CONFIG_MALI_T6XX_DEBUG_SYS
-	gpu_remove_sysfs_file(kbdev->osdev.dev);
-#endif /* CONFIG_MALI_T6XX_DEBUG_SYS */
+#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
+	gpu_remove_sysfs_file(kbdev->dev);
+#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 }
 
 kbase_platform_funcs_conf platform_funcs = {
@@ -146,20 +134,12 @@ extern kbase_pm_callback_conf pm_callbacks;
 extern int get_cpu_clock_speed(u32 *cpu_clock);
 
 static kbase_attribute config_attributes[] = {
-	{
-		KBASE_CONFIG_ATTR_MEMORY_OS_SHARED_MAX,
-		2048 * 1024 * 1024UL /* 2048MB */
-	},
-	{
-		KBASE_CONFIG_ATTR_MEMORY_OS_SHARED_PERF_GPU,
-		KBASE_MEM_PERF_FAST
-	},
-#ifdef CONFIG_MALI_T6XX_RT_PM
+#ifdef CONFIG_MALI_MIDGARD_RT_PM
 	{
 		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_CALLBACKS,
 		(uintptr_t)&pm_callbacks
 	},
-#endif /* CONFIG_MALI_T6XX_RT_PM */
+#endif /* CONFIG_MALI_MIDGARD_RT_PM */
 	{
 		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_DVFS_FREQ,
 		100
@@ -193,12 +173,20 @@ static kbase_attribute config_attributes[] = {
 
 kbase_platform_config platform_config = {
 		.attributes                = config_attributes,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
-		.io_resources              = &io_resources,
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0) */
 		.midgard_type              = KBASE_MALI_T604
 };
 
+kbase_platform_config platform_config;
+kbase_platform_config e5422_platform_config;
+
+kbase_platform_config *kbase_get_platform_config(void) {
+                e5422_platform_config.attributes = config_attributes;
+                e5422_platform_config.midgard_type = KBASE_MALI_T604;
+                return &e5422_platform_config;
+ 
+}
+
+/*
 int kbase_platform_early_init(struct platform_device *pdev)
 {
 	kbase_platform_config *config;
@@ -209,12 +197,9 @@ int kbase_platform_early_init(struct platform_device *pdev)
 
 	return platform_device_add_data(
 #ifndef CONFIG_MALI_PLATFORM_FAKE
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
 		pdev,
-#else
-		&exynos5_device_g3d,
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
+#endif
 		config->attributes,
 		attribute_count * sizeof(config->attributes[0]));
 }
+*/

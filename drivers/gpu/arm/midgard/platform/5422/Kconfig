@@ -14,8 +14,10 @@
 
 
 
-ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
-# remove begin and end quotes from the Kconfig string type
-	platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
-	obj-y += $(platform_name)/
-endif
+# Add your platform specific Kconfig file here
+#
+# "drivers/gpu/arm/t6xx/kbase/src/platform/xxx/Kconfig"
+#
+# Where xxx is the platform name is the name set in MALI_PLATFORM_THIRDPARTY_NAME
+#
+

@@ -18,7 +18,7 @@
 #ifndef _GPU_CUSTOM_INTERFACE_H_
 #define _GPU_CUSTOM_INTERFACE_H_
 
-#ifdef CONFIG_MALI_T6XX_DEBUG_SYS
+#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 int gpu_create_sysfs_file(struct device *dev);
 void gpu_remove_sysfs_file(struct device *dev);
 #endif
