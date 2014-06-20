@@ -72,11 +72,11 @@ static struct clk_ops scpi_clk_ops = {
 static int __scpi_dvfs_round_rate(struct scpi_clk *clk, unsigned long rate)
 {
 	int idx, max_opp = clk->opps->count;
-	u32 *freqs = clk->opps->freqs;
+	struct scpi_opp_entry *opp = clk->opps->opp;
 	u32 fmin = 0, fmax = ~0, ftmp;
 
-	for (idx = 0; idx < max_opp; idx++, freqs++) {
-		ftmp = *freqs;
+	for (idx = 0; idx < max_opp; idx++, opp++) {
+		ftmp = opp->freq_hz;
 		if (ftmp >= (u32)rate) {
 			if (ftmp <= fmax)
 				fmax = ftmp;
@@ -96,12 +96,12 @@ static unsigned long scpi_dvfs_recalc_rate(struct clk_hw *hw,
 {
 	struct scpi_clk *clk = to_scpi_clk(hw);
 	int idx = scpi_dvfs_get_idx(clk->id);
-	u32 *freqs = clk->opps->freqs;
+	struct scpi_opp_entry *opp = clk->opps->opp;
 
 	if (idx < 0)
 		return 0;
 	else
-		return *(freqs + idx);
+		return opp[idx].freq_hz;
 }
 
 static long scpi_dvfs_round_rate(struct clk_hw *hw, unsigned long rate,
@@ -114,10 +114,10 @@ static long scpi_dvfs_round_rate(struct clk_hw *hw, unsigned long rate,
 static int __scpi_find_dvfs_index(struct scpi_clk *clk, unsigned long rate)
 {
 	int idx, max_opp = clk->opps->count;
-	u32 *freqs = clk->opps->freqs;
+	struct scpi_opp_entry *opp = clk->opps->opp;
 
-	for (idx = 0; idx < max_opp; idx++, freqs++)
-		if (*freqs == (u32)rate)
+	for (idx = 0; idx < max_opp; idx++, opp++)
+		if (opp->freq_hz == (u32)rate)
 			break;
 	return (idx == max_opp) ? -EINVAL : idx;
 }
@@ -145,7 +145,7 @@ scpi_dvfs_ops_init(struct device *dev, struct device_node *np,
 		   struct scpi_clk *sclk)
 {
 	struct clk_init_data init;
-	struct scpi_opp *opp;
+	struct scpi_opp *opps;
 
 	init.name = sclk->name;
 	init.flags = CLK_IS_ROOT;
@@ -153,11 +153,11 @@ scpi_dvfs_ops_init(struct device *dev, struct device_node *np,
 	init.ops = &scpi_dvfs_ops;
 	sclk->hw.init = &init;
 
-	opp = scpi_dvfs_get_opps(sclk->id);
-	if (IS_ERR(opp))
-		return (struct clk *)opp;
+	opps = scpi_dvfs_get_opps(sclk->id);
+	if (IS_ERR(opps))
+		return (struct clk *)opps;
 
-	sclk->opps = opp;
+	sclk->opps = opps;
 
 	return devm_clk_register(dev, &sclk->hw);
 }

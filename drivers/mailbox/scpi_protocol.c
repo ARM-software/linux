@@ -271,10 +271,10 @@ struct scpi_opp *scpi_dvfs_get_opps(u8 domain)
 	struct __packed {
 		u32 status;
 		u32 header;
-		u32 freqs[MAX_DVFS_OPPS];
+		struct scpi_opp_entry opp[MAX_DVFS_OPPS];
 	} buf;
-	struct scpi_opp *opp;
-	size_t freqs_sz;
+	struct scpi_opp *opps;
+	size_t opps_sz;
 	int count, ret;
 
 	if (domain >= MAX_DVFS_DOMAINS)
@@ -289,25 +289,25 @@ struct scpi_opp *scpi_dvfs_get_opps(u8 domain)
 	if (ret)
 		return ERR_PTR(ret);
 
-	opp = kmalloc(sizeof(*opp), GFP_KERNEL);
-	if (!opp)
+	opps = kmalloc(sizeof(*opps), GFP_KERNEL);
+	if (!opps)
 		return ERR_PTR(-ENOMEM);
 
 	count = DVFS_OPP_COUNT(buf.header);
-	freqs_sz = count * sizeof(*(opp->freqs));
+	opps_sz = count * sizeof(*(opps->opp));
 
-	opp->count = count;
-	opp->latency = DVFS_LATENCY(buf.header);
-	opp->freqs = kmalloc(freqs_sz, GFP_KERNEL);
-	if (!opp->freqs) {
-		kfree(opp);
+	opps->count = count;
+	opps->latency = DVFS_LATENCY(buf.header);
+	opps->opp = kmalloc(opps_sz, GFP_KERNEL);
+	if (!opps->opp) {
+		kfree(opps);
 		return ERR_PTR(-ENOMEM);
 	}
 
-	memcpy(opp->freqs, &buf.freqs[0], freqs_sz);
-	scpi_opps[domain] = opp;
+	memcpy(opps->opp, &buf.opp[0], opps_sz);
+	scpi_opps[domain] = opps;
 
-	return opp;
+	return opps;
 }
 EXPORT_SYMBOL_GPL(scpi_dvfs_get_opps);
 

@@ -17,11 +17,16 @@
  */
 #include <linux/types.h>
 
+struct scpi_opp_entry {
+	u32 freq_hz;
+	u32 volt_mv;
+} __packed;
+
 struct scpi_opp {
-	u32 *freqs;
+	struct scpi_opp_entry *opp;
 	u32 latency; /* in usecs */
 	int count;
-};
+} __packed;
 
 unsigned long scpi_clk_get_val(u16 clk_id);
 int scpi_clk_set_val(u16 clk_id, unsigned long rate);

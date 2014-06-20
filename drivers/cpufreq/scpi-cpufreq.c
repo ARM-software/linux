@@ -30,22 +30,23 @@
 static int scpi_init_opp_table(struct device *cpu_dev)
 {
 	u8 domain = topology_physical_package_id(cpu_dev->id);
-	struct scpi_opp *opp;
+	struct scpi_opp *opps;
 	int idx, ret = 0, max_opp;
-	u32 *freqs;
+	struct scpi_opp_entry *opp;
 
 	if ((dev_pm_opp_get_opp_count(cpu_dev)) > 0)
 		return 0;
-	opp = scpi_dvfs_get_opps(domain);
-	if (IS_ERR(opp))
-		return PTR_ERR(opp);
+	opps = scpi_dvfs_get_opps(domain);
+	if (IS_ERR(opps))
+		return PTR_ERR(opps);
 
-	freqs = opp->freqs;
-	max_opp = opp->count;
-	for (idx = 0; idx < max_opp; idx++, freqs++) {
-		ret = dev_pm_opp_add(cpu_dev, *freqs, 900000000 /* TODO */);
+	opp = opps->opp;
+	max_opp = opps->count;
+	for (idx = 0; idx < max_opp; idx++, opp++) {
+		ret = dev_pm_opp_add(cpu_dev, opp->freq_hz, opp->volt_mv*1000);
 		if (ret) {
-			dev_warn(cpu_dev, "failed to add opp %u\n", *freqs);
+			dev_warn(cpu_dev, "failed to add opp %uHz %umV\n",
+					opp->freq_hz, opp->volt_mv);
 			return ret;
 		}
 	}
