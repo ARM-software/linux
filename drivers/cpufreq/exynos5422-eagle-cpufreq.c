@@ -307,10 +307,10 @@ static unsigned int exynos5422_apll_pms_table_CA15[CPUFREQ_LEVEL_END_CA15] = {
  * ASV group voltage table
  */
 static const unsigned int asv_voltage_5422_CA15[CPUFREQ_LEVEL_END_CA15] = {
-	1200000,    /* L0  2400 */
-	1200000,    /* L1  2300 */
-	1200000,    /* L2  2200 */
-	1200000,    /* L3  2100 */
+	1250000,    /* L0  2400 */
+	1275000,    /* L1  2300 */
+	1250000,    /* L2  2200 */
+	1250000,    /* L3  2100 */
 	1200000,    /* L4  2000 */
 	1200000,    /* L5  1900 */
 	1200000,    /* L6  1800 */
@@ -547,15 +547,8 @@ static void __init set_volt_table_CA15(void)
 				exynos5422_abb_table_CA15[i]);
 	}
 
-#ifdef CONFIG_EXYNOS5_MAX_CPU_HOTPLUG
-	max_support_idx_CA15 = L3;
-#else
-#ifdef CONFIG_SOC_EXYNOS5422_REV_0
-	max_support_idx_CA15 = L6;
-#else
-	max_support_idx_CA15 = L5;
-#endif
-#endif
+	/* Max/Min A15 Frequencies */
+	max_support_idx_CA15 = L2; 
 	min_support_idx_CA15 = L16;
 }
 

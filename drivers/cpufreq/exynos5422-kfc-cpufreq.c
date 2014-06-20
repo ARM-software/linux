@@ -401,11 +401,9 @@ static void __init set_volt_table_CA7(void)
 		pr_info("CPUFREQ of CA7  L%d : ABB %d\n", i,
 				exynos5422_abb_table_CA7[i]);
 	}
-#ifdef CONFIG_SOC_EXYNOS5422_REV_0
-	max_support_idx_CA7 = L3;
-#else
-	max_support_idx_CA7 = L3;
-#endif
+	
+	/* A7's Max/Min Frequencies */
+	max_support_idx_CA7 = L0;
 	min_support_idx_CA7 = L11;
 }
 
