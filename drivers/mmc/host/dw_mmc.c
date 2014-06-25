@@ -3472,6 +3472,21 @@ static struct dw_mci_of_quirks {
 	},
 };
 
+//-------------------------------------------------------------
+//
+// eMMC H/W Reset GPIO Control
+//
+//-------------------------------------------------------------
+#if defined(CONFIG_MACH_ODROIDXU3)
+    int  eMMC_HW_RESET_GPIO = 0;
+    
+    // Use arch/arm/mach-exynos/common.c
+    // eMMC H/W Reset Control
+    EXPORT_SYMBOL(eMMC_HW_RESET_GPIO);
+#endif    
+
+//-------------------------------------------------------------
+
 static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 {
 	struct dw_mci_board *pdata;
@@ -3605,6 +3620,29 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 	if (of_find_property(np, "supports-sdr104-mode", NULL))
 		pdata->caps |= MMC_CAP_UHS_SDR104;
 
+#if defined(CONFIG_MACH_ODROIDXU3)
+    //-------------------------------------------------------------
+    //
+    // eMMC Hardware Reset Control GPIO (Global)
+    //
+    //-------------------------------------------------------------
+    {
+        int np_gpio = of_get_named_gpio(np, "dw-mshc-hw-reset", 0);
+
+    	if (gpio_is_valid(np_gpio)) {
+    		if(devm_gpio_request_one(host->dev, np_gpio, GPIOF_OUT_INIT_HIGH,
+    					    "emmc_reset"))  {
+    			dev_err(host->dev, "%s : emmc h/w reset gpio[%d] request fail!!!\n", __func__, np_gpio);
+		    }
+    		else {
+        		dev_info(host->dev, "%s : emmc h/w reset gpio[%d] notifier registered.\n", __func__, np_gpio);
+        		// Export symbol : use arch/arm/mach-exynos/common.c
+        	    eMMC_HW_RESET_GPIO = np_gpio;
+    		}
+    	}
+    }
+    //-------------------------------------------------------------
+#endif    
 	return pdata;
 }
 

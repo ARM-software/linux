@@ -650,8 +650,25 @@ void exynos4_restart(char mode, const char *cmd)
 }
 
 #define INFORM_NONE		0x0
-#define INFORM_RAMDUMP		0xd
-#define INFORM_RECOVERY		0xf
+
+#if defined(CONFIG_MACH_ODROIDXU3)
+    #define REBOOT_FASTBOOT 0xFAB0
+    #define REBOOT_UPDATE   0xFADA
+#else
+    #define INFORM_RAMDUMP		0xd
+    #define INFORM_RECOVERY		0xf
+#endif    
+
+#if defined(CONFIG_MACH_ODROIDXU3)
+    #include <linux/delay.h>
+    #include <linux/pm.h>
+    #include <asm/io.h>
+    #include <asm/cacheflush.h>
+    #include <asm/system.h>
+
+    // From drivers/mmc/host/dw_mmc.c
+    extern int  eMMC_HW_RESET_GPIO;
+#endif
 
 void exynos5_restart(char mode, const char *cmd)
 {
@@ -678,11 +695,31 @@ void exynos5_restart(char mode, const char *cmd)
 	restart_inform = INFORM_NONE;
 
 	if (cmd) {
-		if (!strcmp((char *)cmd, "recovery"))
-			restart_inform = INFORM_RECOVERY;
-		else if(!strcmp((char *)cmd, "ramdump"))
-			restart_inform = INFORM_RAMDUMP;
+	    #if defined(CONFIG_MACH_ODROIDXU3)
+        	if (!strcmp((char *)cmd, "fastboot"))
+        		restart_inform = REBOOT_FASTBOOT;
+        	if (!strcmp((char *)cmd, "update"))
+        		restart_inform = REBOOT_UPDATE;
+	    #else
+    		if (!strcmp((char *)cmd, "recovery"))
+    			restart_inform = INFORM_RECOVERY;
+    		else if(!strcmp((char *)cmd, "ramdump"))
+    			restart_inform = INFORM_RAMDUMP;
+	    #endif
 	}
+
+    #if defined(CONFIG_MACH_ODROIDXU3)
+    	local_irq_disable();
+    	mdelay(100);	flush_cache_all();	outer_flush_all();	mdelay(100);
+
+        // eMMC Module Hardware Reset Control
+        // eMMC_HW_RESET_GPIO : drivers/mmc/host/dw_mmc.c
+    	if (gpio_is_valid(eMMC_HW_RESET_GPIO)) {
+        	gpio_set_value(eMMC_HW_RESET_GPIO, 0); mdelay(100);
+        	gpio_set_value(eMMC_HW_RESET_GPIO, 1); mdelay(100);
+        }
+    #endif        
+
 	__raw_writel(restart_inform, EXYNOS_INFORM4);
 
 	__raw_writel(val, addr);
