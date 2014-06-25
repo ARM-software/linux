@@ -1961,18 +1961,14 @@ struct samsung_pll_rate_table cpll_rate_table[] = {
 
 struct samsung_pll_rate_table epll_rate_table[] = {
 	/* rate		p	m	s	k */
-#ifdef CONFIG_SOC_EXYNOS5422_REV_0
-	{ 466000000U,   3,  233,    2,  0},
-#else
 	{ 600000000U,   2,  100,    1,  0},
 	{ 400000000U,   3,  200,    2,  0},
 	{ 200000000U,   3,  200,    3,  0},
-	{ 180633600U,   5,  301,    3,  0},
+	{ 180633600U,   5,  301,    3,  3671},
 	{ 100000000U,   3,  200,    4,  0},
-	{  67737600U,   5,  452,    5,  0},
-	{  49152000U,   3,  197,    5,  0},
-	{  45158400U,   3,  181,    5,  0},
-#endif
+	{  67737600U,   5,  452,    5,  27263},
+	{  49152000U,   3,  197,    5,  25690},
+	{  45158400U,   3,  181,    5,  24012},
 };
 
 struct samsung_pll_rate_table ipll_rate_table[] = {

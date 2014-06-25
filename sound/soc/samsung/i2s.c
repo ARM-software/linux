@@ -18,6 +18,9 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/pm_runtime.h>
+#include <linux/clk.h>
+#include <linux/clkdev.h>
+#include <linux/clk-provider.h>
 
 #include <sound/soc.h>
 #include <sound/pcm_params.h>
@@ -532,11 +535,10 @@ static int i2s_set_sysclk(struct snd_soc_dai *dai,
 			}
 
 			if (clk_id)
-				i2s->op_clk = clk_get(&i2s->pdev->dev,
-						"i2s_opclk1");
+				i2s->op_clk = __clk_lookup("i2s_opclk1");
 			else
-				i2s->op_clk = clk_get(&i2s->pdev->dev,
-						"i2s_opclk0");
+				i2s->op_clk = __clk_lookup("i2s_opclk0");
+
 			clk_prepare_enable(i2s->op_clk);
 			i2s->rclk_srcrate = clk_get_rate(i2s->op_clk);
 
@@ -897,8 +899,7 @@ static int config_setup(struct i2s_dai *i2s)
 		return 0;
 
 	if (!(i2s->quirks & QUIRK_NO_MUXPSR)) {
-		psr = i2s->rclk_srcrate / i2s->frmclk / rfs;
-		writel(((psr - 1) << 8) | PSR_PSREN, i2s->addr + I2SPSR);
+		writel((15 << 8) | PSR_PSREN, i2s->addr + I2SPSR);
 		dev_dbg(&i2s->pdev->dev,
 			"RCLK_SRC=%luHz PSR=%u, RCLK=%dfs, BCLK=%dfs\n",
 				i2s->rclk_srcrate, psr, rfs, bfs);
@@ -1142,7 +1143,7 @@ static int samsung_i2s_dai_probe(struct snd_soc_dai *dai)
 		return -ENXIO;
 	}
 
-	i2s->clk = clk_get(&i2s->pdev->dev, "iis");
+	i2s->clk = __clk_lookup("iis");
 	if (IS_ERR(i2s->clk)) {
 		dev_err(&i2s->pdev->dev, "failed to get i2s_clock\n");
 		iounmap(i2s->addr);
@@ -1441,6 +1442,7 @@ static int samsung_i2s_probe(struct platform_device *pdev)
 
 		if (of_find_property(np, "samsung,supports-low-rfs", NULL))
 			quirks |= QUIRK_SUPPORTS_LOW_RFS;
+
 #ifdef CONFIG_SND_SAMSUNG_IDMA
 		if (of_find_property(np, "samsung,supports-idma", NULL)) {
 			quirks |= QUIRK_IDMA;

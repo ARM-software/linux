@@ -475,7 +475,7 @@
 		clock-names = "rate_i2c", "gate_i2c";
 		status = "disabled";
 	};
-
+/*
 	i2c_1: i2c@12C70000 {
 		compatible = "samsung,s3c2440-i2c";
 		reg = <0x12C70000 0x1000>;
@@ -488,7 +488,7 @@
 		clock-names = "rate_i2c", "gate_i2c";
 		status = "disabled";
 	};
-
+*/
 	i2c_2: i2c@12C80000 {
 		compatible = "samsung,s3c2440-i2c";
 		reg = <0x12C80000 0x1000>;
@@ -758,7 +758,7 @@
 		interrupts = <0 106 0>;
 		#io-channel-cells = <1>;
 		io-channel-ranges;
-		clocks = <&clock 875>;
+		clocks = <&clock 1485>; 
 		clock-names = "gate_adcif";
 	};
 
@@ -1032,15 +1032,15 @@
 			 <&clock 1723>,		/* gate_ass_timer */
 			 <&clock 1725>,		/* gate_ass_gpio */
 			 <&clock 1730>,		/* gate_ass_srp */
-			 <&clock 5>,		/* fout_dpll */
-			 <&clock 2002>,		/* mout_dpll_ctrl */
+			 <&clock 6>,		/* fout_epll */
+			 <&clock 2003>,		/* mout_epll_ctrl */
 			 <&clock 2060>,		/* mout_mau_epll_clk */
 			 <&clock 5316>,		/* mout_mau_epll_clk_user */
 			 <&clock 2200>,		/* mout_ass_clk */
 			 <&clock 2201>,		/* mout_ass_i2s */
 			 <&clock 1>;		/* fin_pll */
-		clock-names = "dmac", "timer", "gpio", "srp", "fout_dpll",
-			"mout_dpll_ctrl", "mout_mau_epll_clk",
+		clock-names = "dmac", "timer", "gpio", "srp", "fout_epll",
+			"mout_epll_ctrl", "mout_mau_epll_clk",
 			"mout_mau_epll_clk_user", "mout_ass_clk",
 			"mout_ass_i2s", "fin_pll";
 		samsung,power-domain = <&pd_maudio>;

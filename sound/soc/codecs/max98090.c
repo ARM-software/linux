@@ -23,6 +23,12 @@
 #include <sound/max98090.h>
 #include "max98090.h"
 
+#include <linux/of.h>
+#include <linux/of_platform.h>
+#include <linux/of_gpio.h>
+#include <linux/io.h>
+#include <linux/pinctrl/consumer.h>
+
 #define DEBUG
 #define EXTMIC_METHOD
 #define EXTMIC_METHOD_TEST
@@ -336,12 +342,11 @@ static bool max98090_readable_register(struct device *dev, unsigned int reg)
 	case M98090_REG_RECORD_TDM_SLOT:
 	case M98090_REG_SAMPLE_RATE:
 	case M98090_REG_DMIC34_BIQUAD_BASE ... M98090_REG_DMIC34_BIQUAD_BASE + 0x0E:
-	case M98090_REG_REVISION_ID:
 		return true;
 	default:
 		return false;
 	}
-}
+	}
 
 static int max98090_reset(struct max98090_priv *max98090)
 {
@@ -382,7 +387,7 @@ static const DECLARE_TLV_DB_SCALE(max98090_av_tlv, -1200, 100, 0);
 
 static const DECLARE_TLV_DB_SCALE(max98090_dvg_tlv, 0, 600, 0);
 static const DECLARE_TLV_DB_SCALE(max98090_dv_tlv, -1500, 100, 0);
-
+	
 static const DECLARE_TLV_DB_SCALE(max98090_sidetone_tlv, -6050, 200, 0);
 
 static const DECLARE_TLV_DB_SCALE(max98090_alc_tlv, -1500, 100, 0);
@@ -440,11 +445,11 @@ static int max98090_get_enab_tlv(struct snd_kcontrol *kcontrol,
 		break;
 	case M98090_REG_MIC2_INPUT_LEVEL:
 		select = &(max98090->pa2en);
-		break;
+			break;
 	case M98090_REG_ADC_SIDETONE:
 		select = &(max98090->sidetone);
-		break;
-	default:
+			break;
+		default :
 		return -EINVAL;
 	}
 
@@ -490,7 +495,7 @@ static int max98090_put_enab_tlv(struct snd_kcontrol *kcontrol,
 	}
 
 	val = (val >> mc->shift) & mask;
-
+	
 	*select = sel;
 
 	/* Setting a volume is only valid if it is already On */
@@ -805,7 +810,7 @@ static int max98090_micinput_event(struct snd_soc_dapm_widget *w,
 	else
 		val = (val & M98090_MIC_PA2EN_MASK) >> M98090_MIC_PA2EN_SHIFT;
 
-
+	
 	if (val >= 1) {
 		if (w->reg == M98090_REG_MIC1_INPUT_LEVEL) {
 			max98090->pa1en = val - 1; /* Update for volatile */
@@ -821,12 +826,12 @@ static int max98090_micinput_event(struct snd_soc_dapm_widget *w,
 			val = max98090->pa1en + 1;
 		else
 			val = max98090->pa2en + 1;
-		break;
+			break;
 	case SND_SOC_DAPM_POST_PMD:
 		/* If turning off, turn off */
 		val = 0;
-		break;
-	default:
+			break;
+		default :
 		return -EINVAL;
 	}
 
@@ -857,6 +862,14 @@ static const struct soc_enum mic2_mux_enum =
 
 static const struct snd_kcontrol_new max98090_mic2_mux =
 	SOC_DAPM_ENUM("MIC2 Mux", mic2_mux_enum);
+
+static const char *dmic_mux_text[] = { "ADC", "DMIC" };
+
+static const struct soc_enum dmic_mux_enum =
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(dmic_mux_text), dmic_mux_text);
+
+static const struct snd_kcontrol_new max98090_dmic_mux =
+	SOC_DAPM_ENUM_VIRT("DMIC Mux", dmic_mux_enum);
 
 static const char *max98090_micpre_text[] = { "Off", "On" };
 
@@ -1145,6 +1158,9 @@ static const struct snd_soc_dapm_widget max98090_dapm_widgets[] = {
 	SND_SOC_DAPM_MUX("MIC2 Mux", SND_SOC_NOPM,
 		0, 0, &max98090_mic2_mux),
 
+	SND_SOC_DAPM_VIRT_MUX("DMIC Mux", SND_SOC_NOPM,
+		0, 0, &max98090_dmic_mux),
+
 	SND_SOC_DAPM_PGA_E("MIC1 Input", M98090_REG_MIC1_INPUT_LEVEL,
 		M98090_MIC_PA1EN_SHIFT, 0, NULL, 0, max98090_micinput_event,
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
@@ -1337,11 +1353,14 @@ static const struct snd_soc_dapm_route max98090_dapm_routes[] = {
 	{"ADCL", NULL, "SHDN"},
 	{"ADCR", NULL, "SHDN"},
 
-	{"LBENL Mux", "Normal", "ADCL"},
-	{"LBENL Mux", "Normal", "DMICL"},
+	{"DMIC Mux", "ADC", "ADCL"},
+	{"DMIC Mux", "ADC", "ADCR"},
+	{"DMIC Mux", "DMIC", "DMICL"},
+	{"DMIC Mux", "DMIC", "DMICR"},
+
+	{"LBENL Mux", "Normal", "DMIC Mux"},
 	{"LBENL Mux", "Loopback", "LTENL Mux"},
-	{"LBENR Mux", "Normal", "ADCR"},
-	{"LBENR Mux", "Normal", "DMICR"},
+	{"LBENR Mux", "Normal", "DMIC Mux"},
 	{"LBENR Mux", "Loopback", "LTENR Mux"},
 
 	{"AIFOUTL", NULL, "LBENL Mux"},
@@ -1668,13 +1687,13 @@ static int max98090_dai_set_fmt(struct snd_soc_dai *codec_dai,
 			regval |= M98090_DLY_MASK;
 			break;
 		case SND_SOC_DAIFMT_LEFT_J:
-			break;
+				break;
 		case SND_SOC_DAIFMT_RIGHT_J:
 			regval |= M98090_RJ_MASK;
 			break;
 		case SND_SOC_DAIFMT_DSP_A:
 			/* Not supported mode */
-		default:
+			default :
 			dev_err(codec->dev, "DAI format unsupported");
 			return -EINVAL;
 		}
@@ -1684,7 +1703,7 @@ static int max98090_dai_set_fmt(struct snd_soc_dai *codec_dai,
 			break;
 		case SND_SOC_DAIFMT_NB_IF:
 			regval |= M98090_WCI_MASK;
-			break;
+				break;
 		case SND_SOC_DAIFMT_IB_NF:
 			regval |= M98090_BCI_MASK;
 			break;
@@ -1737,7 +1756,7 @@ static int max98090_set_tdm_slot(struct snd_soc_dai *codec_dai,
 		snd_soc_update_bits(codec, M98090_REG_TDM_CONTROL,
 			M98090_TDM_MASK,
 			M98090_TDM_MASK);
-	}
+}
 
 	/*
 	 * Normally advisable to set TDM first, but this permits either order
@@ -1756,6 +1775,16 @@ static int max98090_set_bias_level(struct snd_soc_codec *codec,
 
 	switch (level) {
 	case SND_SOC_BIAS_ON:
+		if (codec->dapm.bias_level == SND_SOC_BIAS_OFF) {
+			ret = regcache_sync(max98090->regmap);
+
+			if (ret != 0) {
+				dev_err(codec->dev,
+					"Failed to sync cache: %d\n", ret);
+				return ret;
+		}
+	}
+
 		if (max98090->jack_state == M98090_JACK_STATE_HEADSET) {
 			/*
 			 * Set to normal bias level.
@@ -1769,16 +1798,6 @@ static int max98090_set_bias_level(struct snd_soc_codec *codec,
 		break;
 
 	case SND_SOC_BIAS_STANDBY:
-		if (codec->dapm.bias_level == SND_SOC_BIAS_OFF) {
-			ret = regcache_sync(max98090->regmap);
-			if (ret != 0) {
-				dev_err(codec->dev,
-					"Failed to sync cache: %d\n", ret);
-				return ret;
-			}
-		}
-		break;
-
 	case SND_SOC_BIAS_OFF:
 		/* Set internal pull-up to lowest power mode */
 		snd_soc_update_bits(codec, M98090_REG_JACK_DETECT,
@@ -1896,8 +1915,8 @@ static int max98090_dai_set_sysclk(struct snd_soc_dai *dai,
 
 	/* Setup clocks for slave mode, and using the PLL
 	 * PSCLK = 0x01 (when master clk is 10MHz to 20MHz)
-	 *		 0x02 (when master clk is 20MHz to 40MHz)..
-	 *		 0x03 (when master clk is 40MHz to 60MHz)..
+	 *         0x02 (when master clk is 20MHz to 40MHz)..
+	 *         0x03 (when master clk is 40MHz to 60MHz)..
 	 */
 	if ((freq >= 10000000) && (freq < 20000000)) {
 		snd_soc_write(codec, M98090_REG_SYSTEM_CLOCK,
@@ -1967,7 +1986,7 @@ static void max98090_jack_work(struct work_struct *work)
 			dev_dbg(codec->dev, "No Headset Detected\n");
 
 			max98090->jack_state = M98090_JACK_STATE_NO_HEADSET;
-
+		
 			status |= 0;
 
 			break;
@@ -1987,8 +2006,8 @@ static void max98090_jack_work(struct work_struct *work)
 				status |= SND_JACK_HEADSET;
 				status |= SND_JACK_BTN_0;
 
-				break;
-			}
+			break;
+		}
 
 			/* Line is reported as Headphone */
 			/* Nokia Headset is reported as Headphone */
@@ -2013,7 +2032,7 @@ static void max98090_jack_work(struct work_struct *work)
 		default:
 			dev_dbg(codec->dev, "Unrecognized Jack Status\n");
 			break;
-	}
+		}
 
 	snd_soc_jack_report(max98090->jack, status,
 			    SND_JACK_HEADSET | SND_JACK_BTN_0);
@@ -2071,8 +2090,9 @@ static irqreturn_t max98090_interrupt(int irq, void *data)
 
 		pm_wakeup_event(codec->dev, 100);
 
-		schedule_delayed_work(&max98090->jack_work,
-			msecs_to_jiffies(100));
+//		queue_delayed_work(system_power_efficient_wq,
+//				   &max98090->jack_work,
+//				   msecs_to_jiffies(100));
 	}
 
 	if (active & M98090_DRCACT_MASK)
@@ -2119,8 +2139,9 @@ int max98090_mic_detect(struct snd_soc_codec *codec,
 	snd_soc_jack_report(max98090->jack, 0,
 			    SND_JACK_HEADSET | SND_JACK_BTN_0);
 
-	schedule_delayed_work(&max98090->jack_work,
-		msecs_to_jiffies(100));
+//	queue_delayed_work(system_power_efficient_wq,
+//			   &max98090->jack_work,
+//			   msecs_to_jiffies(100));
 
 	return 0;
 }
@@ -2138,22 +2159,22 @@ static struct snd_soc_dai_ops max98090_dai_ops = {
 };
 
 static struct snd_soc_dai_driver max98090_dai[] = {
-{
+	{
 	.name = "HiFi",
-	.playback = {
-		.stream_name = "HiFi Playback",
+		.playback = {
+			.stream_name = "HiFi Playback",
 		.channels_min = 2,
-		.channels_max = 2,
-		.rates = MAX98090_RATES,
-		.formats = MAX98090_FORMATS,
-	},
-	.capture = {
-		.stream_name = "HiFi Capture",
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = MAX98090_RATES,
-		.formats = MAX98090_FORMATS,
-	},
+			.channels_max = 2,
+			.rates = MAX98090_RATES,
+			.formats = MAX98090_FORMATS,
+		},
+		.capture = {
+			.stream_name = "HiFi Capture",
+			.channels_min = 1,
+			.channels_max = 2,
+			.rates = MAX98090_RATES,
+			.formats = MAX98090_FORMATS,
+		},
 	 .ops = &max98090_dai_ops,
 }
 };
@@ -2166,7 +2187,7 @@ static void max98090_handle_pdata(struct snd_soc_codec *codec)
 	if (!pdata) {
 		dev_err(codec->dev, "No platform data\n");
 		return;
-	}
+}
 
 }
 
@@ -2298,11 +2319,38 @@ static const struct regmap_config max98090_regmap = {
 	.cache_type = REGCACHE_RBTREE,
 };
 
+#ifdef CONFIG_OF
+static struct max98090_pdata *max98090_i2c_parse_dt(struct i2c_client *i2c)
+{
+	struct device *dev = &i2c->dev;
+	struct device_node *np = dev->of_node;
+	struct max98090_pdata *pdata;
+
+	if (!np)
+		return NULL;
+
+	pdata = kzalloc(sizeof(struct max98090_pdata), GFP_KERNEL);
+	if (!pdata) {
+		dev_err(dev, "failed to allocate platform data\n");
+		return NULL;
+	}
+	dev->platform_data = pdata;
+
+	return pdata;
+}
+#else
+static struct max98090_pdata *max98090_i2c_parse_dt(struct i2c_client *i2c)
+{
+	return NULL;
+}
+#endif
+
 static int max98090_i2c_probe(struct i2c_client *i2c,
-				 const struct i2c_device_id *id)
+			     const struct i2c_device_id *id)
 {
 	struct max98090_priv *max98090;
-	int ret;
+	struct device *dev = &i2c->dev;
+	int ret,irq_gpio;
 
 	pr_debug("max98090_i2c_probe\n");
 
@@ -2310,12 +2358,19 @@ static int max98090_i2c_probe(struct i2c_client *i2c,
 		GFP_KERNEL);
 	if (max98090 == NULL)
 		return -ENOMEM;
-
+	
 	max98090->devtype = id->driver_data;
 	i2c_set_clientdata(i2c, max98090);
 	max98090->control_data = i2c;
-	max98090->pdata = i2c->dev.platform_data;
-	max98090->irq = i2c->irq;
+	max98090->pdata = max98090_i2c_parse_dt(i2c);
+
+	/* B-Session gpio */
+	irq_gpio = of_get_named_gpio(dev->of_node,
+					"odroid,irq-gpio", 0);
+	if (!gpio_is_valid(irq_gpio))
+		dev_info(dev, "IRQ gpio is not available\n");
+
+	max98090->irq = gpio_to_irq(irq_gpio);
 
 	max98090->regmap = devm_regmap_init_i2c(i2c, &max98090_regmap);
 	if (IS_ERR(max98090->regmap)) {
@@ -2337,6 +2392,7 @@ static int max98090_i2c_remove(struct i2c_client *client)
 	return 0;
 }
 
+#ifdef CONFIG_PM_RUNTIME
 static int max98090_runtime_resume(struct device *dev)
 {
 	struct max98090_priv *max98090 = dev_get_drvdata(dev);
@@ -2356,6 +2412,7 @@ static int max98090_runtime_suspend(struct device *dev)
 
 	return 0;
 }
+#endif
 
 static const struct dev_pm_ops max98090_pm = {
 	SET_RUNTIME_PM_OPS(max98090_runtime_suspend,
@@ -2368,11 +2425,21 @@ static const struct i2c_device_id max98090_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, max98090_i2c_id);
 
+#ifdef CONFIG_OF
+static struct of_device_id max98090_dt_ids[] = {
+	{ .compatible = "maxim,max98090"},
+	{ }
+};
+#endif
+
 static struct i2c_driver max98090_i2c_driver = {
 	.driver = {
 		.name = "max98090",
 		.owner = THIS_MODULE,
 		.pm = &max98090_pm,
+#ifdef CONFIG_OF
+		.of_match_table = of_match_ptr(max98090_dt_ids),
+#endif
 	},
 	.probe  = max98090_i2c_probe,
 	.remove = max98090_i2c_remove,

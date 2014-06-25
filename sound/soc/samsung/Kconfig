@@ -279,6 +279,16 @@ config SND_SOC_SAMSUNG_XYREF5422_ES515
        help
          Say Y if you want to add support for SoC audio on the XYREF5422.
 
+config SND_SOC_SAMSUNG_ODROID_MAX98090
+       tristate "SoC I2S Audio support for max98090 on ODROID"
+       depends on SND_SOC_SAMSUNG
+       select SND_SAMSUNG_I2S
+       select SND_SAMSUNG_AUDSS
+       select SND_SOC_MAX98090
+       select SND_SOC_DUMMY_CODEC
+       help
+         Say Y if you want to add support for SoC audio on the XYREF5422.
+
 config SND_SOC_ES515_I2S_MASTER
 	bool "Enable Codec master mode for eS515 on XYREF"
 	depends on SND_SAMSUNG_XYREF && SND_SOC_ES515

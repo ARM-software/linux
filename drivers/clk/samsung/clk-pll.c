@@ -241,6 +241,7 @@ struct clk * __init samsung_clk_register_pll35xx(const char *name,
 #define PLL36XX_SDIV_SHIFT	(0)
 #define PLL36XX_KDIV_SHIFT	(0)
 #define PLL36XX_LOCK_STAT_SHIFT	(29)
+#define PLL36XX_PLL_ENABLE_SHIFT	(31)
 
 static unsigned long samsung_pll36xx_recalc_rate(struct clk_hw *hw,
 				unsigned long parent_rate)
@@ -268,7 +269,7 @@ static int samsung_pll36xx_set_rate(struct clk_hw *hw, unsigned long drate,
 					unsigned long parent_rate)
 {
 	struct samsung_clk_pll *pll = to_clk_pll(hw);
-	u32 tmp, pll_con0, pll_con1;
+	u32 tmp, pll_con0, pll_con1, locktime;
 	const struct samsung_pll_rate_table *rate;
 
 	rate = samsung_get_pll_settings(pll, drate);
@@ -280,21 +281,24 @@ static int samsung_pll36xx_set_rate(struct clk_hw *hw, unsigned long drate,
 
 	pll_con0 = __raw_readl(pll->con_reg);
 	pll_con1 = __raw_readl(pll->con_reg + 4);
-
-	/* Set PLL lock time. */
-	__raw_writel(rate->pdiv * PLL36XX_LOCK_FACTOR, pll->lock_reg);
-
 	 /* Change PLL PMS values */
 	pll_con0 &= ~((PLL36XX_MDIV_MASK << PLL36XX_MDIV_SHIFT) |
 			(PLL36XX_PDIV_MASK << PLL36XX_PDIV_SHIFT) |
 			(PLL36XX_SDIV_MASK << PLL36XX_SDIV_SHIFT));
-	pll_con0 |= (rate->mdiv << PLL36XX_MDIV_SHIFT) |
-			(rate->pdiv << PLL36XX_PDIV_SHIFT) |
-			(rate->sdiv << PLL36XX_SDIV_SHIFT);
-	__raw_writel(pll_con0, pll->con_reg);
+
+	 /* Change PLL PMS values */
+	pll_con0 |= rate->mdiv << PLL36XX_MDIV_SHIFT;
+	pll_con0 |= rate->pdiv << PLL36XX_PDIV_SHIFT;
+	pll_con0 |= rate->sdiv << PLL36XX_SDIV_SHIFT;
+	pll_con0 |= 1 << PLL36XX_PLL_ENABLE_SHIFT;
 
 	pll_con1 &= ~(PLL36XX_KDIV_MASK << PLL36XX_KDIV_SHIFT);
 	pll_con1 |= rate->kdiv << PLL36XX_KDIV_SHIFT;
+
+	/* Set PLL lock time. */
+	locktime = PLL36XX_LOCK_FACTOR * rate->pdiv;
+	__raw_writel(locktime, pll->lock_reg);
+	__raw_writel(pll_con0, pll->con_reg);
 	__raw_writel(pll_con1, pll->con_reg + 4);
 
 	/* wait_lock_time */

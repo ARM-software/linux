@@ -209,6 +209,7 @@ static void top_clk_enable(void)
 	pr_info("dpll %ld\n", tmp);
 
 	clk = __clk_lookup("fout_epll");
+	clk_set_rate(clk, 180633600);
 	tmp = clk_get_rate(clk);
 	pr_info("epll %ld\n", tmp);
 
@@ -250,8 +251,8 @@ static void aud_init_clock(void)
 	writel(0xF48, EXYNOS_CLKDIV_AUDSS);
 
 #ifdef CONFIG_SOC_EXYNOS5422_REV_0
-	exynos_set_parent("mout_dpll_ctrl", "fout_dpll");
-	exynos_set_parent("mout_mau_epll_clk", "mout_dpll_ctrl");
+	exynos_set_parent("mout_epll_ctrl", "fout_epll");
+	exynos_set_parent("mout_mau_epll_clk", "mout_epll_ctrl");
 	exynos_set_parent("mout_mau_epll_clk_user", "mout_mau_epll_clk");
 	exynos_set_parent("mout_ass_clk", "mout_mau_epll_clk_user");
 	exynos_set_parent("mout_ass_i2s", "mout_ass_clk");

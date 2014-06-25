@@ -72,8 +72,8 @@ struct lpass_info {
 	struct clk		*clk_sramc;
 	struct clk		*clk_intr;
 	struct clk		*clk_timer;
-	struct clk		*clk_fout_dpll;
-	struct clk		*clk_mout_dpll_ctrl;
+	struct clk		*clk_fout_epll;
+	struct clk		*clk_mout_epll_ctrl;
 	struct clk		*clk_mout_mau_epll_clk;
 	struct clk		*clk_mout_mau_epll_clk_user;
 	struct clk		*clk_mout_ass_clk;
@@ -379,10 +379,13 @@ static void ass_enable(void)
 {
 	lpass_reg_restore();
 
+	writel(0x1, EXYNOS_CLKSRC_AUDSS);
+	writel(0x013, EXYNOS_CLKDIV_AUDSS);
+
 	/* ASS_MUX_SEL */
 #ifdef CONFIG_SOC_EXYNOS5422_REV_0
-	clk_set_parent(lpass.clk_mout_dpll_ctrl, lpass.clk_fout_dpll);
-	clk_set_parent(lpass.clk_mout_mau_epll_clk, lpass.clk_mout_dpll_ctrl);
+	clk_set_parent(lpass.clk_mout_epll_ctrl, lpass.clk_fout_epll);
+	clk_set_parent(lpass.clk_mout_mau_epll_clk, lpass.clk_mout_epll_ctrl);
 	clk_set_parent(lpass.clk_mout_mau_epll_clk_user, lpass.clk_mout_mau_epll_clk);
 	clk_set_parent(lpass.clk_mout_ass_clk, lpass.clk_mout_mau_epll_clk_user);
 	clk_set_parent(lpass.clk_mout_ass_i2s, lpass.clk_mout_ass_clk);
@@ -506,15 +509,15 @@ static int clk_set_heirachy_ass(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 
-	lpass.clk_fout_dpll = clk_get(NULL,"fout_dpll");
-	if (IS_ERR_OR_NULL(lpass.clk_fout_dpll)) {
-		dev_err(dev, "fout_dpll clk not found\n");
+	lpass.clk_fout_epll = clk_get(NULL,"fout_epll");
+	if (IS_ERR_OR_NULL(lpass.clk_fout_epll)) {
+		dev_err(dev, "fout_epll clk not found\n");
 		goto err0;
 	}
 
-	lpass.clk_mout_dpll_ctrl = clk_get(dev,"mout_dpll_ctrl");
-	if (IS_ERR_OR_NULL(lpass.clk_mout_dpll_ctrl)) {
-		dev_err(dev, "mout_dpll_ctrl clk not found\n");
+	lpass.clk_mout_epll_ctrl = clk_get(dev,"mout_epll_ctrl");
+	if (IS_ERR_OR_NULL(lpass.clk_mout_epll_ctrl)) {
+		dev_err(dev, "mout_epll_ctrl clk not found\n");
 		goto err1;
 	}
 
@@ -575,9 +578,9 @@ err4:
 err3:
 	clk_put(lpass.clk_mout_mau_epll_clk);
 err2:
-	clk_put(lpass.clk_mout_dpll_ctrl);
+	clk_put(lpass.clk_mout_epll_ctrl);
 err1:
-	clk_put(lpass.clk_fout_dpll);
+	clk_put(lpass.clk_fout_epll);
 err0:
 	return -1;
 }
@@ -695,6 +698,8 @@ static void lpass_init_reg_list(void)
 
 static int lpass_proc_show(struct seq_file *m, void *v) {
 	struct subip_info *si;
+	struct aud_reg *ar;
+	
 	int pmode = exynos_check_aud_pwr();
 
 	seq_printf(m, "power: %s\n", lpass.enabled ? "on" : "off");
@@ -708,7 +713,10 @@ static int lpass_proc_show(struct seq_file *m, void *v) {
 		seq_printf(m, "subip: %s (%d)\n",
 				si->name, atomic_read(&si->use_cnt));
 	}
-
+	list_for_each_entry(ar, &reg_list, node) {
+		seq_printf(m, "reg_list: 0x%08x (0x%08x)\n",
+				ar->reg, ar->val);
+	}
 	return 0;
 }
 

@@ -50,6 +50,7 @@ snd-soc-bells-objs := bells.o
 snd-soc-xyref5430-es515-objs := xyref5430_es515.o
 snd-soc-smdk5422-wm8994-objs := smdk5422_wm8994.o
 snd-soc-xyref5422-es515-objs := xyref5422_es515.o
+snd-soc-odroid-max98090-objs := odroid_max98090.o
 
 obj-$(CONFIG_SND_SOC_SAMSUNG_JIVE_WM8750) += snd-soc-jive-wm8750.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_NEO1973_WM8753) += snd-soc-neo1973-wm8753.o
@@ -77,5 +78,6 @@ obj-$(CONFIG_SND_SOC_BELLS) += snd-soc-bells.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_XYREF5430_ES515) += snd-soc-xyref5430-es515.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_SMDK5422_WM8994) += snd-soc-smdk5422-wm8994.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_XYREF5422_ES515) += snd-soc-xyref5422-es515.o
+obj-$(CONFIG_SND_SOC_SAMSUNG_ODROID_MAX98090) += snd-soc-odroid-max98090.o
 
 obj-$(CONFIG_SND_SAMSUNG_SEIREN) += seiren/
