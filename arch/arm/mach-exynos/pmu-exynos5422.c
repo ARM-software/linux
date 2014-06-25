@@ -668,9 +668,57 @@ void show_exynos_pmu(void)
 	pr_info(" -----------------------------------------------------------------------------------\n");
 }
 
+#if defined(CONFIG_MACH_ODROIDXU3)
+#include <linux/delay.h>
+#include <linux/pm.h>
+#include <asm/io.h>
+#include <asm/cacheflush.h>
+#include <asm/system.h>
+
+static void odroid_power_off(void)
+{
+	unsigned int value, off_retry = 0;
+	
+	printk("%s : set PS_HOLD low\n", __func__);
+
+	local_irq_disable();
+
+	while (1) {
+        /*
+        * Set PSHOLD port for ouput low
+        */
+    	value = __raw_readl(EXYNOS5422_PS_HOLD_CONTROL);
+    	value &= ~EXYNOS_PS_HOLD_OUTPUT_HIGH;
+    	__raw_writel(value, EXYNOS5422_PS_HOLD_CONTROL);
+    
+    	/*
+    	* Enable signal for PSHOLD port
+    	*/
+    	value = __raw_readl(EXYNOS5422_PS_HOLD_CONTROL);
+    	value |= EXYNOS_PS_HOLD_EN;
+    	__raw_writel(value, EXYNOS_PS_HOLD_CONTROL);
+    
+    	mdelay(1000);
+    	if(off_retry++ > 5) {
+			flush_cache_all();
+			outer_flush_all();
+			exynos5_restart(0, 0);
+
+			pr_emerg("%s: waiting for reboot\n", __func__);
+			while(1);
+    	}
+    	printk("%s : Power OFF error count = %d !!!\n", __func__, off_retry);
+    }
+}
+#endif
+
 int __init exynos5422_pmu_init(void)
 {
 	unsigned int value, i;
+
+#if defined(CONFIG_MACH_ODROIDXU3)
+    pm_power_off = odroid_power_off;
+#endif    
 
 	exynos_cpu.power_up = exynos5422_secondary_up;
 	exynos_cpu.power_state = exynos5422_cpu_state;

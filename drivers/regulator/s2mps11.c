@@ -419,6 +419,17 @@ static int s2mps11_pmic_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#if defined(CONFIG_MACH_ODROIDXU3)
+static void s2mps11_pmic_shutdown(struct platform_device *pdev)
+{
+    struct sec_pmic_dev *iodev = dev_get_drvdata(pdev->dev.parent);
+
+	/* PWR_HOLD bit-clear when power off */
+	sec_reg_update(iodev, S2MPS11_REG_CTRL1, 0x00, 0xff);
+	dev_info(&pdev->dev, "%s : PWR_HOLD Clear Bit.\n",__func__);
+}
+#endif
+
 static const struct platform_device_id s2mps11_pmic_id[] = {
 	{ "s2mps11-pmic", 0},
 	{ },
@@ -432,6 +443,9 @@ static struct platform_driver s2mps11_pmic_driver = {
 	},
 	.probe = s2mps11_pmic_probe,
 	.remove = s2mps11_pmic_remove,
+#if defined(CONFIG_MACH_ODROIDXU3)
+	.shutdown	= s2mps11_pmic_shutdown,
+#endif	
 	.id_table = s2mps11_pmic_id,
 };
 
