@@ -7,5 +7,19 @@ config ODROID_EXYNOS5_SP
 	---help---
 		Enables the INA231 Sensor on ODROID-EXYNOS5
 
+config ODROID_EXYNOS5_IOBOARD
+    bool "Enable the ODROID EXYNOS5 IOBOARD Drivers"
+	depends on MACH_ODROIDXU3
+	default n
+	---help---
+		Enables the IOBOARD Drivers
+
+config ODROID_EXYNOS5_IOBOARD_DEBUG
+    bool "Enable the ODROIDXU IOBOARD DEBUG Enable"
+	depends on ODROID_EXYNOS5_IOBOARD
+	default n
+	---help---
+		Enables the IOBOARD Debug Message
+
 endmenu
 
