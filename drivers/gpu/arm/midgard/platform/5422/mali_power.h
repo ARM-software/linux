@@ -42,7 +42,7 @@ TRACE_EVENT(mali_utilization_stats,
 #endif				/* _MALI_POWER_H */
 
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH ../../drivers/gpu/arm/midgard/platform
+#define TRACE_INCLUDE_PATH ../../drivers/gpu/arm/midgard/platform/5422
 
 /* This part must be outside protection */
 #include <trace/define_trace.h>
