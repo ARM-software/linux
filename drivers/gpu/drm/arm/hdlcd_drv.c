@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
@@ -29,8 +30,8 @@ static int hdlcd_unload(struct drm_device *dev)
 	struct hdlcd_drm_private *hdlcd = dev->dev_private;
 
 	drm_kms_helper_poll_fini(dev);
-	if (hdlcd->fbdev)
-		drm_fbdev_cma_fini(hdlcd->fbdev);
+	if (hdlcd->fb_helper)
+		drm_fb_helper_fini(hdlcd->fb_helper);
 
 	drm_vblank_cleanup(dev);
 	drm_mode_config_cleanup(dev);
@@ -72,6 +73,7 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 	atomic_set(&hdlcd->vsync_count, 0);
 	atomic_set(&hdlcd->dma_end_count, 0);
 #endif
+	hdlcd->initialised = false;
 	dev->dev_private = hdlcd;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -123,19 +125,27 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 	 */
 	if (hdlcd->slave_node) {
 		ret = hdlcd_create_digital_connector(dev, hdlcd);
-		if (ret < 0)
+		if (ret < 0) {
+			dev_err(dev->dev, "failed to create digital connector, trying board setup: %d\n", ret);
 			ret = hdlcd_create_vexpress_connector(dev, hdlcd);
+		}
 
 		if (ret < 0) {
-			dev_err(dev->dev, "failed to create digital connector\n");
+			dev_err(dev->dev, "failed to create board connector: %d\n", ret);
 			goto fail;
 		}
 	} else {
 		ret = hdlcd_create_virtual_connector(dev);
 		if (ret < 0) {
-			dev_err(dev->dev, "failed to create virtual connector\n");
+			dev_err(dev->dev, "failed to create virtual connector: %d\n", ret);
 			goto fail;
 		}
+	}
+
+	ret = hdlcd_fbdev_init(dev);
+	if (ret < 0) {
+		dev_err(dev->dev, "failed to init the framebuffer (%d)\n", ret);
+		goto fail;
 	}
 
 	platform_set_drvdata(pdev, dev);
@@ -146,6 +156,7 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 		goto fail;
 	}
 
+	init_completion(&hdlcd->vsync_completion);
 	ret = drm_vblank_init(dev, 1);
 	if (ret < 0) {
 		dev_err(dev->dev, "failed to initialise vblank\n");
@@ -154,8 +165,6 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 		dev_info(dev->dev, "initialised vblank\n");
 	}
 
-	hdlcd->fbdev = drm_fbdev_cma_init(dev, 32, dev->mode_config.num_crtc,
-					dev->mode_config.num_connector);
 	drm_kms_helper_poll_init(dev);
 
 	return 0;
@@ -172,7 +181,11 @@ static void hdlcd_preclose(struct drm_device *dev, struct drm_file *file)
 static void hdlcd_lastclose(struct drm_device *dev)
 {
 	struct hdlcd_drm_private *hdlcd = dev->dev_private;
-	drm_fbdev_cma_restore_mode(hdlcd->fbdev);
+
+	drm_modeset_lock_all(dev);
+	if (hdlcd->fb_helper)
+		drm_fb_helper_restore_fbdev_mode(hdlcd->fb_helper);
+	drm_modeset_unlock_all(dev);
 }
 
 static irqreturn_t hdlcd_irq(int irq, void *arg)
@@ -213,6 +226,7 @@ static irqreturn_t hdlcd_irq(int irq, void *arg)
 			drm_vblank_put(dev, 0);
 		}
 		spin_unlock_irqrestore(&dev->event_lock, flags);
+		complete(&hdlcd->vsync_completion);
 	}
 
 	/* acknowledge interrupt(s) */
@@ -309,7 +323,7 @@ static void hdlcd_debugfs_cleanup(struct drm_minor *minor)
 }
 #endif
 
-static const struct file_operations fops = {
+static const struct file_operations hdlcd_fops = {
 	.owner		= THIS_MODULE,
 	.open		= drm_open,
 	.release	= drm_release,
@@ -317,10 +331,10 @@ static const struct file_operations fops = {
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= drm_compat_ioctl,
 #endif
+	.mmap		= drm_gem_cma_mmap,
 	.poll		= drm_poll,
 	.read		= drm_read,
 	.llseek		= no_llseek,
-	.mmap		= drm_gem_cma_mmap,
 };
 
 static struct drm_driver hdlcd_driver = {
@@ -337,8 +351,10 @@ static struct drm_driver hdlcd_driver = {
 	.get_vblank_counter	= drm_vblank_count,
 	.enable_vblank		= hdlcd_enable_vblank,
 	.disable_vblank		= hdlcd_disable_vblank,
+
 	.gem_free_object	= drm_gem_cma_free_object,
 	.gem_vm_ops		= &drm_gem_cma_vm_ops,
+
 	.dumb_create		= drm_gem_cma_dumb_create,
 	.dumb_map_offset	= drm_gem_cma_dumb_map_offset,
 	.dumb_destroy		= drm_gem_dumb_destroy,
@@ -354,7 +370,8 @@ static struct drm_driver hdlcd_driver = {
 	.debugfs_init		= hdlcd_debugfs_init,
 	.debugfs_cleanup	= hdlcd_debugfs_cleanup,
 #endif
-	.fops			= &fops,
+	.fops			= &hdlcd_fops,
+
 	.name			= "hdlcd",
 	.desc			= "ARM HDLCD Controller DRM",
 	.date			= "20130505",
@@ -392,21 +409,11 @@ static struct platform_driver hdlcd_platform_driver = {
 
 static int __init hdlcd_init(void)
 {
-	int err = platform_driver_register(&hdlcd_platform_driver);
-
-#ifdef HDLCD_COUNT_BUFFERUNDERRUNS
-	if (!err)
-		hdlcd_underrun_init();
-#endif
-
-	return err;
+	return platform_driver_register(&hdlcd_platform_driver);
 }
 
 static void __exit hdlcd_exit(void)
 {
-#ifdef HDLCD_COUNT_BUFFERUNDERRUNS
-	hdlcd_underrun_close();
-#endif
 	platform_driver_unregister(&hdlcd_platform_driver);
 }
 

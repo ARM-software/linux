@@ -20,7 +20,7 @@ config DRM_HDLCD
 	  If M is selected the module will be called hdlcd.
 
 config DRM_VIRTUAL_HDLCD
-       bool "Support for virtual HDLCD"
-       depends on DRM_HDLCD
-       help
-         Enable support for virtual HDLCD as emulated by ARM's Fast Models.
+	bool "Support for virtual HDLCD"
+	depends on DRM_HDLCD
+	help
+	  Enable support for virtual HDLCD as emulated by ARM's Fast Models.

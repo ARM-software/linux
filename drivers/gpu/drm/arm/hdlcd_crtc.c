@@ -34,17 +34,20 @@ static void hdlcd_crtc_destroy(struct drm_crtc *crtc)
 void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd)
 {
 	struct drm_framebuffer *fb = hdlcd->crtc.primary->fb;
-	struct drm_gem_cma_object *gem;
+	struct hdlcd_bo *bo;
 	unsigned int depth, bpp;
 	dma_addr_t scanout_start;
 
 	drm_fb_get_bpp_depth(fb->pixel_format, &depth, &bpp);
-	gem = drm_fb_cma_get_gem_obj(fb, 0);
+	bo = hdlcd->bo;
 
-	scanout_start = gem->paddr + fb->offsets[0] +
+	scanout_start = bo->dma_addr + fb->offsets[0] +
 		(hdlcd->crtc.y * fb->pitches[0]) + (hdlcd->crtc.x * bpp/8);
 
-	hdlcd_write(hdlcd, HDLCD_REG_FB_BASE, scanout_start);
+	if (scanout_start != hdlcd->scanout_buf) {
+		hdlcd_write(hdlcd, HDLCD_REG_FB_BASE, scanout_start);
+		hdlcd->scanout_buf = scanout_start;
+	}
 }
 
 static int hdlcd_crtc_page_flip(struct drm_crtc *crtc,
@@ -105,6 +108,7 @@ static bool hdlcd_crtc_mode_fixup(struct drm_crtc *crtc,
 
 static void hdlcd_crtc_prepare(struct drm_crtc *crtc)
 {
+	drm_vblank_pre_modeset(crtc->dev, 0);
 	hdlcd_crtc_dpms(crtc, DRM_MODE_DPMS_OFF);
 }
 
@@ -112,6 +116,20 @@ static void hdlcd_crtc_commit(struct drm_crtc *crtc)
 {
 	drm_vblank_post_modeset(crtc->dev, 0);
 	hdlcd_crtc_dpms(crtc, DRM_MODE_DPMS_ON);
+}
+
+static bool hdlcd_fb_mode_equal(struct drm_framebuffer *oldfb,
+				struct drm_framebuffer *newfb)
+{
+	if (!oldfb || !newfb)
+		return false;
+
+	if (oldfb->pixel_format == newfb->pixel_format &&
+		oldfb->width == newfb->width &&
+		oldfb->height == newfb->height)
+		return true;
+
+	return false;
 }
 
 static int hdlcd_crtc_mode_set(struct drm_crtc *crtc,
@@ -128,7 +146,12 @@ static int hdlcd_crtc_mode_set(struct drm_crtc *crtc,
 	default_color = 0x00ff000000;
 #endif
 
-	drm_vblank_pre_modeset(crtc->dev, 0);
+	/* This function gets called when the only change is the start of
+	   the scanout buffer. Detect that and bail out early */
+	if (hdlcd->initialised && hdlcd_fb_mode_equal(oldfb, crtc->primary->fb)) {
+		hdlcd_set_scanout(hdlcd);
+		return 0;
+	}
 
 	/* Preset the number of bits per colour */
 	drm_fb_get_bpp_depth(crtc->primary->fb->pixel_format, &depth, &bpp);
@@ -204,7 +227,17 @@ static int hdlcd_crtc_mode_set(struct drm_crtc *crtc,
 	clk_enable(hdlcd->clk);
 
 	hdlcd_set_scanout(hdlcd);
+	hdlcd->initialised = true;
 
+	return 0;
+}
+
+int hdlcd_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
+			struct drm_framebuffer *oldfb)
+{
+	struct hdlcd_drm_private *hdlcd = crtc_to_hdlcd_priv(crtc);
+
+	hdlcd_set_scanout(hdlcd);
 	return 0;
 }
 
@@ -218,19 +251,8 @@ static const struct drm_crtc_helper_funcs hdlcd_crtc_helper_funcs = {
 	.prepare	= hdlcd_crtc_prepare,
 	.commit		= hdlcd_crtc_commit,
 	.mode_set	= hdlcd_crtc_mode_set,
+	.mode_set_base	= hdlcd_crtc_mode_set_base,
 	.load_lut	= hdlcd_crtc_load_lut,
-};
-
-static void hdlcd_fb_output_poll_changed(struct drm_device *dev)
-{
-	struct hdlcd_drm_private *hdlcd = dev->dev_private;
-	if (hdlcd->fbdev)
-		drm_fbdev_cma_hotplug_event(hdlcd->fbdev);
-}
-
-static const struct drm_mode_config_funcs hdlcd_mode_config_funcs = {
-	.fb_create = drm_fb_cma_create,
-	.output_poll_changed = hdlcd_fb_output_poll_changed,
 };
 
 int hdlcd_setup_crtc(struct drm_device *dev)
@@ -239,12 +261,7 @@ int hdlcd_setup_crtc(struct drm_device *dev)
 	int ret;
 
 	drm_mode_config_init(dev);
-
-	dev->mode_config.min_width = 0;
-	dev->mode_config.min_height = 0;
-	dev->mode_config.max_width = HDLCD_MAX_XRES;
-	dev->mode_config.max_height = HDLCD_MAX_YRES;
-	dev->mode_config.funcs = &hdlcd_mode_config_funcs;
+	hdlcd_drm_mode_config_init(dev);
 
 	ret = drm_crtc_init(dev, &hdlcd->crtc, &hdlcd_crtc_funcs);
 	if (ret < 0)
