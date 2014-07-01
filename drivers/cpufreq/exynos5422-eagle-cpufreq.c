@@ -548,7 +548,7 @@ static void __init set_volt_table_CA15(void)
 	}
 
 	/* Max/Min A15 Frequencies */
-	max_support_idx_CA15 = L2; 
+	max_support_idx_CA15 = L6; 
 	min_support_idx_CA15 = L16;
 }
 
