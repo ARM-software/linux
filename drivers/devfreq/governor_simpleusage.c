@@ -20,6 +20,7 @@
 #define DFSO_UPTHRESHOLD	(50)
 #define DFSO_TARGET_PERCENTAGE	(20)
 #define DFSO_PROPORTIONAL	(120)
+#define DFSO_WEIGHT		(100)
 
 static int devfreq_simple_usage_notifier(struct notifier_block *nb, unsigned long val, void *data)
 {
@@ -45,6 +46,7 @@ static int devfreq_simple_usage_func(struct devfreq *df, unsigned long *freq)
 	unsigned int dfso_upthreshold = DFSO_UPTHRESHOLD;
 	unsigned int dfso_target_percentage = DFSO_TARGET_PERCENTAGE;
 	unsigned int dfso_proportional = DFSO_PROPORTIONAL;
+	unsigned int dfso_multiplication_weight = DFSO_WEIGHT;
 	struct devfreq_simple_usage_data *data = df->data;
 	unsigned long max = (df->max_freq) ? df->max_freq : 0;
 	unsigned long pm_qos_min;
@@ -63,9 +65,13 @@ static int devfreq_simple_usage_func(struct devfreq *df, unsigned long *freq)
 		dfso_target_percentage = data->target_percentage;
 	if (data->proportional)
 		dfso_proportional = data->proportional;
+	if (data->multiplication_weight)
+		dfso_multiplication_weight = data->multiplication_weight;
 
-	a = (unsigned long long)stat.busy_time * dfso_proportional;
-	b = div_u64(a, stat.total_time);
+	a = stat.busy_time * dfso_multiplication_weight;
+	a = div64_u64(a, 100);
+	a = a * dfso_proportional;
+	b = div64_u64(a, stat.total_time);
 
 	/* If percentage is larger than upthreshold, set with max freq */
 	if (b >= data->upthreshold) {
@@ -80,7 +86,7 @@ static int devfreq_simple_usage_func(struct devfreq *df, unsigned long *freq)
 
 	b *= stat.current_frequency;
 
-	a = div_u64(b, dfso_target_percentage);
+	a = div64_u64(b, dfso_target_percentage);
 
 	if (a > data->cal_qos_max)
 		a = data->cal_qos_max;

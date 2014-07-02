@@ -82,7 +82,7 @@ enum int_bus_pll {
 };
 
 unsigned int int_fimc_opp_list[][3] = {
-	{LV_7, LV_7, LV_7},
+	{LV_6, LV_6, LV_6},
 	{LV_7, LV_7, LV_3},
 	{LV_7, LV_5, LV_3},
 	{LV_6, LV_5, LV_3},
@@ -336,10 +336,10 @@ struct int_clk_info aclk_400_isp[] = {
 struct int_clk_info aclk_333[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0,   400000, SW_MUX},
-	{LV_1,   222000, C_PLL},
-	{LV_1_1, 167000, C_PLL},
-	{LV_1_2,  84000, C_PLL},
-	{LV_1_3, 111000, C_PLL},
+	{LV_1,   400000, SW_MUX},
+	{LV_1_1, 400000, SW_MUX},
+	{LV_1_2, 400000, SW_MUX},
+	{LV_1_3, 400000, SW_MUX},
 	{LV_2,   400000, SW_MUX},
 	{LV_3,   333000, C_PLL},
 	{LV_4,   222000, C_PLL},
@@ -713,7 +713,7 @@ static struct int_pm_clks *exynos5_int_pm_clks[] = {
 
 static struct pm_qos_request exynos5_int_media_qos;
 
-void exynos5_update_district_int_level(unsigned idx)
+void exynos5_update_district_int_level(unsigned int idx)
 {
 	if (!pm_qos_request_active(&exynos5_int_media_qos))
 		return;
@@ -1083,7 +1083,7 @@ static struct devfreq_simple_ondemand_data exynos5_int_governor_data = {
 #endif
 
 static struct devfreq_dev_profile exynos5_int_devfreq_profile = {
-	.initial_freq	= 400000,
+	.initial_freq	= 420000,
 	.polling_ms	= 100,
 	.target		= exynos5_int_busfreq_target,
 	.get_dev_status	= exynos5_int_bus_get_dev_status,
@@ -1095,6 +1095,7 @@ static int exynos5422_init_int_table(struct busfreq_data_int *data)
 	unsigned int i;
 	unsigned int ret;
 	unsigned int asv_volt;
+	unsigned int asv_abb = 0;
 
 	/* will add code for ASV information setting function in here */
 
@@ -1114,8 +1115,11 @@ static int exynos5422_init_int_table(struct busfreq_data_int *data)
 			dev_err(data->dev, "Fail to add opp entries.\n");
 			return ret;
 		}
-
-		devfreq_int_asv_abb[i] = get_match_abb(ID_INT, int_bus_opp_list[i].freq);
+		asv_abb = get_match_abb(ID_INT, int_bus_opp_list[i].freq);
+		if (!asv_abb)
+			devfreq_int_asv_abb[i] = ABB_BYPASS;
+		else
+			devfreq_int_asv_abb[i] = asv_abb;
 
 		pr_info("DEVFREQ(INT) : %luKhz, ABB %u\n", int_bus_opp_list[i].freq, devfreq_int_asv_abb[i]);
 	}
@@ -1259,8 +1263,8 @@ static int exynos5_devfreq_int_probe(struct platform_device *pdev)
 
 	exynos5_int_devfreq_profile.freq_table = kzalloc(sizeof(int) * LV_END, GFP_KERNEL);
 	if (exynos5_int_devfreq_profile.freq_table == NULL) {
+		pr_err("DEVFREQ(INT) : Failed to allocate freq table\n");
 		kfree(data);
-		pr_err("DEVFREQ(MIF) : Failed to allocate freq table\n");
 		return -ENOMEM;
 	}
 
@@ -1473,6 +1477,7 @@ err_fout_ipll:
 err_fout_spll:
 	regulator_put(data->vdd_int);
 err_regulator:
+	kfree(exynos5_int_devfreq_profile.freq_table);
 	kfree(data);
 
 	return err;
@@ -1498,6 +1503,7 @@ static int exynos5_devfreq_int_remove(struct platform_device *pdev)
 
 	regulator_put(data->vdd_int);
 
+	kfree(exynos5_int_devfreq_profile.freq_table);
 	kfree(data);
 
 	platform_set_drvdata(pdev, NULL);

@@ -137,9 +137,9 @@ static void exynos5_ppmu_add(struct exynos_ppmu *to, struct exynos_ppmu *from,
 
 	for (i = start; i <= end; i++) {
 		for (j = PPMU_PMNCNT0; j < PPMU_PMNCNT_MAX; j++)
-			to[i].count[j] += from[i].count[j];
+			to[i].count[j] = from[i].count[j];
 
-		to[i].ccnt += from[i].ccnt;
+		to[i].ccnt = from[i].ccnt;
 		if (to[i].ccnt < from[i].ccnt)
 			to[i].ccnt_overflow = true;
 
@@ -191,17 +191,16 @@ static int exynos5_ppmu_get_filter(enum exynos_ppmu_sets filter,
 }
 
 int exynos5_ppmu_get_busy(struct exynos5_ppmu_handle *handle,
-	enum exynos_ppmu_sets filter, unsigned int *ccnt,
-	unsigned long *pmcnt)
+	enum exynos_ppmu_sets filter, unsigned long long *ccnt,
+	unsigned long long *pmcnt)
 {
 	unsigned long flags;
 	int i;
 	int busy = 0;
-	int temp;
 	enum exynos5_ppmu_list start, end;
 	int ret;
-	unsigned int max_ccnt = 0, temp_ccnt = 0;
-	unsigned long max_pmcnt = 0, temp_pmcnt = 0;
+	unsigned long max_ccnt = 0, temp_ccnt = 0;
+	unsigned long temp_drex0_pmcnt = 0, temp_drex1_pmcnt = 0;
 
 	ret = exynos5_ppmu_get_filter(filter, &start, &end);
 	if (ret < 0)
@@ -211,6 +210,11 @@ int exynos5_ppmu_get_busy(struct exynos5_ppmu_handle *handle,
 
 	exynos5_ppmu_update(start, end);
 
+	/* for MIF usage calculation
+	 * DREX0 = 1.5 * RWcpu + 0.5 * RWdev
+	 * DREX1 = 1   * RWcpu + 1   * RWdev
+	 * pmcnt = max(DREX0, DREX1) * 1.5 (usage_rate proportional value for 5422)
+	 */
 	for (i = start; i <= end; i++) {
 		if (handle->ppmu[i].ccnt_overflow) {
 			busy = -EOVERFLOW;
@@ -221,21 +225,22 @@ int exynos5_ppmu_get_busy(struct exynos5_ppmu_handle *handle,
 		if (temp_ccnt > max_ccnt)
 			max_ccnt = temp_ccnt;
 
-		temp_pmcnt = handle->ppmu[i].count[PPMU_PMNCNT3];
-		if (temp_pmcnt > max_pmcnt)
-			max_pmcnt = temp_pmcnt;
-
-		temp = handle->ppmu[i].count[PPMU_PMNCNT3] * 100;
-		if (handle->ppmu[i].count > 0 && temp > 0)
-			temp /= handle->ppmu[i].ccnt;
-
-		if (temp > busy)
-			busy = temp;
-
+		if (i == PPMU_DMC_0_0)
+			temp_drex0_pmcnt += (handle->ppmu[i].count[PPMU_PMNCNT3] * 15 / 10);
+		else if (i == PPMU_DMC_0_1)
+			temp_drex0_pmcnt += (handle->ppmu[i].count[PPMU_PMNCNT3] * 5 / 10);
+		else
+			temp_drex1_pmcnt += handle->ppmu[i].count[PPMU_PMNCNT3];
 	}
 
 	*ccnt = max_ccnt;
-	*pmcnt = max_pmcnt;
+	*pmcnt = max(temp_drex0_pmcnt * 15 / 10, temp_drex1_pmcnt);
+
+	if (max_ccnt > 0) {
+		busy = div_u64((*pmcnt * 100), max_ccnt);
+	} else {
+		busy = -EINVAL;
+	}
 
 	exynos5_ppmu_handle_clear(handle, (end - start) + 1);
 

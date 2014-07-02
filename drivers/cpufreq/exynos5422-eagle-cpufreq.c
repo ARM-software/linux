@@ -128,31 +128,31 @@ static unsigned int clkdiv_cpu0_5422_CA15[CPUFREQ_LEVEL_END_CA15][7] = {
 	{ 2, 7, 7, 3, 0 },
 
 	/* ARM L14: 1000MHz */
-	{ 2, 6, 7, 3, 0 },
+	{ 2, 6, 6, 3, 0 },
 
 	/* ARM L15: 900MHz */
-	{ 2, 6, 7, 3, 0 },
+	{ 2, 6, 6, 3, 0 },
 
 	/* ARM L16: 800MHz */
-	{ 2, 5, 7, 3, 0 },
+	{ 2, 5, 5, 3, 0 },
 
 	/* ARM L17: 700MHz */
-	{ 2, 5, 7, 3, 0 },
+	{ 2, 5, 5, 3, 0 },
 
 	/* ARM L18: 600MHz */
-	{ 2, 4, 7, 3, 0 },
+	{ 2, 4, 4, 3, 0 },
 
 	/* ARM L19: 500MHz */
-	{ 2, 3, 7, 3, 0 },
+	{ 2, 3, 3, 3, 0 },
 
 	/* ARM L20: 400MHz */
-	{ 2, 3, 7, 3, 0 },
+	{ 2, 3, 3, 3, 0 },
 
 	/* ARM L21: 300MHz */
-	{ 2, 3, 7, 3, 0 },
+	{ 2, 3, 3, 3, 0 },
 
 	/* ARM L22: 200MHz */
-	{ 2, 3, 7, 3, 0 },
+	{ 2, 3, 3, 3, 0 },
 };
 
 static unsigned int clkdiv_cpu1_5422_CA15[CPUFREQ_LEVEL_END_CA15][2] = {
@@ -288,8 +288,7 @@ static unsigned int exynos5422_apll_pms_table_CA15[CPUFREQ_LEVEL_END_CA15] = {
 	((175 << 16) | (3 << 8) | (0x1)),
 
 	/* APLL FOUT L18: 600MHz */
-	((200 << 16) | (2 << 8) | (0x2)),
-
+	((100 << 16) | (2 << 8) | (0x1)),
 	/* APLL FOUT L19: 500MHz */
 	((250 << 16) | (3 << 8) | (0x2)),
 
@@ -297,7 +296,7 @@ static unsigned int exynos5422_apll_pms_table_CA15[CPUFREQ_LEVEL_END_CA15] = {
 	((200 << 16) | (3 << 8) | (0x2)),
 
 	/* APLL FOUT L21: 300MHz */
-	((200 << 16) | (2 << 8) | (0x3)),
+	((100 << 16) | (2 << 8) | (0x2)),
 
 	/* APLL FOUT L22: 200MHz */
 	((200 << 16) | (3 << 8) | (0x3)),
@@ -339,24 +338,24 @@ static int exynos5422_bus_table_CA15[CPUFREQ_LEVEL_END_CA15] = {
 	825000, /* 2.2 GHz */
 	825000, /* 2.1 GHz */
 	825000, /* 2.0 GHz */
-	825000, /* 1.9 GHz */
+	728000, /* 1.9 GHz */
 	728000, /* 1.8 GHz */
 	728000, /* 1.7 MHz */
-	633000, /* 1.6 GHz */
+	728000, /* 1.6 GHz */
 	633000, /* 1.5 GHz */
 	633000, /* 1.4 GHz */
 	633000, /* 1.3 GHz */
 	633000, /* 1.2 GHz */
-	633000, /* 1.1 GHz */
+	543000, /* 1.1 GHz */
 	543000, /* 1.0 GHz */
-	543000, /* 900 MHz */
-	543000, /* 800 MHz */
-	543000, /* 700 MHz */
-	543000, /* 600 MHz */
-	543000, /* 500 MHz */
-	543000, /* 400 MHz */
-	543000, /* 300 MHz */
-	543000, /* 200 MHz */
+	413000, /* 900 MHz */
+	413000, /* 800 MHz */
+	413000, /* 700 MHz */
+	413000, /* 600 MHz */
+	413000, /* 500 MHz */
+	413000, /* 400 MHz */
+	413000, /* 300 MHz */
+	413000, /* 200 MHz */
 };
 
 static void exynos5422_set_int_skew_CA15(int new_index)
@@ -391,7 +390,7 @@ static void exynos5422_set_clkdiv_CA15(unsigned int div_index)
 	do {
 		cpu_relax();
 		tmp = __raw_readl(EXYNOS5_CLKDIV_STATCPU0);
-	} while (tmp & 0x11110010);
+	} while (tmp & 0x11111111);
 
 #ifdef PRINT_DIV_VAL
 	tmp = __raw_readl(EXYNOS5_CLKDIV_CPU0);
@@ -406,7 +405,7 @@ static void exynos5422_set_clkdiv_CA15(unsigned int div_index)
 	do {
 		cpu_relax();
 		tmp = __raw_readl(EXYNOS5_CLKDIV_STATCPU1);
-	} while (tmp & 0x11);
+	} while (tmp & 0x111);
 
 #ifdef PRINT_DIV_VAL
 	tmp = __raw_readl(EXYNOS5_CLKDIV_CPU1);
@@ -416,6 +415,7 @@ static void exynos5422_set_clkdiv_CA15(unsigned int div_index)
 
 #define CLK_ENA(a) clk_prepare_enable(a)
 #define CLK_DIS(a) clk_disable_unprepare(a)
+#define USING_CCF
 static void exynos5422_set_egl_pll_CA15(unsigned int new_index, unsigned int old_index)
 {
 	unsigned int tmp, pdiv;
@@ -436,6 +436,7 @@ static void exynos5422_set_egl_pll_CA15(unsigned int new_index, unsigned int old
 		>> EXYNOS5_CLKSRC_CPU_MUXCORE_SHIFT);
 		tmp &= 0x7;
 	} while (tmp != 0x2);
+#ifndef USING_CCF
 	/* 2. Set APLL Lock time */
 	pdiv = ((exynos5422_apll_pms_table_CA15[new_index] >> 8) & 0x3f);
 
@@ -452,7 +453,11 @@ static void exynos5422_set_egl_pll_CA15(unsigned int new_index, unsigned int old
 		cpu_relax();
 		tmp = __raw_readl(EXYNOS5_APLL_CON0);
 	} while (!(tmp & (0x1 << EXYNOS5_APLLCON0_LOCKED_SHIFT)));
-
+#else
+	pdiv = 0;
+	clk_set_rate(fout_apll, exynos5422_freq_table_CA15[new_index].frequency*1000);
+	pr_debug("apll set_rate:%ld\n", clk_get_rate(fout_apll));
+#endif
 	/* 5. MUX_CORE_SEL = APLL */
 	if (clk_set_parent(mout_cpu, mout_apll))
 		pr_err("Unable to set parent %s of clock %s.\n",
@@ -519,7 +524,6 @@ static void exynos5422_set_frequency_CA15(unsigned int old_index,
 		}
 	}
 
-	clk_set_rate(fout_apll, exynos5422_freq_table_CA15[new_index].frequency * 1000);
 	pr_debug("post clk [%ld]\n", clk_get_rate(dout_cpu));
 }
 
@@ -527,6 +531,7 @@ static void __init set_volt_table_CA15(void)
 {
 	unsigned int i;
 	unsigned int asv_volt __maybe_unused;
+	unsigned int asv_abb = 0;
 
 	for (i = 0; i < CPUFREQ_LEVEL_END_CA15; i++) {
 		/* FIXME: need to update voltage table for REV1 */
@@ -540,15 +545,21 @@ static void __init set_volt_table_CA15(void)
 		pr_info("CPUFREQ of CA15 L%d : %d uV\n", i,
 		exynos5422_volt_table_CA15[i]);
 
-		exynos5422_abb_table_CA15[i] =
-			get_match_abb(ID_ARM, exynos5422_freq_table_CA15[i].frequency);
+		asv_abb = get_match_abb(ID_ARM, exynos5422_freq_table_CA15[i].frequency);
+		if (!asv_abb)
+			exynos5422_abb_table_CA15[i] = ABB_BYPASS;
+		else
+			exynos5422_abb_table_CA15[i] = asv_abb;
 
 		pr_info("CPUFREQ of CA15  L%d : ABB %d\n", i,
 				exynos5422_abb_table_CA15[i]);
 	}
 
 	/* Max/Min A15 Frequencies */
-	max_support_idx_CA15 = L6; 
+	if(exynos5422_tbl_ver_is_bin2())
+		max_support_idx_CA15 = L6; 
+	else
+		max_support_idx_CA15 = L3;
 	min_support_idx_CA15 = L16;
 }
 

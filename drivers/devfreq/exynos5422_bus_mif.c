@@ -44,10 +44,10 @@
 
 #define SET_DREX_TIMING
 
-inline void REGULATOR_SET_VOLTAGE(struct regulator *a, unsigned long b, unsigned long c)
+inline void REGULATOR_SET_VOLTAGE(struct regulator *a, unsigned long b, unsigned long c, bool is_first_level)
 {
 	bool dynamic_self_refresh_enabled = (__raw_readl(S5P_VA_DREXI_0 + 0x4) & 0x20) ? 1 : 0; /* check default status */
-	if(dynamic_self_refresh_enabled) {
+	if(is_first_level && dynamic_self_refresh_enabled) {
 		pr_debug("MIF:dynamic self-refresh enabled\n");
 		__raw_writel(__raw_readl(S5P_VA_DREXI_0 + 0x4) & ~0x20, S5P_VA_DREXI_0 + 0x4); /* DREX0: MemControl.deref_en = 0 */
 		__raw_writel(__raw_readl(S5P_VA_DREXI_1 + 0x4) & ~0x20, S5P_VA_DREXI_1 + 0x4); /* DREX1: MemControl.deref_en = 0 */
@@ -57,7 +57,7 @@ inline void REGULATOR_SET_VOLTAGE(struct regulator *a, unsigned long b, unsigned
 		__raw_writel(0x08100000, S5P_VA_DREXI_1 + 0x10); /* DREX1 chip1: Exit from self refresh */
 	}
 	regulator_set_voltage(a, b, c);
-	if(dynamic_self_refresh_enabled) {
+	if(is_first_level && dynamic_self_refresh_enabled) {
 		__raw_writel(__raw_readl(S5P_VA_DREXI_0 + 0x4) | 0x20, S5P_VA_DREXI_0 + 0x4); /* DREX0: MemControl.deref_en = 1 */
 		__raw_writel(__raw_readl(S5P_VA_DREXI_1 + 0x4) | 0x20, S5P_VA_DREXI_1 + 0x4); /* DREX1: MemControl.deref_en = 1 */
 	}
@@ -82,11 +82,6 @@ static bool en_profile;
 #define SET_0			0
 #define SET_1			1
 
-#define NEW_THERMAL
-#ifdef CONFIG_EXYNOS_THERMAL
-bool mif_is_probed;
-#endif
-
 static bool mif_transition_disabled;
 static unsigned int enabled_fimc_lite;
 unsigned int enabled_ud_encode;
@@ -99,8 +94,6 @@ static struct pm_qos_request boot_mif_qos;
 static struct pm_qos_request media_mif_qos;
 static struct pm_qos_request min_mif_thermal_qos;
 cputime64_t mif_pre_time;
-
-static struct pm_qos_request exynos5_int_qos;
 
 static DEFINE_MUTEX(media_mutex);
 
@@ -145,54 +138,8 @@ struct busfreq_data_mif {
 
 	struct notifier_block tmu_notifier;
 	int busy;
-#ifdef CONFIG_EXYNOS_THERMAL
-#ifdef NEW_THERMAL
-	void __iomem *base_drex0;
-	void __iomem *base_drex1;
-#endif
-#endif
 };
 
-#ifdef CONFIG_EXYNOS_THERMAL
-#ifdef NEW_THERMAL
-#include <linux/workqueue.h>
-#define MRSTATUS_THERMAL_BIT_SHIFT (7)
-#define MRSTATUS_THERMAL_BIT_MASK  (1)
-#define MRSTATUS_THERMAL_LV_MASK   (0x7)
-
-enum devfreq_mif_thermal_autorate {
-	RATE_ONE = 0x0000005D,
-	RATE_HALF = 0x0000002E,
-	RATE_QUARTER = 0x00000017,
-};
-
-enum devfreq_mif_thermal_channel {
-	THERMAL_CHANNEL0,
-	THERMAL_CHANNEL1,
-};
-struct devfreq_thermal_work {
-	struct delayed_work devfreq_mif_thermal_work;
-	enum devfreq_mif_thermal_channel channel;
-	struct workqueue_struct *work_queue;
-	unsigned int polling_period;
-	unsigned long max_freq;
-	unsigned int thermal_level_cs0;
-	unsigned int thermal_level_cs1;
-};
-static struct workqueue_struct *devfreq_mif_thermal_wq_ch0;
-static struct workqueue_struct *devfreq_mif_thermal_wq_ch1;
-static struct devfreq_thermal_work devfreq_mif_ch0_work = {
-	.channel = THERMAL_CHANNEL0,
-	.polling_period = 1000,
-};
-static struct devfreq_thermal_work devfreq_mif_ch1_work = {
-	.channel = THERMAL_CHANNEL1,
-	.polling_period = 1000,
-};
-struct busfreq_data_mif *data_mif;
-
-#endif
-#endif
 enum mif_bus_idx {
 	LV_0 = 0,
 	LV_1,
@@ -256,7 +203,7 @@ static unsigned int mif_fimc_opp_list[][3] = {
 static unsigned int devfreq_mif_asv_abb[LV_END];
 
 static unsigned int (*exynos5422_dram_param)[3];
-static unsigned int *exynos5422_dram_param_spll;
+static unsigned int *exynos5422_dram_switching_param;
 
 #if defined(SET_DREX_TIMING)
 static unsigned int exynos5422_dram_param_3gb[][3] = {
@@ -283,35 +230,39 @@ static unsigned int exynos5422_dram_param_3gb[][3] = {
 	{0x11222144, 0x2620065C, 0x100C0225},	/* 133Mhz */
 #endif
 };
+#endif
 
 #ifdef CONFIG_SOC_EXYNOS5422_REV_0
 static unsigned int exynos5422_dram_param_2gb[][3] = {
 	/* timiningRow, timingData, timingPower */
-	{0x365A9713, 0x4740085E, 0x543A0446},	/*825Mhz*/
-	{0x30598651, 0x3730085E, 0x4C330336},	/*728Mhz*/
-	{0x2A48758F, 0x3730085E, 0x402D0335},	/*633Mhz*/
-	{0x244764CD, 0x3730085E, 0x38270335},	/*543Mhz*/
-	{0x1B35538A, 0x2720085E, 0x2C1D0225},	/*413Mhz*/
-	{0x12244287, 0x2720085E, 0x1C140225},	/*275Mhz*/
-	{0x112331C6, 0x2720085E, 0x180F0225},	/*206Mhz*/
-	{0x12223185, 0x2720085E, 0x140C0225},	/*165Mhz*/
-	{0x11222144, 0x2720085E, 0x100C0225},	/*138Mhz*/
+	{0x365A9713, 0x4740085E, 0x543A0446},   /*825Mhz*/
+	{0x30598651, 0x3730085E, 0x4C330336},   /*728Mhz*/
+	{0x2A48758F, 0x3730085E, 0x402D0335},   /*633Mhz*/
+	{0x244764CD, 0x3730085E, 0x38270335},   /*543Mhz*/
+	{0x1B35538A, 0x2720085E, 0x2C1D0225},   /*413Mhz*/
+	{0x12244287, 0x2720085E, 0x1C140225},   /*275Mhz*/
+	{0x112331C6, 0x2720085E, 0x180F0225},   /*206Mhz*/
+	{0x11223185, 0x2720085E, 0x140C0225},   /*165Mhz*/
+	{0x11222144, 0x2720085E, 0x100C0225},   /*138Mhz*/
 };
 #endif
 
-#ifdef CONFIG_SOC_EXYNOS5422_REV_0
-static unsigned int exynos5422_dram_param_spll_3gb[3] = {
-	/* timiningRow, timingData, timingPower */
+static struct devfreq_simple_exynos_data exynos5_mif_governor_data = {
+	.urgentthreshold	= 65,
+	.upthreshold		= 60,
+	.downthreshold		= 45,
+	.idlethreshold		= 30,
+	.cal_qos_max		= 825000,
+	.pm_qos_class		= PM_QOS_BUS_THROUGHPUT,
+};
+
+static unsigned int exynos5422_dram_switching_param_3gb[3] = {
 	0x2A35538A, 0x2720085E, 0x282C0225	/*400Mhz*/
 };
 
-static unsigned int exynos5422_dram_param_spll_2gb[3] = {
-	/* timiningRow, timingData, timingPower */
-	0x1A35538A, 0x2720085E, 0x2720085E	/*400Mhz*/
+static unsigned int exynos5422_dram_switching_param_2gb[3] = {
+	0x1A35538A, 0x2720085E, 0x281C0225	/*400Mhz*/
 };
-
-#endif
-#endif
 
 /*
  * MIF devfreq notifier
@@ -542,9 +493,9 @@ static void exynos5_set_spll_timing(void)
 {
 	unsigned int spll_timing_row, spll_timing_data, spll_timing_power;
 #ifdef CONFIG_SOC_EXYNOS5422_REV_0
-	spll_timing_row = exynos5422_dram_param_spll[0];
-	spll_timing_data = exynos5422_dram_param_spll[1];
-	spll_timing_power = exynos5422_dram_param_spll[2];
+	spll_timing_row = exynos5422_dram_switching_param[0];
+	spll_timing_data = exynos5422_dram_switching_param[1];
+	spll_timing_power = exynos5422_dram_switching_param[2];
 #else
 	spll_timing_row = exynos5422_dram_param[LV_4][0];
 	spll_timing_data = exynos5422_dram_param[LV_4][1];
@@ -645,14 +596,6 @@ static void exynos5_mif_set_freq(struct busfreq_data_mif *data,
 		}
 	}
 
-	if (target_idx <= LV_4) {
-		if (!pm_qos_request_active(&exynos5_int_qos))
-			pm_qos_add_request(&exynos5_int_qos, PM_QOS_DEVICE_THROUGHPUT, 111000);
-	} else {
-		if (pm_qos_request_active(&exynos5_int_qos))
-			pm_qos_remove_request(&exynos5_int_qos);
-	}
-
 	if (!data->bp_enabled && (target_freq <= mif_bus_opp_list[LV_4].clk ||
 		(enabled_ud_decode || enabled_ud_encode || enabled_fimc_lite))) {
 		exynos5_back_pressure_enable(true);
@@ -748,6 +691,7 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 	unsigned long target_volt;
 	int i, target_idx = LV_0;
 	bool set_abb_first_than_volt;
+	bool is_first_level;
 
 	if (mif_transition_disabled)
 		return 0;
@@ -767,13 +711,6 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 	target_volt = opp_get_voltage(opp);
 	rcu_read_unlock();
 
-#ifdef CONFIG_EXYNOS_THERMAL
-#ifdef NEW_THERMAL
-	freq = min3(freq,
-			devfreq_mif_ch0_work.max_freq,
-			devfreq_mif_ch1_work.max_freq);
-#endif
-#endif
 	/* get olg opp information */
 	rcu_read_lock();
 	old_freq = opp_get_freq(data->curr_opp);
@@ -799,6 +736,7 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 	}
 
 	set_abb_first_than_volt = is_set_abb_first(ID_MIF, old_freq, freq);
+	is_first_level = (target_idx == LV_0);
 
 	/*
 	 * If target freq is higher than old freq
@@ -809,10 +747,12 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 			set_match_abb(ID_MIF, devfreq_mif_asv_abb[target_idx]);
 		if ((old_freq < data->mspll_freq) && (freq < data->mspll_freq))
 			REGULATOR_SET_VOLTAGE(data->vdd_mif, data->mspll_volt,
-					data->mspll_volt + MIF_VOLT_STEP);
+					data->mspll_volt + MIF_VOLT_STEP,
+					is_first_level);
 		else
 			REGULATOR_SET_VOLTAGE(data->vdd_mif, target_volt,
-					target_volt + MIF_VOLT_STEP);
+					target_volt + MIF_VOLT_STEP,
+					is_first_level);
 
 		if (!set_abb_first_than_volt)
 			set_match_abb(ID_MIF, devfreq_mif_asv_abb[target_idx]);
@@ -822,7 +762,8 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 			if (set_abb_first_than_volt)
 				set_match_abb(ID_MIF, devfreq_mif_asv_abb[target_idx]);
 			REGULATOR_SET_VOLTAGE(data->vdd_mif, target_volt,
-					target_volt + MIF_VOLT_STEP);
+					target_volt + MIF_VOLT_STEP,
+					is_first_level);
 			if (!set_abb_first_than_volt)
 				set_match_abb(ID_MIF, devfreq_mif_asv_abb[target_idx]);
 		}
@@ -840,7 +781,8 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 			if (set_abb_first_than_volt)
 				set_match_abb(ID_MIF, devfreq_mif_asv_abb[target_idx]);
 			REGULATOR_SET_VOLTAGE(data->vdd_mif, data->mspll_volt,
-					data->mspll_volt + MIF_VOLT_STEP);
+					data->mspll_volt + MIF_VOLT_STEP,
+					is_first_level);
 			if (!set_abb_first_than_volt)
 				set_match_abb(ID_MIF, devfreq_mif_asv_abb[target_idx]);
 		}
@@ -848,7 +790,8 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 		exynos5_mif_set_freq(data, old_freq, freq);
 		if (set_abb_first_than_volt)
 			set_match_abb(ID_MIF, devfreq_mif_asv_abb[target_idx]);
-		REGULATOR_SET_VOLTAGE(data->vdd_mif, target_volt, target_volt + MIF_VOLT_STEP);
+		REGULATOR_SET_VOLTAGE(data->vdd_mif, target_volt, target_volt + MIF_VOLT_STEP,
+					is_first_level);
 		if (!set_abb_first_than_volt)
 			set_match_abb(ID_MIF, devfreq_mif_asv_abb[target_idx]);
 	}
@@ -866,12 +809,36 @@ static int exynos5_mif_bus_get_dev_status(struct device *dev,
 {
 	struct busfreq_data_mif *data = dev_get_drvdata(dev);
 	unsigned long busy_data;
-	unsigned int int_ccnt = 0;
-	unsigned long int_pmcnt = 0;
+	unsigned long long int_ccnt = 0;
+	unsigned long long int_pmcnt = 0;
+	unsigned int idx = -1;
+	int above_idx = 0;
+	int below_idx = LV_END - 1;
+	int i;
 
 	rcu_read_lock();
 	stat->current_frequency = opp_get_freq(data->curr_opp);
 	rcu_read_unlock();
+
+	for (i = LV_0; i < LV_END; i++) {
+		if (mif_bus_opp_list[i].clk == stat->current_frequency) {
+			idx = i;
+			above_idx = i - 1;
+			below_idx = i + 1;
+			break;
+		}
+	}
+
+	if (idx < 0)
+		return -EAGAIN;
+
+	if (above_idx < 0)
+		above_idx = 0;
+	if (below_idx >= LV_END)
+		below_idx = LV_END - 1;
+
+	exynos5_mif_governor_data.above_freq = mif_bus_opp_list[above_idx].clk;
+	exynos5_mif_governor_data.below_freq = mif_bus_opp_list[below_idx].clk;
 
 	/*
 	 * Bandwidth of memory interface is 128bits
@@ -881,14 +848,14 @@ static int exynos5_mif_bus_get_dev_status(struct device *dev,
 			&int_ccnt, &int_pmcnt);
 
 	/* TODO: ppmu will return 0, when after suspend/resume */
-	if(!(int_ccnt | int_pmcnt))
-		return 0;
+	if (!int_ccnt)
+		return -EAGAIN;
 
 	stat->total_time = int_ccnt;
 	stat->busy_time = int_pmcnt;
 
 	if (en_profile)
-		pr_info("%lu,%lu\n", stat->busy_time, stat->total_time);
+		pr_info("%llu,%llu\n", stat->busy_time, stat->total_time);
 
 	return 0;
 }
@@ -909,15 +876,15 @@ static int exynos5422_dram_parameter(void)
 
 	pkg_id = (pkg_id >> 4) & 0xf;
 
-	if (pkg_id == 0x2) {
+	if (pkg_id == 0x2 || pkg_id == 0x3) {
 		exynos5422_dram_param = exynos5422_dram_param_2gb;
-		exynos5422_dram_param_spll = exynos5422_dram_param_spll_2gb;
+		exynos5422_dram_switching_param = exynos5422_dram_switching_param_2gb;
 		return 0;
 	}
 
-	if (pkg_id == 0x0 || pkg_id == 0x1 || pkg_id == 0x7) {
+	if (pkg_id == 0x0 || pkg_id == 0x1 || pkg_id == 0x8) {
 		exynos5422_dram_param = exynos5422_dram_param_3gb;
-		exynos5422_dram_param_spll = exynos5422_dram_param_spll_3gb;
+		exynos5422_dram_switching_param = exynos5422_dram_switching_param_3gb;
 		return 0;
 	}
 
@@ -929,7 +896,6 @@ static int exynos5422_mif_table(struct busfreq_data_mif *data)
 	unsigned int i;
 	unsigned int ret;
 	unsigned int asv_volt;
-	unsigned int asv_abb = 0;
 
 	/* will add code for ASV information setting function in here */
 
@@ -949,175 +915,15 @@ static int exynos5422_mif_table(struct busfreq_data_mif *data)
 			dev_err(data->dev, "Fail to add opp entries.\n");
 			return ret;
 		}
-		asv_abb = get_match_abb(ID_MIF, mif_bus_opp_list[i].clk);
-		if (!asv_abb)
-			devfreq_mif_asv_abb[i] = ABB_BYPASS;
-		else
-			devfreq_mif_asv_abb[i] = asv_abb;
+
+		devfreq_mif_asv_abb[i] = get_match_abb(ID_MIF, mif_bus_opp_list[i].clk);
+
 		pr_info("DEVFREQ(MIF) : %luKhz, ABB %u\n", mif_bus_opp_list[i].clk, devfreq_mif_asv_abb[i]);
 	}
 
 	return 0;
 }
 
-#if defined(CONFIG_DEVFREQ_GOV_SIMPLE_USAGE)
-static struct devfreq_simple_usage_data exynos5_mif_governor_data = {
-	.upthreshold		= 85,
-	.target_percentage	= 80,
-	.proportional		= 100,
-	.cal_qos_max		= 825000,
-	.pm_qos_class		= PM_QOS_BUS_THROUGHPUT,
-};
-#endif
-
-#ifdef CONFIG_EXYNOS_THERMAL
-#ifdef NEW_THERMAL
-static void exynos5_devfreq_thermal_event(struct devfreq_thermal_work *work)
-{
-	if (work->polling_period == 0)
-		return;
-
-	queue_delayed_work(work->work_queue,
-			&work->devfreq_mif_thermal_work,
-			msecs_to_jiffies(work->polling_period));
-}
-
-static ssize_t mif_show_templvl_ch0_0(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%u\n", devfreq_mif_ch0_work.thermal_level_cs0);
-}
-static ssize_t mif_show_templvl_ch0_1(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%u\n", devfreq_mif_ch0_work.thermal_level_cs1);
-}
-static ssize_t mif_show_templvl_ch1_0(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%u\n", devfreq_mif_ch1_work.thermal_level_cs0);
-}
-static ssize_t mif_show_templvl_ch1_1(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%u\n", devfreq_mif_ch1_work.thermal_level_cs1);
-}
-
-static DEVICE_ATTR(mif_templvl_ch0_0, 0644, mif_show_templvl_ch0_0, NULL);
-static DEVICE_ATTR(mif_templvl_ch0_1, 0644, mif_show_templvl_ch0_1, NULL);
-static DEVICE_ATTR(mif_templvl_ch1_0, 0644, mif_show_templvl_ch1_0, NULL);
-static DEVICE_ATTR(mif_templvl_ch1_1, 0644, mif_show_templvl_ch1_1, NULL);
-
-static struct attribute *devfreq_mif_sysfs_entries[] = {
-	&dev_attr_mif_templvl_ch0_0.attr,
-	&dev_attr_mif_templvl_ch0_1.attr,
-	&dev_attr_mif_templvl_ch1_0.attr,
-	&dev_attr_mif_templvl_ch1_1.attr,
-	NULL,
-};
-
-static struct attribute_group devfreq_mif_attr_group = {
-	.name   = "temp_level",
-	.attrs  = devfreq_mif_sysfs_entries,
-};
-
-static void exynos5_devfreq_thermal_monitor(struct work_struct *work)
-{
-	struct delayed_work *d_work = container_of(work, struct delayed_work, work);
-	struct devfreq_thermal_work *thermal_work =
-		container_of(d_work, struct devfreq_thermal_work, devfreq_mif_thermal_work);
-	unsigned int mrstatus, tmp_thermal_level, max_thermal_level = 0;
-	unsigned int timingaref_value = RATE_ONE;
-	unsigned long max_freq = exynos5_mif_governor_data.cal_qos_max;
-	bool throttling = false;
-	void __iomem *base_drex = NULL;
-
-	if (thermal_work->channel == THERMAL_CHANNEL0) {
-		base_drex = data_mif->base_drex0;
-	} else if (thermal_work->channel == THERMAL_CHANNEL1) {
-		base_drex = data_mif->base_drex1;
-	}
-	__raw_writel(0x09001000, base_drex + 0x10);
-	mrstatus = __raw_readl(base_drex + 0x54);
-	tmp_thermal_level = (mrstatus & MRSTATUS_THERMAL_LV_MASK);
-	if (tmp_thermal_level > max_thermal_level)
-		max_thermal_level = tmp_thermal_level;
-
-	thermal_work->thermal_level_cs0 = tmp_thermal_level;
-
-	if (thermal_work->channel == THERMAL_CHANNEL0)
-		devfreq_mif_ch0_work.thermal_level_cs0 = thermal_work->thermal_level_cs0;
-	else if (thermal_work->channel == THERMAL_CHANNEL1)
-		devfreq_mif_ch1_work.thermal_level_cs0 = thermal_work->thermal_level_cs0;
-
-	__raw_writel(0x09101000, base_drex + 0x10);
-	mrstatus = __raw_readl(base_drex + 0x54);
-	tmp_thermal_level = (mrstatus & MRSTATUS_THERMAL_LV_MASK);
-	if (tmp_thermal_level > max_thermal_level)
-		max_thermal_level = tmp_thermal_level;
-
-	thermal_work->thermal_level_cs1 = tmp_thermal_level;
-
-	if (thermal_work->channel == THERMAL_CHANNEL0)
-		devfreq_mif_ch0_work.thermal_level_cs1 = thermal_work->thermal_level_cs1;
-	else if (thermal_work->channel == THERMAL_CHANNEL1)
-		devfreq_mif_ch1_work.thermal_level_cs1 = thermal_work->thermal_level_cs1;
-
-	switch (max_thermal_level) {
-		case 0:
-		case 1:
-		case 2:
-		case 3:
-			timingaref_value = RATE_HALF;
-			thermal_work->polling_period = 1000;
-			break;
-		case 4:
-			timingaref_value = RATE_HALF;
-			thermal_work->polling_period = 300;
-			break;
-		case 6:
-			throttling = true;
-		case 5:
-			timingaref_value = RATE_QUARTER;
-			thermal_work->polling_period = 100;
-			break;
-		default:
-			pr_err("DEVFREQ(MIF) : can't support memory thermal level\n");
-			return;
-	}
-
-	if (throttling){
-		max_freq = mif_bus_opp_list[LV_6].clk;
-	}
-	else
-		max_freq = exynos5_mif_governor_data.cal_qos_max;
-
-	if (thermal_work->max_freq != max_freq) {
-		thermal_work->max_freq = max_freq;
-		mutex_lock(&data_mif->devfreq->lock);
-		data_mif->devfreq->max_freq = max_freq;
-		update_devfreq(data_mif->devfreq);
-		mutex_unlock(&data_mif->devfreq->lock);
-	}
-
-	__raw_writel(timingaref_value, base_drex + 0x30);
-	exynos5_devfreq_thermal_event(thermal_work);
-}
-
-static void exynos5_devfreq_init_thermal(void)
-{
-	devfreq_mif_thermal_wq_ch0 = create_freezable_workqueue("devfreq_thermal_wq_ch0");
-	devfreq_mif_thermal_wq_ch1 = create_freezable_workqueue("devfreq_thermal_wq_ch1");
-
-	INIT_DELAYED_WORK(&devfreq_mif_ch0_work.devfreq_mif_thermal_work,
-			exynos5_devfreq_thermal_monitor);
-	INIT_DELAYED_WORK(&devfreq_mif_ch1_work.devfreq_mif_thermal_work,
-			exynos5_devfreq_thermal_monitor);
-
-	devfreq_mif_ch0_work.work_queue = devfreq_mif_thermal_wq_ch0;
-	devfreq_mif_ch1_work.work_queue = devfreq_mif_thermal_wq_ch1;
-
-	exynos5_devfreq_thermal_event(&devfreq_mif_ch0_work);
-	exynos5_devfreq_thermal_event(&devfreq_mif_ch1_work);
-}
-#endif
-#endif
 static ssize_t mif_show_state(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	unsigned int i;
@@ -1133,120 +939,8 @@ static ssize_t mif_show_state(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR(mif_time_in_state, 0644, mif_show_state, NULL);
 
-static ssize_t show_upthreshold(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%d\n", exynos5_mif_governor_data.upthreshold);
-}
-
-static ssize_t store_upthreshold(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	unsigned int value;
-	int ret;
-
-	if (count > sizeof(value))
-		goto out;
-
-	ret = sscanf(buf, "%u", &value);
-	if (ret != 1 || value > 100)
-		goto out;
-
-	exynos5_mif_governor_data.upthreshold = value;
-out:
-	return count;
-}
-
-static DEVICE_ATTR(upthreshold, S_IRUGO | S_IWUSR, show_upthreshold, store_upthreshold);
-
-static ssize_t show_target_percentage(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%d\n", exynos5_mif_governor_data.target_percentage);
-}
-
-static ssize_t store_target_percentage(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	unsigned int value;
-	int ret;
-
-	if (count > sizeof(value))
-		goto out;
-
-	ret = sscanf(buf, "%u", &value);
-	if (ret != 1 || value > 100)
-		goto out;
-
-	exynos5_mif_governor_data.target_percentage = value;
-out:
-	return count;
-}
-
-static DEVICE_ATTR(target_percentage, S_IRUGO | S_IWUSR, show_target_percentage, store_target_percentage);
-
-static ssize_t show_proportional(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%d\n", exynos5_mif_governor_data.proportional);
-}
-
-static ssize_t store_proportional(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	unsigned int value;
-	int ret;
-
-	if (count > sizeof(value))
-		goto out;
-
-	ret = sscanf(buf, "%u", &value);
-	if (ret != 1 || value > 100)
-		goto out;
-
-	exynos5_mif_governor_data.proportional = value;
-out:
-	return count;
-}
-
-static DEVICE_ATTR(proportional, S_IRUGO | S_IWUSR, show_proportional, store_proportional);
-
-static ssize_t show_en_profile(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n", en_profile ? "true" : "false");
-}
-
-static ssize_t store_en_profile(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	unsigned int value;
-	int ret;
-
-	if (count > sizeof(value))
-		goto out;
-
-	ret = sscanf(buf, "%u", &value);
-	if (ret != 1 || value > 2)
-		goto out;
-
-	if (value)
-		en_profile = true;
-	else
-		en_profile = false;
-
-out:
-	return count;
-}
-
-static DEVICE_ATTR(en_profile, S_IRUGO | S_IWUSR, show_en_profile, store_en_profile);
-
 static struct attribute *busfreq_mif_entries[] = {
 	&dev_attr_mif_time_in_state.attr,
-	&dev_attr_upthreshold.attr,
-	&dev_attr_target_percentage.attr,
-	&dev_attr_proportional.attr,
-	&dev_attr_en_profile.attr,
 	NULL,
 };
 
@@ -1326,7 +1020,7 @@ static int exynos5_bus_mif_tmu_notifier(struct notifier_block *notifier,
 
 			/* setting voltage for MIF about cold temperature */
 			set_volt = get_limit_voltage(prev_volt, data->volt_offset);
-			REGULATOR_SET_VOLTAGE(data->vdd_mif, set_volt, set_volt + MIF_VOLT_STEP);
+			REGULATOR_SET_VOLTAGE(data->vdd_mif, set_volt, set_volt + MIF_VOLT_STEP, true);
 
 			mutex_unlock(&data->lock);
 		} else {
@@ -1343,7 +1037,7 @@ static int exynos5_bus_mif_tmu_notifier(struct notifier_block *notifier,
 
 			/* restore voltage for MIF */
 			set_volt = get_limit_voltage(prev_volt - COLD_VOLT_OFFSET, data->volt_offset);
-			REGULATOR_SET_VOLTAGE(data->vdd_mif, set_volt, set_volt + MIF_VOLT_STEP);
+			REGULATOR_SET_VOLTAGE(data->vdd_mif, set_volt, set_volt + MIF_VOLT_STEP, true);
 
 			mutex_unlock(&data->lock);
 		}
@@ -1352,7 +1046,6 @@ static int exynos5_bus_mif_tmu_notifier(struct notifier_block *notifier,
 			pm_qos_update_request(&exynos5_mif_qos, pdata->default_qos);
 	}
 
-#ifndef NEW_THERMAL
 	switch (event) {
 		case MIF_TH_LV1:
 			__raw_writel(AREF_NORMAL, EXYNOS5_DREXI_0_TIMINGAREF);
@@ -1396,7 +1089,7 @@ static int exynos5_bus_mif_tmu_notifier(struct notifier_block *notifier,
 
 			break;
 	}
-#endif
+
 	return NOTIFY_OK;
 }
 #endif
@@ -1413,6 +1106,8 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 	int err = 0;
 	unsigned long initial_freq;
 	unsigned long initial_volt, current_volt;
+	int index = -1;
+	int i;
 
 	data = kzalloc(sizeof(struct busfreq_data_mif), GFP_KERNEL);
 
@@ -1423,8 +1118,8 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 
 	exynos5_mif_devfreq_profile.freq_table = kzalloc(sizeof(int) * LV_END, GFP_KERNEL);
 	if (exynos5_mif_devfreq_profile.freq_table == NULL) {
-		pr_err("DEVFREQ(MIF) : Failed to allocate freq table\n");
 		kfree(data);
+		pr_err("DEVFREQ(MIF) : Failed to allocate freq table\n");
 		return -ENOMEM;
 	}
 
@@ -1480,7 +1175,6 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 	}
 
 	clk_set_parent(data->mx_mspll_ccore, data->mout_spll);
-	clk_put(data->mout_spll);
 
 	data->fout_spll = clk_get(dev, "fout_spll");
 	if (IS_ERR(data->fout_spll)) {
@@ -1507,7 +1201,7 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 	if (IS_ERR(data->clkm_phy0)) {
 		dev_err(dev, "Cannot get clock \"clkm_phy0\"\n");
 		err = PTR_ERR(data->clkm_phy0);
-		goto err_clkm_phy;
+		goto err_clkm_phy0;
 	}
 	data->clkm_phy1 = clk_get(dev, "clkm_phy1");
 	if (IS_ERR(data->clkm_phy1)) {
@@ -1522,11 +1216,23 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 	/* support ASV setting */
 	initial_freq = clk_get_rate(data->mclk_cdrex);
 	initial_volt = get_match_volt(ID_MIF, initial_freq/1000);
-	REGULATOR_SET_VOLTAGE(data->vdd_mif, initial_volt, initial_volt);
+	REGULATOR_SET_VOLTAGE(data->vdd_mif, initial_volt, initial_volt, true);
 	current_volt = regulator_get_voltage(data->vdd_mif);
 	if (current_volt != initial_volt)
 		dev_err(dev, "Cannot set default asv voltage\n");
 	pr_info("MIF: set ASV freq %ld, voltage %ld\n", initial_freq/1000, current_volt);
+	for (i = LV_0; i < LV_END; i++) {
+		if (mif_bus_opp_list[i].clk == exynos5_mif_devfreq_profile.initial_freq) {
+			index = mif_bus_opp_list[i].idx;
+			break;
+		}
+	}
+	if (index < 0) {
+		dev_err(dev, "Cannot find index to set abb\n");
+		err = -EINVAL;
+		goto err_opp_add;
+	}
+	set_match_abb(ID_MIF, devfreq_mif_asv_abb[index]);
 
 	data->ppmu = exynos5_ppmu_get();
 	if (!data->ppmu)
@@ -1552,20 +1258,10 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_EXYNOS_THERMAL
 	data->tmu_notifier.notifier_call = exynos5_bus_mif_tmu_notifier;
-#ifdef NEW_THERMAL
-	data->base_drex0 = S5P_VA_DREXI_0;
-	data->base_drex1 = S5P_VA_DREXI_1;
-	data_mif = data;
-#endif
 #endif
 	platform_set_drvdata(pdev, data);
-#if defined(CONFIG_DEVFREQ_GOV_SIMPLE_USAGE)
 	data->devfreq = devfreq_add_device(dev, &exynos5_mif_devfreq_profile,
-			"simple_usage", &exynos5_mif_governor_data);
-#endif
-#if defined(CONFIG_DEVFREQ_GOV_USERSPACE)
-	data->devfreq = devfreq_add_device(dev, &exynos5_mif_devfreq_profile, "user_space", NULL);
-#endif
+			"simple_exynos", &exynos5_mif_governor_data);
 	if (IS_ERR(data->devfreq)) {
 		err = PTR_ERR(data->devfreq);
 		goto err_opp_add;
@@ -1612,18 +1308,10 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 	if (err)
 		pr_err("%s: Fail to create sysfs file\n", __func__);
 
-	err = sysfs_create_group(&data->devfreq->dev.kobj, &devfreq_mif_attr_group);
-
 	pdata = pdev->dev.platform_data;
 	if (!pdata)
 		pdata = &exynos5422_qos_mif;
 
-#ifdef CONFIG_EXYNOS_THERMAL
-#ifdef NEW_THERMAL
-	devfreq_mif_ch0_work.max_freq = exynos5_mif_governor_data.cal_qos_max;
-	devfreq_mif_ch1_work.max_freq = exynos5_mif_governor_data.cal_qos_max;
-#endif
-#endif
 	pm_qos_add_request(&exynos5_mif_qos, PM_QOS_BUS_THROUGHPUT, pdata->default_qos);
 	pm_qos_add_request(&boot_mif_qos, PM_QOS_BUS_THROUGHPUT, pdata->default_qos);
 	pm_qos_add_request(&media_mif_qos, PM_QOS_BUS_THROUGHPUT, pdata->default_qos);
@@ -1635,34 +1323,28 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_EXYNOS_THERMAL
 	exynos_tmu_add_notifier(&data->tmu_notifier);
-	mif_is_probed = true;
-#ifdef NEW_THERMAL
-	devfreq_mif_ch0_work.max_freq = exynos5_mif_governor_data.cal_qos_max;
-	devfreq_mif_ch1_work.max_freq = exynos5_mif_governor_data.cal_qos_max;
-	exynos5_devfreq_init_thermal();
-#endif
 #endif
 	return 0;
 
 err_opp_add:
-	clk_put(data->clkm_phy0);
 	clk_put(data->clkm_phy1);
+err_clkm_phy0:
+	clk_put(data->clkm_phy0);
 err_clkm_phy:
 	clk_put(data->fout_bpll);
 err_fout_bpll:
 	clk_put(data->mout_bpll);
 err_mout_bpll:
-	clk_put(data->mx_mspll_ccore);
-err_mx_mspll_ccore:
-	clk_put(data->mclk_cdrex);
-err_mout_mclk_cdrex:
 	clk_put(data->fout_spll);
 err_fout_spll:
 	clk_put(data->mout_spll);
 err_mout_spll:
+	clk_put(data->mx_mspll_ccore);
+err_mx_mspll_ccore:
+	clk_put(data->mclk_cdrex);
+err_mout_mclk_cdrex:
 	regulator_put(data->vdd_mif);
 err_regulator:
-	kfree(exynos5_mif_devfreq_profile.freq_table);
 	kfree(data);
 
 	return err;
@@ -1671,15 +1353,6 @@ err_regulator:
 static int exynos5_devfreq_remove(struct platform_device *pdev)
 {
 	struct busfreq_data_mif *data = platform_get_drvdata(pdev);
-
-#ifdef CONFIG_EXYNOS_THERMAL
-#ifdef NEW_THERMAL
-	flush_workqueue(devfreq_mif_thermal_wq_ch0);
-	destroy_workqueue(devfreq_mif_thermal_wq_ch0);
-	flush_workqueue(devfreq_mif_thermal_wq_ch1);
-	destroy_workqueue(devfreq_mif_thermal_wq_ch1);
-#endif
-#endif
 
 	devfreq_remove_device(data->devfreq);
 
@@ -1696,7 +1369,6 @@ static int exynos5_devfreq_remove(struct platform_device *pdev)
 
 	regulator_put(data->vdd_mif);
 
-	kfree(exynos5_mif_devfreq_profile.freq_table);
 	kfree(data);
 
 	platform_set_drvdata(pdev, NULL);

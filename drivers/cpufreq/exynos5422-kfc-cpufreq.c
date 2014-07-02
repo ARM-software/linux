@@ -25,6 +25,7 @@
 
 #define CPUFREQ_LEVEL_END_CA7	(L14 + 1)
 #define L2_LOCAL_PWR_EN		0x3
+#define PKG_ID_DVFS_VERSION	(((__raw_readl(S5P_VA_CHIPID + 4)) >> 8) & 0x03)
 
 #undef PRINT_DIV_VAL
 #undef ENABLE_CLKOUT
@@ -324,6 +325,8 @@ static void exynos5422_set_kfc_pll_CA7(unsigned int new_index, unsigned int old_
 	/* 6. restore original div value */
 	if ((new_index < L5) && (old_index < L5))
 		exynos5422_set_clkdiv_CA7(new_index);
+		
+	clk_set_rate(fout_kpll, exynos5422_freq_table_CA7[new_index].frequency * 1000);
 }
 
 static bool exynos5422_pms_change_CA7(unsigned int old_index,
@@ -403,7 +406,11 @@ static void __init set_volt_table_CA7(void)
 	}
 	
 	/* A7's Max/Min Frequencies */
-	max_support_idx_CA7 = L2;
+	if(exynos5422_tbl_ver_is_bin2())
+		max_support_idx_CA7 = L3;
+	else
+		max_support_idx_CA7 = L2;
+		
 	min_support_idx_CA7 = L14;
 }
 

@@ -43,6 +43,11 @@ config DEVFREQ_GOV_SIMPLE_USAGE
 	help
 	  Chooses frequency based on the percentage of target device.
 
+config DEVFREQ_GOV_SIMPLE_EXYNOS
+	tristate "Simple Exynos"
+	help
+	  Chooses frequency based on the threshold of target device.
+
 config DEVFREQ_GOV_PERFORMANCE
 	tristate "Performance"
 	help
@@ -88,7 +93,7 @@ config ARM_EXYNOS5422_BUS_DEVFREQ
 	depends on SOC_EXYNOS5422
 	select ARCH_HAS_OPP
 	select PM_OPP
-	select DEVFREQ_GOV_SIMPLE_ONDEMAND
+	select DEVFREQ_GOV_SIMPLE_EXYNOS
 	help
 	  This adds the DEVFREQ driver for Exynos5 series memory and int.
 
