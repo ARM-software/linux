@@ -42,13 +42,13 @@ static char *governor_list[G3D_MAX_GOVERNOR_NUM] = {"Default", "Static", "Booste
 static gpu_dvfs_info gpu_dvfs_infotbl_default[] = {
 /*  vol,clk,min,max,down stay, pm_qos mem, pm_qos int, pm_qos cpu_kfc_min, pm_qos cpu_egl_max */
 #if SOC_NAME == 5422
-	{812500,  177,  0,  90, 2, 0, 275000, 222000,       0, CPU_MAX},
-	{862500,  266, 60,  90, 1, 0, 413000, 222000,       0, CPU_MAX},
-	{912500,  350, 70,  90, 1, 0, 728000, 333000,       0, CPU_MAX},
-	{962500,  420, 78,  90, 1, 0, 825000, 400000,       0, CPU_MAX},
-	{1000000, 480, 90,  99, 1, 0, 825000, 400000, 1000000, 1600000},
+	{812500,  177,  0,   3, 2, 0, 275000, 222000,       0, CPU_MAX},
+	{862500,  266,  4,   6, 1, 0, 413000, 222000,       0, CPU_MAX},
+	{912500,  350,  7,  10, 1, 0, 728000, 333000,       0, CPU_MAX},
+	{962500,  420, 11,  14, 1, 0, 825000, 400000,       0, CPU_MAX},
+	{1000000, 480, 15,  20, 1, 0, 825000, 400000, 1000000, 1600000},
 #ifdef CONFIG_SOC_EXYNOS5422_REV_0
-	{1037500, 543, 99, 100, 1, 0, 825000, 400000, 1000000, 1600000},
+	{1037500, 543, 21, 100, 1, 0, 825000, 400000, 1000000, 1600000},
 #else
 	{1037500, 533, 99, 100, 1, 0, 825000, 400000, 1000000, 1600000},
 #endif /* CONFIG_SOC_EXYNOS5422_REV_0 */
@@ -81,6 +81,10 @@ static int gpu_abb_infobl_default[] = {900000, 900000, 950000, 1000000, 1075000,
 static int gpu_dvfs_governor_default(struct kbase_device *kbdev, int utilization)
 {
 	struct exynos_context *platform;
+	/* HACK: On Linux es2gears and glmark2-es2 doesn't utilize 100% 
+	 * of the GPU. So we need to keep it on the high frequency to get 
+	 * proper performance. */
+	utilization = 100;
 
 	platform = (struct exynos_context *) kbdev->platform_context;
 	if (!platform)
