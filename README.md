@@ -1,8 +1,8 @@
 ### 1.  Release details
 *  Product Release Status
-      - 0.3-Juno
+      - 1.0-Juno
 *  Linux Kernel BSP
-      - The Linux Kernel BSP contains the upstream version 3.15-rc5 of the 
+      - The Linux Kernel BSP contains the upstream version 3.15-rc8 of the 
         Linux kernel modified to support the Juno development board.
 *  Functionality included
       - Linux kernel configures the Juno Compute System and a limited set
@@ -13,8 +13,9 @@
       - Initial support for HMP patchset for AArch64. Please note that the patch has not been fine-tuned for Juno yet.
       - Initial support for DVFS
       - Unified defconfig for both standard Linux filesystem and Android
+      - Double buffering support when paired with Mali DDK code.
 *  Limitations
-      - No support for MALI graphics chip yet, Linux support will be commited on the next release
+      - No cpuidle support at the moment. Code is present but performance has not been tuned.
 *  Issues resolved since last release
       - USB keyboard issues fixed
       - Drivers for DVFS and cpufreq
