@@ -148,7 +148,7 @@
 		#address-cells = <0>;
 		interrupt-controller;
 		reg = <0x0 0x2c010000 0 0x1000>,
-		      <0x0 0x2c02f000 0 0x1000>,
+		      <0x0 0x2c02f000 0 0x2000>,
 		      <0x0 0x2c04f000 0 0x2000>,
 		      <0x0 0x2c06f000 0 0x2000>;
 		interrupts = <GIC_PPI 9 0xf04>;
@@ -468,11 +468,13 @@
 		};
 	};
 
-	gpu@0xfc010000 {
+	gpu@0x2d000000 {
 		compatible = "arm,malit6xx", "arm,mali";
-		reg = <0x0 0x2d000000 0x0 0x10000>;
+		reg = <0x0 0x2d000000 0x0 0x4000>;
 		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
 		interrupt-names = "JOB", "MMU", "GPU";
+		clocks = <&scpi_dvfs 2>;
+		clock-names = "clk_mali";
 	};
 
 	smb {
