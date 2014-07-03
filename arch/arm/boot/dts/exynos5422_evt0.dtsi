@@ -430,6 +430,34 @@
 		mmu-masters = <&mfc_0>;
 	};
 
+    sysmmu_fimd0x: sysmmu@0x14640000 {
+        compatible = "samsung,exynos4210-sysmmu";
+        reg = <0x14640000 0x1000>;
+        interrupt-parent = <&combiner>;  
+        interrupts = <3 2>;
+        clock-names = "sysmmu", "master";
+        clocks = <&clock 1322>, <&clock 1329>;
+        qos = <15>;
+        mmu-masters = <&fimd>;
+			prop-map {
+				winmap = <0x11>;  
+            };
+	};
+
+    sysmmu_fimd1x: sysmmu@0x14680000 {
+		compatible = "samsung,exynos4210-sysmmu";
+		reg = <0x14680000 0x1000>;
+		interrupt-parent = <&combiner>;
+		interrupts = <3 0>;
+		clock-names = "sysmmu", "master";
+		clocks = <&clock 1321>, <&clock 1329>;
+		qos = <15>;
+		mmu-masters = <&fimd>;
+			prop-map {
+				winmap = <0xe>;   
+			};
+	};
+	
 	dwmmc_0: dwmmc0@12200000 {
 		compatible = "samsung,exynos5422-dw-mshc";
 		reg = <0x12200000 0x2000>;
@@ -1135,7 +1163,55 @@
 	
 	hdmiphy: hdmiphy@145D0000 {
 		reg = <0x145D0000 0x20>;
-	};	
+	};
+	
+    dp_phy: video-phy@10040728 {
+        compatible = "samsung,exynos5250-dp-video-phy";
+        reg = <0x10040728 4>;
+        #phy-cells = <0>;
+    };
+
+    dp: dp-controller@145B0000 {  
+        reg = <0x145b0000 0x10000>;
+        interrupts = <10 3>;
+		interrupt-parent = <&combiner>;
+		compatible = "samsung,exynos5-dp";
+        clocks = <&clock 1325>;
+        clock-names = "clk_dp1";   
+        phys = <&dp_phy>;
+        phy-names = "dp";
+        /* HACK? */
+		samsung,color-space = <0>;
+        samsung,dynamic-range = <0>;
+        samsung,ycbcr-coeff = <0>;
+        samsung,color-depth = <1>;
+        samsung,link-rate = <0x0a>;
+        samsung,lane-count = <2>;
+        samsung,hpd-gpio = <&gpx0 7 3>;
+    };
+
+    fimd: fimd@14400000 {   
+		compatible = "samsung,exynos5250-fimd";
+        // samsung,power-domain = <&pd_disp1>;
+        clocks = <&clock 1061>, <&clock 1329>;
+        clock-names = "sclk_fimd1", "clk_fimd1";
+        reg = <0x14400000 0x40000>, <0x14500000 0x8000>;
+        samsung,power-domain = <&spd_fimd>;
+        interrupt-controller;
+        #interrups-cells = <2>;
+        interrupt-parent = <&fimd_fb_int_map>;
+        interrupts = <0 0>, <1 0>, <2 0>, <3 0>;        
+        
+                 fimd_fb_int_map: fimd_fb_int_map {
+                        #interrupt-cells = <2>;
+                        #address-cells = <0>;
+                        #size-cells = <0>;
+                        interrupt-map = <0 0 &combiner 18 5>,
+                                        <1 0 &combiner 18 4>,
+                                        <2 0 &combiner 18 6>,
+                                        <3 0 &gic 0 82 0>;
+                };
+    };
 
 	spi_3: spi@131a0000 {
 		compatible = "samsung,exynos5410-spi";

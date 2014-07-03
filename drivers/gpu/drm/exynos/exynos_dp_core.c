@@ -1241,7 +1241,7 @@ static int exynos_dp_bind(struct device *dev, struct device *master, void *data)
 	if (ret)
 		return ret;
 
-	dp->clock = devm_clk_get(&pdev->dev, "dp");
+	dp->clock = devm_clk_get(&pdev->dev, "clk_dp1");
 	if (IS_ERR(dp->clock)) {
 		dev_err(&pdev->dev, "failed to get clock\n");
 		return PTR_ERR(dp->clock);
@@ -1330,14 +1330,14 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	ret = exynos_drm_component_add(&pdev->dev, EXYNOS_DEVICE_TYPE_CONNECTOR,
 					exynos_dp_display.type);
-	if (ret)
+		if (ret)
 		return ret;
 
 	ret = component_add(&pdev->dev, &exynos_dp_ops);
 	if (ret)
 		exynos_drm_component_del(&pdev->dev,
 						EXYNOS_DEVICE_TYPE_CONNECTOR);
-
+	
 	return ret;
 }
 

@@ -948,14 +948,14 @@ static int fimd_probe(struct platform_device *pdev)
 	if (of_property_read_bool(dev->of_node, "samsung,invert-vclk"))
 		ctx->vidcon1 |= VIDCON1_INV_VCLK;
 
-	ctx->bus_clk = devm_clk_get(dev, "fimd");
+	ctx->bus_clk = devm_clk_get(dev, "clk_fimd1");
 	if (IS_ERR(ctx->bus_clk)) {
 		dev_err(dev, "failed to get bus clock\n");
 		ret = PTR_ERR(ctx->bus_clk);
 		goto err_del_component;
 	}
 
-	ctx->lcd_clk = devm_clk_get(dev, "sclk_fimd");
+	ctx->lcd_clk = devm_clk_get(dev, "sclk_fimd1");
 	if (IS_ERR(ctx->lcd_clk)) {
 		dev_err(dev, "failed to get lcd clock\n");
 		ret = PTR_ERR(ctx->lcd_clk);
@@ -970,9 +970,9 @@ static int fimd_probe(struct platform_device *pdev)
 		goto err_del_component;
 	}
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ, "vsync");
+	res = platform_get_resource(pdev, IORESOURCE_IRQ, 1);
 	if (!res) {
-		dev_err(dev, "irq request failed.\n");
+		dev_err(dev, "vsync irq request failed.\n");
 		ret = -ENXIO;
 		goto err_del_component;
 	}
@@ -980,7 +980,7 @@ static int fimd_probe(struct platform_device *pdev)
 	ret = devm_request_irq(dev, res->start, fimd_irq_handler,
 							0, "drm_fimd", ctx);
 	if (ret) {
-		dev_err(dev, "irq request failed.\n");
+		dev_err(dev, "drm_fimd irq request failed.\n");
 		goto err_del_component;
 	}
 
