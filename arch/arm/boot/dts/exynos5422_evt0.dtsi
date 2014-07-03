@@ -1187,7 +1187,7 @@
         samsung,color-depth = <1>;
         samsung,link-rate = <0x0a>;
         samsung,lane-count = <2>;
-        samsung,hpd-gpio = <&gpx0 7 3>;
+        
     };
 
     fimd: fimd@14400000 {   
