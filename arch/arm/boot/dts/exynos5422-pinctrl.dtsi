@@ -81,7 +81,7 @@
 			samsung,pin-drv = <0>;
 		};
 
-        dp_hpd: dp_hpd  {
+        dp_hpd_gpio: dp_hpd_gpio  {
             samsung,pins = "gpx0-7";
             samsung,pin-function = <3>;
             samsung,pin-pud = <0>;
