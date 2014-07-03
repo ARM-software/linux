@@ -1169,7 +1169,7 @@ static int exynos_dp_dt_parse_phydata(struct exynos_dp_device *dp)
 	dp_phy_node = of_find_node_by_name(dp_phy_node, "dptx-phy");
 	if (!dp_phy_node) {
 		dp->phy = devm_phy_get(dp->dev, "dp");
-		return PTR_ERR_OR_ZERO(dp->phy);
+		return PTR_RET(dp->phy);
 	}
 
 	if (of_property_read_u32(dp_phy_node, "reg", &phy_base)) {
