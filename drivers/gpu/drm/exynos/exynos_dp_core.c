@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/of.h>
+#include <linux/of_i2c.h>
 #include <linux/of_gpio.h>
 #include <linux/gpio.h>
 #include <linux/component.h>
