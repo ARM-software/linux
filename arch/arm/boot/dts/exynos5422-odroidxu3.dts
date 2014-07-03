@@ -892,14 +892,14 @@
                 native-mode = <&timing1>;  
 
                 timing1: timing@1 {
-                        clock-frequency = <148500000>;
+                        clock-frequency = <138500000>;
                         hactive = <1920>;
                         vactive = <1080>;
-                        hfront-porch = <88>;  
-                        hback-porch = <148>;
-                        hsync-len = <44>;
-                        vback-porch = <36>;
-                        vfront-porch = <4>;
+                        hfront-porch = <48>;  
+                        hback-porch = <80>;
+                        hsync-len = <32>;
+                        vback-porch = <23>;
+                        vfront-porch = <3>;
                         vsync-len = <5>;
                 };
         };		
