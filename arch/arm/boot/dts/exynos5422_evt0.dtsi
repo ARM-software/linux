@@ -1171,7 +1171,7 @@
         #phy-cells = <0>;
     };
 
-    dp: dp-controller@145B0000 {  
+    dp: dp-controller@145B0000 { 
         reg = <0x145b0000 0x10000>;
         interrupts = <10 3>;
 		interrupt-parent = <&combiner>;
@@ -1180,14 +1180,20 @@
         clock-names = "clk_dp1";   
         phys = <&dp_phy>;
         phy-names = "dp";
+
+		samsung,power-domain = <&spd_dp>; 
+		
         /* HACK? */
+		hsync-active-high = <0>;
+		vsync-active-high = <0>;
+		interlaced = <0>;
+
 		samsung,color-space = <0>;
         samsung,dynamic-range = <0>;
         samsung,ycbcr-coeff = <0>;
         samsung,color-depth = <1>;
         samsung,link-rate = <0x0a>;
-        samsung,lane-count = <2>;
-        
+        samsung,lane-count = <4>;
     };
 
     fimd: fimd@14400000 {   
@@ -1312,6 +1318,12 @@
 		};
 
 		spd_hdmi: spd-hdmi@100440c0 {
+			compatible = "samsung,exynos-spd";
+			bts-status = "enabled";
+			status = "enabled";
+		};
+
+		spd_dp: spd-dp@100440c0 {
 			compatible = "samsung,exynos-spd";
 			bts-status = "enabled";
 			status = "enabled";

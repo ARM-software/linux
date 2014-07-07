@@ -881,34 +881,31 @@
 	};
 	
 	/* AOC 22" DP Config */
-	
-	dp-controller {
+
+	dp-controller@145B0000 {
 		status = "okay";
+		samsung,hpd-gpio = <&gpx0 7 3>; 
         pinctrl-names = "default";
         pinctrl-0 = <&dp_hpd_gpio>;
-		samsung,hpd-gpio = <&gpx0 7 3>;
 
         display-timings {
-                native-mode = <&timing1>;  
+            native-mode = <&timing1>;  
 
-                timing1: timing@1 {
-                        clock-frequency = <138500000>;
-                        hactive = <1920>;
-                        vactive = <1080>;
-                        hfront-porch = <48>;  
-                        hback-porch = <80>;
-                        hsync-len = <32>;
-                        vback-porch = <23>;
-                        vfront-porch = <3>;
-                        vsync-len = <5>;
-                };
+            timing1: timing@1 {
+                    clock-frequency = <266000000>;
+                    hactive = <1920>;
+                    vactive = <1080>;
+                    hfront-porch = <56>;  
+                    hback-porch = <24>;
+                    hsync-len = <14>;
+                    vback-porch = <3>;
+                    vfront-porch = <3>;
+                    vsync-len = <5>;
+            };
         };		
 	};
 	
 	fimd {
-        status = "enabled";
-        samsung,invert-vclk;
+        status = "okay";
 	};
-
-	
 };
