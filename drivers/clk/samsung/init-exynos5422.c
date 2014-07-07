@@ -413,6 +413,38 @@ void mmc_clock_init(void)
 	pr_info("mmc2: dout_mmc2 %d\n", exynos_get_rate("dout_mmc2"));
 }
 
+void fimd1_clock_init(void)
+{
+	unsigned int reg = 0;
+
+	/*
+	 * Set DISP1BLK_CFG register for Display path selection
+	 *
+	 * FIMD of DISP1_BLK Bypass selection : DISP1BLK_CFG[15]
+	 * ---------------------
+	 *  1 | FIMD : selected
+	 */
+	reg = __raw_readl(S3C_VA_SYS + 0x0214);
+	reg &= ~(1 << 15);	/* To save other reset values */
+	reg |= (1 << 15);
+	__raw_writel(reg, S3C_VA_SYS + 0x0214);
+
+	/* Reference clcok selection for DPTX_PHY: PAD_OSC_IN */
+	reg = __raw_readl(S3C_VA_SYS + 0x04d4);
+	reg &= ~(1 << 0);
+	__raw_writel(reg, S3C_VA_SYS + 0x04d4);
+
+	/* DPTX_PHY: XXTI */
+	reg = __raw_readl(S3C_VA_SYS + 0x04d8);
+	reg &= ~(1 << 3);
+	__raw_writel(reg, S3C_VA_SYS + 0x04d8);
+    
+	if (exynos_set_parent("mout_fimd1", "mout_mpll_ctrl"))
+		pr_err("failed to set parent %s\n", "mout_fimd1");
+	if (exynos_set_rate("dout_fimd1", 266 * 1000000))
+		pr_err("failed to set rate %s\n", "dout_fimd1");
+}
+
 void __init exynos5422_clock_init(void)
 {
 #ifndef CONFIG_L2_AUTO_CLOCK_DISABLE
@@ -433,4 +465,5 @@ void __init exynos5422_clock_init(void)
 	jpeg_clock_init();
 	mfc_clock_init();
 	crypto_init_clock();
+	fimd1_clock_init();
 }
