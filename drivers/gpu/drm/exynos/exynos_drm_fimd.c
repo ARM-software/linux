@@ -332,6 +332,12 @@ static void fimd_commit(struct exynos_drm_manager *mgr)
 		val |= VIDCON0_CLKVAL_F(clkdiv - 1) | VIDCON0_CLKDIR;
 
 	writel(val, ctx->regs + VIDCON0);
+	
+    /* DP clock control */
+    #define DPCLKCON            (0x27c)
+    #define DPCLKCON_ENABLE     (1 << 1)
+
+	writel(DPCLKCON_ENABLE, ctx->regs + DPCLKCON);
 }
 
 static int fimd_enable_vblank(struct exynos_drm_manager *mgr)
