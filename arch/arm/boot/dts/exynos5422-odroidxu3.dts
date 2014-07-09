@@ -108,6 +108,7 @@
 	pinctrl@13400000 {
 		pmic_irq: pmic-irq {
 			samsung,pins = "gpx0-4";
+			samsung,pin-function = <0xf>;
 			samsung,pin-pud = <3>;
 			samsung,pin-drv = <3>;
 		};
@@ -133,7 +134,7 @@
 		s2mps11_pmic@66 {
 			compatible = "samsung,s2mps11-pmic";
 			reg = <0x66>;
-			interrupts = <2 0 0>;
+			interrupts = <4 0 0>;
 			interrupt-parent = <&gpx0>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&pmic_irq &pm_wrsti>;
@@ -191,7 +192,7 @@
 				};
 
 				buck10_reg: BUCK10 {
-					regulator-name = "vdd_cam_isp_1.0v";
+					regulator-name = "vddf_2v85";
 					regulator-min-microvolt = <2850000>;
 					regulator-max-microvolt = <2850000>;
 					regulator-always-on;
@@ -275,8 +276,8 @@
 
 				ldo13_reg: LDO13 {
 					regulator-name = "vdd_ldo13";
-					regulator-min-microvolt = <1800000>;
-					regulator-max-microvolt = <3300000>;
+					regulator-min-microvolt = <2850000>;
+					regulator-max-microvolt = <2850000>;
 					regulator-boot-on;
 					regulator-ramp-delay = <12000>;
 					regulator-initial-mode = <1>;
@@ -284,22 +285,14 @@
 
 				ldo15_reg: LDO15 {
 					regulator-name = "vdd_ldo15";
-					regulator-min-microvolt = <1800000>;
-					regulator-max-microvolt = <2850000>;
-					regulator-always-on;
-					regulator-initial-mode = <1>;
-				};
-
-				ldo16_reg: LDO16 {
-					regulator-name = "vdd_ldo16";
-					regulator-min-microvolt = <2200000>;
-					regulator-max-microvolt = <2200000>;
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
 					regulator-always-on;
 					regulator-initial-mode = <1>;
 				};
 
 				ldo17_reg: LDO17 {
-					regulator-name = "tsp_avdd";
+					regulator-name = "vdd_eth";
 					regulator-min-microvolt = <3300000>;
 					regulator-max-microvolt = <3300000>;
 					regulator-always-on;
@@ -309,7 +302,7 @@
 				ldo18_reg: LDO18 {
 					regulator-name = "vdd_ldo18";
 					regulator-min-microvolt = <1800000>;
-					regulator-max-microvolt = <3300000>;
+					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					regulator-boot-on;
 					regulator-initial-mode = <1>;
@@ -317,34 +310,10 @@
 
 				ldo19_reg: LDO19 {
 					regulator-name = "vdd_ldo19";
-					regulator-min-microvolt = <1800000>;
+					regulator-min-microvolt = <2850000>;
 					regulator-max-microvolt = <2850000>;
 					regulator-always-on;
 					regulator-initial-mode = <1>;
-				};
-
-				ldo20_reg: LDO20 {
-					regulator-name = "vdd_ldo20";
-					regulator-min-microvolt = <1800000>;
-					regulator-max-microvolt = <1800000>;
-					regulator-always-on;
-					regulator-initial-mode = <3>;
-				};
-
-				ldo21_reg: LDO21 {
-					regulator-name = "vdd_ldo21";
-					regulator-min-microvolt = <1800000>;
-					regulator-max-microvolt = <1800000>;
-					regulator-always-on;
-					regulator-initial-mode = <3>;
-				};
-
-				ldo22_reg: LDO22 {
-					regulator-name = "vdd_ldo22";
-					regulator-min-microvolt = <800000>;
-					regulator-max-microvolt = <1350000>;
-					regulator-always-on;
-					regulator-initial-mode = <3>;
 				};
 
 				ldo23_reg: LDO23 {
@@ -354,22 +323,6 @@
 					regulator-always-on;
 					regulator-initial-mode = <1>;
 					regulator-ramp-delay = <12000>;
-				};
-
-				ldo24_reg: LDO24 {
-					regulator-name = "vdd_ldo24";
-					regulator-min-microvolt = <2800000>;
-					regulator-max-microvolt = <2800000>;
-					regulator-always-on;
-					regulator-initial-mode = <1>;
-				};
-
-				ldo25_reg: LDO25 {
-					regulator-name = "vdd_ldo25";
-					regulator-min-microvolt = <1800000>;
-					regulator-max-microvolt = <1800000>;
-					regulator-always-on;
-					regulator-initial-mode = <1>;
 				};
 
 				ldo26_reg: LDO26 {
@@ -396,61 +349,6 @@
 					regulator-always-on;
 					regulator-initial-mode = <1>;
 				};
-
-				ldo29_reg: LDO29 {
-					regulator-name = "vdd_ldo29";
-					regulator-min-microvolt = <1800000>;
-					regulator-max-microvolt = <1800000>;
-					regulator-always-on;
-					regulator-initial-mode = <1>;
-				};
-
-				ldo30_reg: LDO30 {
-					regulator-name = "tsp_io";
-					regulator-min-microvolt = <1800000>;
-					regulator-max-microvolt = <1800000>;
-				};
-
-				ldo31_reg: LDO31 {
-					regulator-name = "vdd_ldo31";
-					regulator-min-microvolt = <1000000>;
-					regulator-max-microvolt = <2100000>;
-					regulator-always-on;
-					regulator-initial-mode = <3>;
-				};
-
-				ldo32_reg: LDO32 {
-					regulator-name = "vdd_ldo32";
-					regulator-min-microvolt = <2800000>;
-					regulator-max-microvolt = <2800000>;
-					regulator-always-on;
-					regulator-initial-mode = <3>;
-				};
-
-				ldo34_reg: LDO34 {
-					regulator-name = "vdd_ldo34";
-					regulator-min-microvolt = <3000000>;
-					regulator-max-microvolt = <3000000>;
-					regulator-always-on;
-					regulator-initial-mode = <1>;
-				};
-
-				ldo35_reg: LDO35 {
-					regulator-name = "vdd_ldo35";
-					regulator-min-microvolt = <1200000>;
-					regulator-max-microvolt = <1200000>;
-					regulator-always-on;
-					regulator-initial-mode = <1>;
-				};
-
-				ldo38_reg: LDO38 {
-					regulator-name = "vdd_ldo38";
-					regulator-min-microvolt = <2800000>;
-					regulator-max-microvolt = <2800000>;
-					regulator-always-on;
-					regulator-initial-mode = <1>;
-				};
-
 			};
 		};
 	};
@@ -546,13 +444,6 @@
 			samsung,pin-function = <0xf>;
 			samsung,pin-pud = <0>;
 		};
-
-		chg_irq: chg-irq {
-			samsung,pins = "gpx0-0";
-			samsung,pin-function = <0>;
-			samsung,pin-pud = <3>;
-			samsung,pin-drv = <3>;
-		};
 	};
 
 	dwc3_vbus: fixedregulator@0 {
@@ -637,7 +528,6 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 	};
-
 
 	i2s0: i2s@03830000 {
 		status = "okay";
@@ -895,12 +785,12 @@
                     clock-frequency = <266000000>;
                     hactive = <1920>;
                     vactive = <1080>;
-                    hfront-porch = <56>;  
-                    hback-porch = <24>;
-                    hsync-len = <14>;
-                    vback-porch = <3>;
-                    vfront-porch = <3>;
-                    vsync-len = <5>;
+                    hfront-porch = <88>;  
+                    hback-porch = <44>;
+                    hsync-len = <148>;
+                    vback-porch = <4>;
+                    vfront-porch = <5>;
+                    vsync-len = <36>;
             };
         };		
 	};
