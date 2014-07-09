@@ -93,7 +93,7 @@ config ARM_EXYNOS5422_BUS_DEVFREQ
 	depends on SOC_EXYNOS5422
 	select ARCH_HAS_OPP
 	select PM_OPP
-	select DEVFREQ_GOV_SIMPLE_EXYNOS
+	select DEVFREQ_GOV_SIMPLE_ONDEMAND
 	help
 	  This adds the DEVFREQ driver for Exynos5 series memory and int.
 

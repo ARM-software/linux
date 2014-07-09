@@ -117,7 +117,6 @@ static int set_kfc_volt = 12500;
 static int set_int_volt = 12500;
 static int set_mif_volt = 12500;
 static int set_g3d_volt = 12500;
-static int set_isp_volt = 12500;
 
 static int __init get_arm_volt(char *str)
 {
@@ -1067,7 +1066,8 @@ int exynos5422_init_asv(struct asv_common *asv_info)
 	chip_id5_value = __raw_readl(CHIP_ID5_REG);
 
 	is_BIN2 = (chip_id3_value >> EXYNOS5422_BIN2_OFFSET) & EXYNOS5422_BIN2_MASK;
-
+	printk("CPU Info : Samsung Exynos5422 Soc is %s\n", is_BIN2 ? "BIN2":"BIN1");
+	
 	if ((chip_id3_value >> EXYNOS5422_USESG_OFFSET) & EXYNOS5422_USESG_MASK && is_BIN2 == 0) {
 		if (!((chip_id3_value >> EXYNOS5422_SG_BSIGN_OFFSET) & EXYNOS5422_SG_BSIGN_MASK))
 			special_lot_group = ((chip_id3_value >> EXYNOS5422_SG_A_OFFSET) & EXYNOS5422_SG_A_MASK)

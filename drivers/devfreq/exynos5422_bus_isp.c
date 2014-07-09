@@ -247,11 +247,11 @@ struct devfreq_clk_info sclk_gscl_wrap_a[] = {
 struct devfreq_clk_info sclk_gscl_wrap_b[] = {
 	{LV0,	 76000,	0,	&sclk_gscl_wrap_b_list},
 	{LV1,	 76000,	0,	&sclk_gscl_wrap_b_list},
-	{LV2,	 67000,	0,	&sclk_gscl_wrap_b_list},
+	{LV2,	 34000,	0,	&sclk_gscl_wrap_b_list},
 	{LV3,	 76000,	0,	&sclk_gscl_wrap_b_list},
-	{LV4,	 67000,	0,	&sclk_gscl_wrap_b_list},
-	{LV5,	 67000,	0,	&sclk_gscl_wrap_b_list},
-	{LV6,	 67000,	0,	&sclk_gscl_wrap_b_list},
+	{LV4,	 34000,	0,	&sclk_gscl_wrap_b_list},
+	{LV5,	 34000,	0,	&sclk_gscl_wrap_b_list},
+	{LV6,	 34000,	0,	&sclk_gscl_wrap_b_list},
 };
 
 struct devfreq_clk_info *devfreq_clk_isp_info_list[] = {
@@ -581,6 +581,8 @@ static int exynos5_devfreq_isp_probe(struct platform_device *pdev)
 	int ret = 0;
 	struct devfreq_data_isp *data;
 	struct exynos_devfreq_platdata *plat_data;
+	struct opp *target_opp;
+	unsigned long target_volt;
 
 	if (exynos5_devfreq_isp_init_clock()) {
 		ret = -EINVAL;
@@ -611,6 +613,25 @@ static int exynos5_devfreq_isp_probe(struct platform_device *pdev)
 	data->volt_offset = 0;
 	data->dev = &pdev->dev;
 	data->vdd_isp = regulator_get(NULL, "vdd_cam_isp_1.0v");
+
+	rcu_read_lock();
+	target_opp = devfreq_recommended_opp(data->dev,
+			&exynos5_devfreq_isp_profile.initial_freq, 0);
+	if (IS_ERR(target_opp)) {
+		rcu_read_unlock();
+		dev_err(data->dev, "DEVFREQ(ISP) : Invalid OPP to set voltage\n");
+		ret = PTR_ERR(target_opp);
+		goto err_inittable;
+	}
+
+	target_volt = opp_get_voltage(target_opp);
+#ifdef CONFIG_EXYNOS_THERMAL
+	target_volt = get_limit_voltage(target_volt, data->volt_offset);
+#endif
+	rcu_read_unlock();
+
+	exynos5_devfreq_isp_set_volt(data, target_volt, target_volt + VOLT_STEP);
+
 	data->devfreq = devfreq_add_device(data->dev,
 						&exynos5_devfreq_isp_profile,
 						"simple_ondemand",

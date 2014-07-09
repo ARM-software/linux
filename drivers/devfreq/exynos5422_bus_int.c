@@ -82,7 +82,7 @@ enum int_bus_pll {
 };
 
 unsigned int int_fimc_opp_list[][3] = {
-	{LV_6, LV_6, LV_6},
+	{LV_7, LV_7, LV_7},
 	{LV_7, LV_7, LV_3},
 	{LV_7, LV_5, LV_3},
 	{LV_6, LV_5, LV_3},
@@ -102,13 +102,19 @@ struct int_bus_opp_table int_bus_opp_list[] = {
 	{LV_1_1, 480000,  987500, 0},	/* ISP Special Level */
 	{LV_1_2, 460000,  987500, 0},	/* ISP Special Level */
 	{LV_1_3, 440000,  987500, 0},	/* ISP Special Level */
+#ifdef CONFIG_SOC_EXYNOS5422_REV_0
 	{LV_2,   420000,  987500, 0},	/* UHD play */
-#if 0
 	{LV_3,   400000,  987500, 0},
 	{LV_4,   333000,  950000, 0},
 	{LV_5,   222000,  950000, 0},
 	{LV_6,   111000,  950000, 0},
 	{LV_7,    83000,  925000, 0},
+#else
+	{LV_2,   400000,  987500, 0},
+	{LV_3,   333000,  950000, 0},
+	{LV_4,   222000,  950000, 0},
+	{LV_5,   111000,  950000, 0},
+	{LV_6,    83000,  925000, 0},
 #endif
 };
 
@@ -336,10 +342,10 @@ struct int_clk_info aclk_400_isp[] = {
 struct int_clk_info aclk_333[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0,   400000, SW_MUX},
-	{LV_1,   400000, SW_MUX},
-	{LV_1_1, 400000, SW_MUX},
-	{LV_1_2, 400000, SW_MUX},
-	{LV_1_3, 400000, SW_MUX},
+	{LV_1,   222000, C_PLL},
+	{LV_1_1, 167000, C_PLL},
+	{LV_1_2,  84000, C_PLL},
+	{LV_1_3, 111000, C_PLL},
 	{LV_2,   400000, SW_MUX},
 	{LV_3,   333000, C_PLL},
 	{LV_4,   222000, C_PLL},
@@ -713,7 +719,7 @@ static struct int_pm_clks *exynos5_int_pm_clks[] = {
 
 static struct pm_qos_request exynos5_int_media_qos;
 
-void exynos5_update_district_int_level(unsigned int idx)
+void exynos5_update_district_int_level(unsigned idx)
 {
 	if (!pm_qos_request_active(&exynos5_int_media_qos))
 		return;
@@ -1083,7 +1089,7 @@ static struct devfreq_simple_ondemand_data exynos5_int_governor_data = {
 #endif
 
 static struct devfreq_dev_profile exynos5_int_devfreq_profile = {
-	.initial_freq	= 420000,
+	.initial_freq	= 400000,
 	.polling_ms	= 100,
 	.target		= exynos5_int_busfreq_target,
 	.get_dev_status	= exynos5_int_bus_get_dev_status,
@@ -1095,7 +1101,6 @@ static int exynos5422_init_int_table(struct busfreq_data_int *data)
 	unsigned int i;
 	unsigned int ret;
 	unsigned int asv_volt;
-	unsigned int asv_abb = 0;
 
 	/* will add code for ASV information setting function in here */
 
@@ -1115,11 +1120,8 @@ static int exynos5422_init_int_table(struct busfreq_data_int *data)
 			dev_err(data->dev, "Fail to add opp entries.\n");
 			return ret;
 		}
-		asv_abb = get_match_abb(ID_INT, int_bus_opp_list[i].freq);
-		if (!asv_abb)
-			devfreq_int_asv_abb[i] = ABB_BYPASS;
-		else
-			devfreq_int_asv_abb[i] = asv_abb;
+
+		devfreq_int_asv_abb[i] = get_match_abb(ID_INT, int_bus_opp_list[i].freq);
 
 		pr_info("DEVFREQ(INT) : %luKhz, ABB %u\n", int_bus_opp_list[i].freq, devfreq_int_asv_abb[i]);
 	}
@@ -1253,6 +1255,8 @@ static int exynos5_devfreq_int_probe(struct platform_device *pdev)
 	int nr_clk;
 	struct clk *tmp_clk = NULL, *tmp_parent_clk = NULL, *tmp_p_parent_clk = NULL;
 	struct int_pm_clks *int_clk;
+	unsigned long volt;
+	int i, index = -1;
 
 	data = kzalloc(sizeof(struct busfreq_data_int), GFP_KERNEL);
 
@@ -1263,8 +1267,8 @@ static int exynos5_devfreq_int_probe(struct platform_device *pdev)
 
 	exynos5_int_devfreq_profile.freq_table = kzalloc(sizeof(int) * LV_END, GFP_KERNEL);
 	if (exynos5_int_devfreq_profile.freq_table == NULL) {
-		pr_err("DEVFREQ(INT) : Failed to allocate freq table\n");
 		kfree(data);
+		pr_err("DEVFREQ(MIF) : Failed to allocate freq table\n");
 		return -ENOMEM;
 	}
 
@@ -1388,11 +1392,24 @@ static int exynos5_devfreq_int_probe(struct platform_device *pdev)
 	opp = opp_find_freq_floor(dev, &exynos5_int_devfreq_profile.initial_freq);
 	if (IS_ERR(opp)) {
 		rcu_read_unlock();
-		dev_err(dev, "Invalid initial frequency %lu kHz.\n", exynos5_int_devfreq_profile.initial_freq);
+		dev_err(dev, "Invalid initial frequency %lu kHz.\n",
+			       exynos5_int_devfreq_profile.initial_freq);
 		err = PTR_ERR(opp);
 		goto err_opp_add;
 	}
+	volt = opp_get_voltage(opp);
 	rcu_read_unlock();
+	regulator_set_voltage(data->vdd_int, volt, volt + VOLT_STEP);
+	for (i = LV_0; i < LV_END; i++) {
+		if (int_bus_opp_list[i].freq == exynos5_int_devfreq_profile.initial_freq)
+			index = int_bus_opp_list[i].idx;
+	}
+	if (index < 0) {
+		dev_err(dev, "Cannot find index to set abb\n");
+		err = -EINVAL;
+		goto err_opp_add;
+	}
+	set_match_abb(ID_INT, devfreq_int_asv_abb[index]);
 
 	int_pre_time = get_jiffies_64();
 
@@ -1477,7 +1494,6 @@ err_fout_ipll:
 err_fout_spll:
 	regulator_put(data->vdd_int);
 err_regulator:
-	kfree(exynos5_int_devfreq_profile.freq_table);
 	kfree(data);
 
 	return err;
@@ -1503,7 +1519,6 @@ static int exynos5_devfreq_int_remove(struct platform_device *pdev)
 
 	regulator_put(data->vdd_int);
 
-	kfree(exynos5_int_devfreq_profile.freq_table);
 	kfree(data);
 
 	platform_set_drvdata(pdev, NULL);
