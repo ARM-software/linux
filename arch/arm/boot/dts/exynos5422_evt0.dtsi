@@ -29,7 +29,6 @@
 		mshc0 = &dwmmc_0;
 		mshc1 = &dwmmc_1;
 		mshc2 = &dwmmc_2;
-		mfc0 = &mfc_0;
 		gsc0 = &gsc_0;
 		gsc1 = &gsc_1;
 		mdev0 = &mdev_0;
@@ -417,7 +416,7 @@
 		interrupts = <6 2>;
 		clock-names = "sysmmu", "master";
 		clocks = <&clock 1349>, <&clock 1350>;
-		mmu-masters = <&mfc_0>;
+		mmu-masters = <&mfc>;
 	};
 
 	sysmmu_mfc0_1: sysmmu@0x11210000 {
@@ -427,7 +426,7 @@
 		interrupts = <8 5>;
 		clock-names = "sysmmu", "master";
 		clocks = <&clock 1348>, <&clock 1350>;
-		mmu-masters = <&mfc_0>;
+		mmu-masters = <&mfc>;
 	};
 
     sysmmu_fimd0x: sysmmu@0x14640000 {
@@ -875,8 +874,20 @@
                 pinctrl-names = "default";
                 pinctrl-0 = <&spi2_bus>;
 	};
+	
+    mfc: codec@11000000 {   
+                reg = <0x11000000 0x10000>;
+                interrupts = <0 96 0>;  
+				clock-names = "mfc", "aclk_333", "mout_aclk_333_user", "gate_ip_mfc", "mout_aclk_333_sw", "dout_aclk_333";
+				clocks = <&clock 1350>, <&clock 486>, <&clock 2041>, <&clock 1234>, <&clock 2034>, <&clock 4008>;
+				samsung,power-domain = <&pd_mfc0>;
+				clock_rate = <400000000>;
+				min_rate = <100000>;
+				compatible = "samsung,mfc-v8";
+    };
 
-	mfc_0: mfc@11000000 {
+
+	/* mfc_0: mfc@11000000 {
 		compatible = "samsung,mfc-v6";
 		reg = <0x11000000 0x10000>;
 		interrupts = <0 96 0>;
@@ -922,7 +933,7 @@
 				freq_kfc = <400000>;
 			};
 		};
-	};
+	}; */
 
 	sec_pwm: pwm@12dd0000 {
 		compatible = "samsung,s3c6400-pwm";
@@ -1290,7 +1301,8 @@
 	pd_mfc0: pd-mfc@10044060 {
 		compatible = "samsung,exynos-pd";
 		reg = <0x10044060 0x20>;
-		bts-status = "disable";
+		bts-status = "enabled";
+		status = "enabled";
 	};
 
 	pd_g3d: pd-g3d@0x10044080 {
