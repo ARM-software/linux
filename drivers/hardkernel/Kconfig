@@ -1,5 +1,12 @@
 menu "ODROID Specific Hardware"
 
+config ODROID_EXYNOS5_FAN
+	bool "Enable the PWM Controlled FAN on ODROID-EXYNOS5"
+	depends on MACH_ODROIDXU3
+	default y
+	---help---
+		Enables the PWM Controlled FAN on ODROID-EXYNOS5
+
 config ODROID_EXYNOS5_SP
 	bool "Enable the INA231 Sensor on ODROID-EXYNOS5"
 	depends on MACH_ODROIDXU3

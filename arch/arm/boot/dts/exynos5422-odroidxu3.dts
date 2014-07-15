@@ -658,7 +658,40 @@
 			reg = <0x77>;
 		};
 	};
+
+	pinctrl@14010000 {
+		pwm0_out: pwm0-out {
+			samsung,pins = "gpb2-0";
+			samsung,pin-function = <2>;
+			samsung,pin-pud = <0x03>;
+		};
+	};
+
+	sec_pwm: pwm@12dd0000 {
+		status = "okay";
+	};
+
+	odroid_fan {
+        compatible = "odroid-fan";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm0_out>;
 	
+		pwm_id = <0>;
+		pwm_periode_ns = <20972>;	/* 22kHz */
+		pwm_duty = <200>;			/* initial value : 0 to 255 */
+
+		fan_mode = <1>; 			/* 0:manual, 1:auto */
+
+		tmu_level_0 = <57>;
+		tmu_level_1 = <63>;
+		tmu_level_2 = <68>;
+
+		fan_speed_0 = <1>;
+		fan_speed_1 = <51>;
+		fan_speed_2 = <71>;
+		fan_speed_3 = <91>;
+	};
+
     leds {
         compatible = "gpio-leds";
         /* Blue LED */
