@@ -1865,6 +1865,32 @@ static int exynos5_tmu_cpufreq_notifier(struct notifier_block *notifier, unsigne
 }
 #endif
 
+unsigned long exynos_thermal_get_value(void)
+{
+	struct exynos_tmu_data *data = th_zone->sensor_conf->private_data;
+	u8 temp_code;
+	unsigned long temp[EXYNOS_TMU_COUNT] = {0,}, max_temp =0;
+	int i;
+
+	mutex_lock(&data->lock);
+	clk_enable(data->clk[0]);
+	clk_enable(data->clk[1]);
+
+	for (i = 0; i < EXYNOS_TMU_COUNT; i++) {
+		temp_code = readb(data->base[i] + EXYNOS_TMU_REG_CURRENT_TEMP);
+		if (temp_code == 0xff)
+			continue;
+		temp[i] = code_to_temp(data, temp_code, i);
+		if(max_temp < temp[i]) max_temp = temp[i];
+	}
+
+	clk_disable(data->clk[0]);
+	clk_disable(data->clk[1]);
+	mutex_unlock(&data->lock);
+	return max_temp;
+}
+EXPORT_SYMBOL(exynos_thermal_get_value);
+
 static int exynos_tmu_probe(struct platform_device *pdev)
 {
 	struct exynos_tmu_data *data;
