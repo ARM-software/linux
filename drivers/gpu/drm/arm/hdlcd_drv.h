@@ -16,7 +16,6 @@ struct hdlcd_drm_private {
 	struct clk			*clk;
 	struct drm_fb_helper		*fb_helper;
 	struct hdlcd_bo			*bo;
-	dma_addr_t			scanout_buf;
 	struct drm_pending_vblank_event	*event;
 	struct drm_crtc			crtc;
 	struct device_node		*slave_node;
@@ -73,7 +72,7 @@ static inline int hdlcd_create_virtual_connector(struct drm_device *dev)
 }
 #endif
 
-void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd);
+void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd, bool wait);
 void hdlcd_drm_mode_config_init(struct drm_device *dev);
 int hdlcd_fbdev_init(struct drm_device *dev);
 

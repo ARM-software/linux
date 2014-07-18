@@ -252,11 +252,14 @@ static int hdlcd_wait_for_vsync(struct fb_info *info)
 	struct hdlcd_drm_private *hdlcd = helper->dev->dev_private;
 	int ret;
 
-	drm_crtc_vblank_on(&hdlcd->crtc);
-	ret = wait_for_completion_interruptible_timeout(&hdlcd->vsync_completion,
-							msecs_to_jiffies(100));
-	drm_crtc_vblank_off(&hdlcd->crtc);
-	if (ret)
+	drm_vblank_get(helper->dev, 0);
+	reinit_completion(&hdlcd->vsync_completion);
+	do {
+		ret = wait_for_completion_interruptible_timeout(&hdlcd->vsync_completion,
+							msecs_to_jiffies(1000));
+	} while (ret == -ERESTARTSYS);
+	drm_vblank_put(helper->dev, 0);
+	if (!ret)
 		return -ETIMEDOUT;
 #endif
 
@@ -288,7 +291,7 @@ static int hdlcd_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 
 	dma_set_attr(DMA_ATTR_WRITE_COMBINE, &attrs);
 
-	vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
+	vma->vm_flags |= VM_IO | VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP;
 	vm_size = vma->vm_end - vma->vm_start;
 
 	if (vm_size > bo->gem.size)
@@ -474,11 +477,11 @@ static int hdlcd_fb_probe(struct drm_fb_helper *helper,
 
 	cmd.width = sizes->surface_width;
 	cmd.height = sizes->surface_height;
-	cmd.pitches[0] = sizes->surface_width * bytes_per_pixel;
+	cmd.pitches[0] = ALIGN(sizes->surface_width * bytes_per_pixel, 64);
 	cmd.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
 						     sizes->surface_depth);
 
-	size = cmd.pitches[0] * cmd.height * MAX_FRAMES;
+	size = PAGE_ALIGN(cmd.pitches[0] * cmd.height * MAX_FRAMES);
 
 	bo = hdlcd_fb_bo_create(helper->dev, size);
 	if (IS_ERR(bo))
@@ -566,7 +569,6 @@ static struct drm_framebuffer *hdlcd_fb_alloc(struct drm_device *dev,
 	int err;
 	struct drm_framebuffer *fb;
 
-	dev_info(dev->dev, "Linux is here %s", __func__);
 	fb = kzalloc(sizeof(*fb), GFP_KERNEL);
 	if (!fb)
 		return ERR_PTR(-ENOMEM);

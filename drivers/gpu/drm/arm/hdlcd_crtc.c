@@ -31,12 +31,13 @@ static void hdlcd_crtc_destroy(struct drm_crtc *crtc)
 	drm_crtc_cleanup(crtc);
 }
 
-void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd)
+void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd, bool wait)
 {
 	struct drm_framebuffer *fb = hdlcd->crtc.primary->fb;
 	struct hdlcd_bo *bo;
 	unsigned int depth, bpp;
 	dma_addr_t scanout_start;
+	int ret;
 
 	drm_fb_get_bpp_depth(fb->pixel_format, &depth, &bpp);
 	bo = hdlcd->bo;
@@ -44,9 +45,16 @@ void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd)
 	scanout_start = bo->dma_addr + fb->offsets[0] +
 		(hdlcd->crtc.y * fb->pitches[0]) + (hdlcd->crtc.x * bpp/8);
 
-	if (scanout_start != hdlcd->scanout_buf) {
-		hdlcd_write(hdlcd, HDLCD_REG_FB_BASE, scanout_start);
-		hdlcd->scanout_buf = scanout_start;
+	hdlcd_write(hdlcd, HDLCD_REG_FB_BASE, scanout_start);
+
+	if (wait) {
+		drm_vblank_get(fb->dev, 0);
+		reinit_completion(&hdlcd->vsync_completion);
+		do {
+			ret = wait_for_completion_interruptible_timeout(&hdlcd->vsync_completion,
+							msecs_to_jiffies(1000));
+		} while (ret <= 0);
+		drm_vblank_put(fb->dev, 0);
 	}
 }
 
@@ -72,11 +80,13 @@ static int hdlcd_crtc_page_flip(struct drm_crtc *crtc,
 		unsigned long flags;
 
 		/* not active, update registers immediately */
-		hdlcd_set_scanout(hdlcd);
+		hdlcd_set_scanout(hdlcd, false);
 		spin_lock_irqsave(&crtc->dev->event_lock, flags);
 		if (event)
 			drm_send_vblank_event(crtc->dev, 0, event);
 		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
+	} else {
+		hdlcd_set_scanout(hdlcd, true);
 	}
 
 	return 0;
@@ -149,7 +159,7 @@ static int hdlcd_crtc_mode_set(struct drm_crtc *crtc,
 	/* This function gets called when the only change is the start of
 	   the scanout buffer. Detect that and bail out early */
 	if (hdlcd->initialised && hdlcd_fb_mode_equal(oldfb, crtc->primary->fb)) {
-		hdlcd_set_scanout(hdlcd);
+		hdlcd_set_scanout(hdlcd, true);
 		return 0;
 	}
 
@@ -226,7 +236,7 @@ static int hdlcd_crtc_mode_set(struct drm_crtc *crtc,
 	clk_set_rate(hdlcd->clk, mode->crtc_clock * 1000);
 	clk_enable(hdlcd->clk);
 
-	hdlcd_set_scanout(hdlcd);
+	hdlcd_set_scanout(hdlcd, false);
 	hdlcd->initialised = true;
 
 	return 0;
@@ -237,7 +247,7 @@ int hdlcd_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 {
 	struct hdlcd_drm_private *hdlcd = crtc_to_hdlcd_priv(crtc);
 
-	hdlcd_set_scanout(hdlcd);
+	hdlcd_set_scanout(hdlcd, true);
 	return 0;
 }
 

@@ -214,8 +214,6 @@ static irqreturn_t hdlcd_irq(int irq, void *arg)
 		struct drm_pending_vblank_event *event;
 		unsigned long flags;
 
-		hdlcd_set_scanout(hdlcd);
-
 		drm_handle_vblank(dev, 0);
 
 		spin_lock_irqsave(&dev->event_lock, flags);
@@ -226,7 +224,7 @@ static irqreturn_t hdlcd_irq(int irq, void *arg)
 			drm_vblank_put(dev, 0);
 		}
 		spin_unlock_irqrestore(&dev->event_lock, flags);
-		complete(&hdlcd->vsync_completion);
+		complete_all(&hdlcd->vsync_completion);
 	}
 
 	/* acknowledge interrupt(s) */
