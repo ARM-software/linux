@@ -443,7 +443,7 @@
 		}; */
 	};
 
-	hdlcd@7ff50000 {
+	/* hdlcd@7ff50000 {
 		compatible = "arm,hdlcd";
 		reg = <0 0x7ff50000 0 0x1000>;
 		interrupts = <0 93 4>;
@@ -454,7 +454,7 @@
 		display-timings {
 			native-mode = <&timing1>;
 			timing1: timing@1 {
-				/* 1024 x 768 framebufer, standard VGA timings */
+				/* 1024 x 768 framebufer, standard VGA timings * /
 				clock-frequency = <65000>;
 				hactive = <1024>;
 				vactive = <768>;
@@ -466,7 +466,7 @@
 				vsync-len = <6>;
 			};
 		};
-	};
+	}; */
 
 	gpu@0x2d000000 {
 		compatible = "arm,malit6xx", "arm,mali";
