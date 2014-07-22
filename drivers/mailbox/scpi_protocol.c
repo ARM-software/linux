@@ -228,7 +228,7 @@ unsigned long scpi_clk_get_val(u16 clk_id)
 {
 	struct scpi_data_buf sdata;
 	struct mhu_data_buf mdata;
-	struct {
+	struct __packed {
 		u32 status;
 		u32 clk_rate;
 	} buf;
@@ -247,7 +247,7 @@ int scpi_clk_set_val(u16 clk_id, unsigned long rate)
 	struct scpi_data_buf sdata;
 	struct mhu_data_buf mdata;
 	int stat;
-	struct {
+	struct __packed {
 		u32 clk_rate;
 		u16 clk_id;
 	} buf;
@@ -265,7 +265,7 @@ struct scpi_opp *scpi_dvfs_get_opps(u8 domain)
 {
 	struct scpi_data_buf sdata;
 	struct mhu_data_buf mdata;
-	struct {
+	struct __packed {
 		u32 status;
 		u32 header;
 		u32 freqs[MAX_DVFS_OPPS];
@@ -312,7 +312,7 @@ int scpi_dvfs_get_idx(u8 domain)
 {
 	struct scpi_data_buf sdata;
 	struct mhu_data_buf mdata;
-	struct {
+	struct __packed {
 		u32 status;
 		u8 dvfs_idx;
 	} buf;
@@ -335,7 +335,7 @@ int scpi_dvfs_set_idx(u8 domain, u8 idx)
 {
 	struct scpi_data_buf sdata;
 	struct mhu_data_buf mdata;
-	struct {
+	struct __packed {
 		u8 dvfs_domain;
 		u8 dvfs_idx;
 	} buf;
