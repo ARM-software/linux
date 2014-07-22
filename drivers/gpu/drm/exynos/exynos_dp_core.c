@@ -1059,6 +1059,7 @@ static void exynos_dp_poweron(struct exynos_dp_device *dp)
 	clk_prepare_enable(dp->clock);
 	exynos_dp_phy_init(dp);
 	exynos_dp_init_dp(dp);
+	schedule_work(&dp->hotplug_work);
 	enable_irq(dp->irq);
 }
 
