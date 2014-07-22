@@ -42,8 +42,7 @@ struct vb2_dma_sg_buf {
 
 static void vb2_dma_sg_put(void *buf_priv);
 
-static void *vb2_dma_sg_alloc(void *alloc_ctx, unsigned long size,
-			      int write, int plane, gfp_t gfp_flags)
+static void *vb2_dma_sg_alloc(void *alloc_ctx, unsigned long size, gfp_t gfp_flags)
 {
 	struct vb2_dma_sg_buf *buf;
 	int i;
@@ -121,7 +120,7 @@ static void vb2_dma_sg_put(void *buf_priv)
 }
 
 static void *vb2_dma_sg_get_userptr(void *alloc_ctx, unsigned long vaddr,
-				    unsigned long size, int write, int plane)
+				    unsigned long size, int write)
 {
 	struct vb2_dma_sg_buf *buf;
 	unsigned long first, last;

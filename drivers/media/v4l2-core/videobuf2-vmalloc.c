@@ -35,8 +35,7 @@ struct vb2_vmalloc_buf {
 
 static void vb2_vmalloc_put(void *buf_priv);
 
-static void *vb2_vmalloc_alloc(void *alloc_ctx, unsigned long size, int write,
-			       int plane, gfp_t gfp_flags)
+static void *vb2_vmalloc_alloc(void *alloc_ctx, unsigned long size, gfp_t gfp_flags)
 {
 	struct vb2_vmalloc_buf *buf;
 
@@ -71,7 +70,7 @@ static void vb2_vmalloc_put(void *buf_priv)
 }
 
 static void *vb2_vmalloc_get_userptr(void *alloc_ctx, unsigned long vaddr,
-				     unsigned long size, int write, int plane)
+				     unsigned long size, int write)
 {
 	struct vb2_vmalloc_buf *buf;
 	unsigned long first, last;
@@ -213,7 +212,7 @@ static int vb2_vmalloc_mmap(void *buf_priv, struct vm_area_struct *vma)
 /*       callbacks for DMABUF buffers        */
 /*********************************************/
 
-static int vb2_vmalloc_map_dmabuf(void *mem_priv, int plane)
+static int vb2_vmalloc_map_dmabuf(void *mem_priv)
 {
 	struct vb2_vmalloc_buf *buf = mem_priv;
 

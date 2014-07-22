@@ -152,8 +152,7 @@ static void vb2_dc_put(void *buf_priv)
 	kfree(buf);
 }
 
-static void *vb2_dc_alloc(void *alloc_ctx, unsigned long size,
-			  int write, int plane, gfp_t gfp_flags)
+static void *vb2_dc_alloc(void *alloc_ctx, unsigned long size, gfp_t gfp_flags)
 {
 	struct vb2_dc_conf *conf = alloc_ctx;
 	struct device *dev = conf->dev;
@@ -480,7 +479,7 @@ static void vb2_dc_put_userptr(void *buf_priv)
 }
 
 static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
-	unsigned long size, int write, int plane)
+	unsigned long size, int write)
 {
 	struct vb2_dc_conf *conf = alloc_ctx;
 	struct vb2_dc_buf *buf;
@@ -625,7 +624,7 @@ fail_buf:
 /*       callbacks for DMABUF buffers        */
 /*********************************************/
 
-static int vb2_dc_map_dmabuf(void *mem_priv, int plane)
+static int vb2_dc_map_dmabuf(void *mem_priv)
 {
 	struct vb2_dc_buf *buf = mem_priv;
 	struct sg_table *sgt;
