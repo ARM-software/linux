@@ -253,10 +253,10 @@ static int hdlcd_wait_for_vsync(struct fb_info *info)
 	int ret;
 
 	drm_vblank_get(helper->dev, 0);
-	reinit_completion(&hdlcd->vsync_completion);
+	reinit_completion(&hdlcd->frame_completion);
 	do {
-		ret = wait_for_completion_interruptible_timeout(&hdlcd->vsync_completion,
-							msecs_to_jiffies(1000));
+		ret = wait_for_completion_interruptible_timeout(&hdlcd->frame_completion,
+							msecs_to_jiffies(50));
 	} while (ret == -ERESTARTSYS);
 	drm_vblank_put(helper->dev, 0);
 	if (!ret)

@@ -47,14 +47,17 @@ void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd, bool wait)
 
 	hdlcd_write(hdlcd, HDLCD_REG_FB_BASE, scanout_start);
 
-	if (wait) {
+	if (wait && hdlcd->dpms == DRM_MODE_DPMS_ON) {
 		drm_vblank_get(fb->dev, 0);
-		reinit_completion(&hdlcd->vsync_completion);
+		reinit_completion(&hdlcd->frame_completion);
 		do {
-			ret = wait_for_completion_interruptible_timeout(&hdlcd->vsync_completion,
-							msecs_to_jiffies(1000));
+			ret = wait_for_completion_interruptible_timeout(&hdlcd->frame_completion,
+							msecs_to_jiffies(50));
 		} while (ret <= 0);
 		drm_vblank_put(fb->dev, 0);
+	} else {
+		dev_info(fb->dev->dev, "%s: wait called with DPMS set to %d\n",
+			__func__, hdlcd->dpms);
 	}
 }
 
@@ -76,7 +79,9 @@ static int hdlcd_crtc_page_flip(struct drm_crtc *crtc,
 
 	crtc->primary->fb = fb;
 
-	if (hdlcd->dpms != DRM_MODE_DPMS_ON) {
+	if (hdlcd->dpms == DRM_MODE_DPMS_ON) {
+		hdlcd_set_scanout(hdlcd, true);
+	} else {
 		unsigned long flags;
 
 		/* not active, update registers immediately */
@@ -85,8 +90,6 @@ static int hdlcd_crtc_page_flip(struct drm_crtc *crtc,
 		if (event)
 			drm_send_vblank_event(crtc->dev, 0, event);
 		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
-	} else {
-		hdlcd_set_scanout(hdlcd, true);
 	}
 
 	return 0;

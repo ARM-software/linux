@@ -156,7 +156,7 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 		goto fail;
 	}
 
-	init_completion(&hdlcd->vsync_completion);
+	init_completion(&hdlcd->frame_completion);
 	ret = drm_vblank_init(dev, 1);
 	if (ret < 0) {
 		dev_err(dev->dev, "failed to initialise vblank\n");
@@ -224,7 +224,10 @@ static irqreturn_t hdlcd_irq(int irq, void *arg)
 			drm_vblank_put(dev, 0);
 		}
 		spin_unlock_irqrestore(&dev->event_lock, flags);
-		complete_all(&hdlcd->vsync_completion);
+	}
+	if (irq_status & HDLCD_INTERRUPT_DMA_END) {
+		// send completion when reading the frame has finished
+		complete_all(&hdlcd->frame_completion);
 	}
 
 	/* acknowledge interrupt(s) */
@@ -243,15 +246,18 @@ static void hdlcd_irq_preinstall(struct drm_device *dev)
 
 static int hdlcd_irq_postinstall(struct drm_device *dev)
 {
-#ifdef CONFIG_DEBUG_FS
 	struct hdlcd_drm_private *hdlcd = dev->dev_private;
-	unsigned long irq_mask = hdlcd_read(hdlcd, HDLCD_REG_INT_MASK);
+	unsigned int irq_mask = hdlcd_read(hdlcd, HDLCD_REG_INT_MASK);
 
+#ifdef CONFIG_DEBUG_FS
 	/* enable debug interrupts */
 	irq_mask |= HDLCD_DEBUG_INT_MASK;
-
-	hdlcd_write(hdlcd, HDLCD_REG_INT_MASK, irq_mask);
 #endif
+
+	/* enable DMA completion interrupts */
+	irq_mask |= HDLCD_INTERRUPT_DMA_END;
+	hdlcd_write(hdlcd, HDLCD_REG_INT_MASK, irq_mask);
+
 	return 0;
 }
 
@@ -259,15 +265,15 @@ static void hdlcd_irq_uninstall(struct drm_device *dev)
 {
 	struct hdlcd_drm_private *hdlcd = dev->dev_private;
 	/* disable all the interrupts that we might have enabled */
-	unsigned long irq_mask = hdlcd_read(hdlcd, HDLCD_REG_INT_MASK);
+	unsigned int irq_mask = hdlcd_read(hdlcd, HDLCD_REG_INT_MASK);
 
 #ifdef CONFIG_DEBUG_FS
 	/* disable debug interrupts */
 	irq_mask &= ~HDLCD_DEBUG_INT_MASK;
 #endif
 
-	/* disable vsync interrupts */
-	irq_mask &= ~HDLCD_INTERRUPT_VSYNC;
+	/* disable vsync and dma interrupts */
+	irq_mask &= ~(HDLCD_INTERRUPT_VSYNC | HDLCD_INTERRUPT_DMA_END);
 
 	hdlcd_write(hdlcd, HDLCD_REG_INT_MASK, irq_mask);
 }

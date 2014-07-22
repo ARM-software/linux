@@ -19,7 +19,7 @@ struct hdlcd_drm_private {
 	struct drm_pending_vblank_event	*event;
 	struct drm_crtc			crtc;
 	struct device_node		*slave_node;
-	struct completion		vsync_completion;
+	struct completion		frame_completion;
 #ifdef CONFIG_DEBUG_FS
 	atomic_t buffer_underrun_count;
 	atomic_t bus_error_count;

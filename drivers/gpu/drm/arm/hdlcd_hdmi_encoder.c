@@ -60,7 +60,7 @@ hdlcd_connector_detect(struct drm_connector *connector, bool force)
 {
 	struct drm_encoder_slave *slave;
 	if (!connector->encoder)
-		return connector_status_unknown;
+		connector->encoder = hdlcd_connector_best_encoder(connector);
 
 	slave = hdlcd_get_slave_encoder(connector);
 	if (!slave || !slave->slave_funcs)
@@ -130,6 +130,11 @@ static struct drm_encoder_funcs hdlcd_encoder_funcs = {
 	.destroy	= drm_i2c_encoder_destroy,
 };
 
+static void hdlcd_hdmi_encoder_disable(struct drm_encoder *encoder)
+{
+	drm_i2c_encoder_dpms(encoder, DRM_MODE_DPMS_OFF);
+}
+
 static struct drm_encoder_helper_funcs hdlcd_encoder_helper_funcs = {
 	.dpms		= drm_i2c_encoder_dpms,
 	.save		= drm_i2c_encoder_save,
@@ -139,6 +144,7 @@ static struct drm_encoder_helper_funcs hdlcd_encoder_helper_funcs = {
 	.commit		= drm_i2c_encoder_commit,
 	.mode_set	= drm_i2c_encoder_mode_set,
 	.detect		= drm_i2c_encoder_detect,
+	.disable	= hdlcd_hdmi_encoder_disable,
 };
 
 static struct tda998x_encoder_params tda998x_params = {
