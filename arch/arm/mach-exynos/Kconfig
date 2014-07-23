@@ -598,6 +598,7 @@ config MACH_ODROIDXU3
 	select PINCTRL
 	select PINCTRL_EXYNOS
 	select USE_OF
+	select S5P_DEV_MFC
 	help
 	  Machine support for Hardkernel odroid-xu3 machine with device tree enabled.
 	  Select this if a fdt blob is available for the EXYNOS5422 SoC based board.
