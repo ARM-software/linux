@@ -775,6 +775,7 @@ static int s5p_mfc_init_vb2_queue(struct vb2_queue *q, void *priv,
 
 	q->type = buf_type;
 	q->drv_priv = priv;
+	q->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	q->io_modes = VB2_MMAP | VB2_DMABUF | VB2_USERPTR;
 	if (node_type == MFCNODE_DECODER)
 		q->ops = get_dec_queue_ops();
