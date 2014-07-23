@@ -1757,12 +1757,17 @@ struct v4l2_event_frame_sync {
 	__u32 frame_sequence;
 };
 
+struct v4l2_event_src_change {
+        __u32 changes;
+};
+
 struct v4l2_event {
 	__u32				type;
 	union {
 		struct v4l2_event_vsync		vsync;
 		struct v4l2_event_ctrl		ctrl;
 		struct v4l2_event_frame_sync	frame_sync;
+		struct v4l2_event_src_change    src_change;
 		__u8				data[64];
 	} u;
 	__u32				pending;
@@ -1966,5 +1971,10 @@ struct v4l2_create_buffers {
    drivers/media/video/v4l2-compat-ioctl32.c as well! */
 
 #define BASE_VIDIOC_PRIVATE	192		/* 192-255 are private */
+
+#define V4L2_BUF_FLAG_TSTAMP_SRC_MASK		0x00070000
+#define V4L2_EVENT_SOURCE_CHANGE		5
+#define V4L2_EVENT_SRC_CH_RESOLUTION		(1 << 0)
+#define V4L2_EVENT_RESOLUTION_CHANGE		5
 
 #endif /* _UAPI__LINUX_VIDEODEV2_H */
