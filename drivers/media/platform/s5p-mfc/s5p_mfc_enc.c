@@ -596,54 +596,6 @@ static struct mfc_control controls[] = {
 		.default_value = 1,
 		.is_volatile = 1,
 	},
-	{
-		.id = V4L2_CID_VPX_PROFILE,
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = 0,
-		.maximum = 3,
-		.step = 1,
-		.default_value = 0,
-	},
-	{
-		.id = V4L2_CID_VPX_MAX_QP,
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = 115,
-		.maximum = 127,
-		.step = 1,
-		.default_value = 127,
-	},
-	{
-		.id = V4L2_CID_VPX_MIN_QP,
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = 0,
-		.maximum = 11,
-		.step = 1,
-		.default_value = 0,
-	},
-	{
-		.id = V4L2_CID_VPX_I_FRAME_QP,
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = 0,
-		.maximum = 127,
-		.step = 1,
-		.default_value = 10,
-	},
-	{
-		.id = V4L2_CID_VPX_P_FRAME_QP,
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = 0,
-		.maximum = 127,
-		.step = 1,
-		.default_value = 10,
-	},
-	{
-		.id = V4L2_CID_VPX_IVF_FORMAT,
-		.type = V4L2_CTRL_TYPE_BOOLEAN,
-		.minimum = 0,
-		.maximum = 1,
-		.step = 1,
-		.default_value = 0,
-	},
 };
 
 #define NUM_CTRLS ARRAY_SIZE(controls)
@@ -2183,7 +2135,7 @@ int s5p_mfc_enc_ctrls_setup(struct s5p_mfc_ctx *ctx)
 			}
 		}
 		if (ctx->ctrl_handler.error) {
-			mfc_err("Adding control (%d) failed\n", i);
+			mfc_err("Adding control (%d) %d failed\n", i, controls[i].id);
 			return ctx->ctrl_handler.error;
 		}
 		if (controls[i].is_volatile && ctx->ctrls[i])
