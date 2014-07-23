@@ -19,6 +19,7 @@
 #include "s5p_mfc_common.h"
 #include "s5p_mfc_debug.h"
 #include "s5p_mfc_pm.h"
+#include "s5p_mfc_ctrl.h"
 
 #define MFC_GATE_CLK_NAME	"mfc"
 
@@ -74,7 +75,7 @@ void s5p_mfc_final_pm(struct s5p_mfc_dev *dev)
 #endif
 }
 
-int s5p_mfc_clock_on(void)
+int s5p_mfc_clock_on(struct s5p_mfc_dev *dev)
 {
 	int ret;
 #ifdef CLK_DEBUG
@@ -82,15 +83,17 @@ int s5p_mfc_clock_on(void)
 	mfc_debug(3, "+ %d\n", atomic_read(&clk_ref));
 #endif
 	ret = clk_enable(pm->clock_gate);
+	s5p_mfc_ctrl_ops_call(dev, mem_req_enable, dev);
 	return ret;
 }
 
-void s5p_mfc_clock_off(void)
+void s5p_mfc_clock_off(struct s5p_mfc_dev *dev)
 {
 #ifdef CLK_DEBUG
 	atomic_dec(&clk_ref);
 	mfc_debug(3, "- %d\n", atomic_read(&clk_ref));
 #endif
+	s5p_mfc_ctrl_ops_call(dev, mem_req_disable, dev);
 	clk_disable(pm->clock_gate);
 }
 

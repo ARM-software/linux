@@ -23,7 +23,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
 #include "regs-mfc.h"
-#include "regs-mfc-v6.h"
+#include "regs-mfc-v8.h"
 
 /* Definitions related to MFC memory */
 
@@ -51,7 +51,7 @@ static inline dma_addr_t s5p_mfc_mem_cookie(void *a, void *b)
 /* MFC definitions */
 #define MFC_MAX_EXTRA_DPB       5
 #define MFC_MAX_BUFFERS		32
-#define MFC_NUM_CONTEXTS	4
+#define MFC_NUM_CONTEXTS	8
 /* Interrupt timeout */
 #define MFC_INT_TIMEOUT		2000
 /* Busy wait timeout */
@@ -64,7 +64,7 @@ static inline dma_addr_t s5p_mfc_mem_cookie(void *a, void *b)
 #define MFC_ENC_CAP_PLANE_COUNT	1
 #define MFC_ENC_OUT_PLANE_COUNT	2
 #define STUFF_BYTE		4
-#define MFC_MAX_CTRLS		70
+#define MFC_MAX_CTRLS		80
 
 #define S5P_MFC_CODEC_NONE		-1
 #define S5P_MFC_CODEC_H264_DEC		0
@@ -80,6 +80,7 @@ static inline dma_addr_t s5p_mfc_mem_cookie(void *a, void *b)
 #define S5P_MFC_CODEC_H264_MVC_ENC	21
 #define S5P_MFC_CODEC_MPEG4_ENC		22
 #define S5P_MFC_CODEC_H263_ENC		23
+#define S5P_MFC_CODEC_VP8_ENC		24
 
 #define S5P_MFC_R2H_CMD_EMPTY			0
 #define S5P_MFC_R2H_CMD_SYS_INIT_RET		1
@@ -113,6 +114,15 @@ enum s5p_mfc_fmt_type {
 };
 
 /**
+ * enum s5p_mfc_node_type - The type of an MFC device node.
+ */
+enum s5p_mfc_node_type {
+	MFCNODE_INVALID = -1,
+	MFCNODE_DECODER = 0,
+	MFCNODE_ENCODER = 1,
+};
+
+/**
  * enum s5p_mfc_inst_type - The type of an MFC instance.
  */
 enum s5p_mfc_inst_type {
@@ -129,7 +139,6 @@ enum s5p_mfc_inst_state {
 	MFCINST_INIT = 100,
 	MFCINST_GOT_INST,
 	MFCINST_HEAD_PARSED,
-	MFCINST_HEAD_PRODUCED,
 	MFCINST_BUFS_SET,
 	MFCINST_RUNNING,
 	MFCINST_FINISHING,
@@ -162,10 +171,39 @@ enum s5p_mfc_decode_arg {
 	MFC_DEC_RES_CHANGE,
 };
 
+
+/**
+ * enum s5p_mfc_encoder_param_change - indicates runtime parameter change
+ */
+enum s5p_mfc_encode_param_change {
+	MFC_ENC_GOP_CONFIG_CHANGE,
+	MFC_ENC_FRAME_RATE_CHANGE,
+	MFC_ENC_BIT_RATE_CHANGE,
+	MFC_ENC_FRAME_INSERTION,
+};
+
+enum s5p_mfc_error {
+	ERR_HEADER_NOT_FOUND,
+	ERR_WARNING,
+	ERR_UNKNOWN,
+};
+
 #define MFC_BUF_FLAG_USED	(1 << 0)
 #define MFC_BUF_FLAG_EOS	(1 << 1)
 
 struct s5p_mfc_ctx;
+
+/**
+ * struct s5p_mfc_enc_params - runtime modifiable encoding parameters
+ */
+struct s5p_mfc_runtime_enc_params {
+	u32 params_changed;
+	u16 gop_size;
+	u32 rc_framerate_num;
+	u32 rc_framerate_denom;
+	u32 rc_bitrate;
+	enum v4l2_mpeg_mfc51_video_force_frame_type force_frame_type;
+};
 
 /**
  * struct s5p_mfc_buf - MFC buffer
@@ -181,6 +219,7 @@ struct s5p_mfc_buf {
 		size_t stream;
 	} cookie;
 	int flags;
+	struct s5p_mfc_runtime_enc_params runtime_enc_params;
 };
 
 /**
@@ -218,30 +257,39 @@ struct s5p_mfc_buf_align {
 	unsigned int base;
 };
 
+enum s5p_mfc_fmt_idx {
+	SRC_FMT_DEC,
+	DST_FMT_DEC,
+	SRC_FMT_ENC,
+	DST_FMT_ENC,
+};
+
 struct s5p_mfc_variant {
 	unsigned int version;
 	unsigned int port_num;
 	struct s5p_mfc_buf_size *buf_size;
 	struct s5p_mfc_buf_align *buf_align;
+	u32	*def_fmt;
 	char	*fw_name;
 };
 
 /**
  * struct s5p_mfc_priv_buf - represents internal used buffer
- * @alloc:		allocation-specific context for each buffer
- *			(videobuf2 allocator)
  * @ofs:		offset of each buffer, will be used for MFC
  * @virt:		kernel virtual address, only valid when the
  *			buffer accessed by driver
  * @dma:		DMA address, only valid when kernel DMA API used
  * @size:		size of the buffer
+ * @attrs:		dma-mapping attributes used to allocate the buffer
+ * @token:		value returned from dma_alloc_attrs()
  */
 struct s5p_mfc_priv_buf {
-	void		*alloc;
 	unsigned long	ofs;
 	void		*virt;
 	dma_addr_t	dma;
 	size_t		size;
+	struct dma_attrs attrs;
+	void		*token;
 };
 
 /**
@@ -280,12 +328,14 @@ struct s5p_mfc_priv_buf {
  * @watchdog_workqueue:	workqueue for the watchdog
  * @watchdog_work:	worker for the watchdog
  * @alloc_ctx:		videobuf2 allocator contexts for two memory banks
+ * @clk_flag:		flag used for dynamic control of mfc clock
  * @enter_suspend:	flag set when entering suspend
  * @ctx_buf:		common context memory (MFCv6)
- * @warn_start:		hardware error code from which warnings start
  * @mfc_ops:		ops structure holding HW operation function pointers
  * @mfc_cmds:		cmd structure holding HW commands function pointers
- *
+ * @mfc_regs:		regs structure holding HW register offsets
+ * @mfc_ctrl_ops:	ctrl structure holding HW control function pointers
+ * @risc_on:		flag to indicate risc on/off status
  */
 struct s5p_mfc_dev {
 	struct v4l2_device	v4l2_dev;
@@ -322,12 +372,15 @@ struct s5p_mfc_dev {
 	struct workqueue_struct *watchdog_workqueue;
 	struct work_struct watchdog_work;
 	void *alloc_ctx[2];
+	unsigned long clk_flag;
 	unsigned long enter_suspend;
 
 	struct s5p_mfc_priv_buf ctx_buf;
-	int warn_start;
 	struct s5p_mfc_hw_ops *mfc_ops;
 	struct s5p_mfc_hw_cmds *mfc_cmds;
+	const struct s5p_mfc_regs *mfc_regs;
+	struct s5p_mfc_hw_ctrl_ops *mfc_ctrl_ops;
+	bool risc_on; /* indicates if RISC is on or off */
 };
 
 /**
@@ -399,13 +452,34 @@ struct s5p_mfc_mpeg4_enc_params {
 };
 
 /**
+ * struct s5p_mfc_vp8_enc_params - encoding parameters for vp8
+ */
+struct s5p_mfc_vp8_enc_params {
+	u8 hier_qp;
+	u8 imd_4x4;
+	enum v4l2_vp8_num_partitions num_partitions;
+	u8 num_ref;
+	u8 filter_level;
+	u8 filter_sharpness;
+	u32 golden_frame_ref_period;
+	u8 golden_frame_sel;
+	u8 profile;
+	u8 rc_min_qp;
+	u8 rc_max_qp;
+	u8 rc_frame_qp;
+	u8 rc_p_frame_qp;
+	bool ivf;
+};
+
+/**
  * struct s5p_mfc_enc_params - general encoding parameters
  */
 struct s5p_mfc_enc_params {
-	u16 width;
-	u16 height;
+	u16 crop_left_offset;
+	u16 crop_right_offset;
+	u16 crop_top_offset;
+	u16 crop_bottom_offset;
 
-	u16 gop_size;
 	enum v4l2_mpeg_video_multi_slice_mode slice_mode;
 	u16 slice_mb;
 	u32 slice_bit;
@@ -416,7 +490,6 @@ struct s5p_mfc_enc_params {
 	u8 pad_cr;
 	int rc_frame;
 	int rc_mb;
-	u32 rc_bitrate;
 	u16 rc_reaction_coeff;
 	u16 vbv_size;
 	u32 vbv_delay;
@@ -426,12 +499,12 @@ struct s5p_mfc_enc_params {
 	int fixed_target_bit;
 
 	u8 num_b_frame;
-	u32 rc_framerate_num;
-	u32 rc_framerate_denom;
 
 	struct {
+		struct s5p_mfc_runtime_enc_params runtime;
 		struct s5p_mfc_h264_enc_params h264;
 		struct s5p_mfc_mpeg4_enc_params mpeg4;
+		struct s5p_mfc_vp8_enc_params vp8;
 	} codec;
 
 };
@@ -593,7 +666,7 @@ struct s5p_mfc_ctx {
 	int after_packed_pb;
 	int sei_fp_parse;
 
-	int pb_count;
+	int dpb_count;
 	int total_dpb_count;
 	int mv_count;
 	/* Buffers */
@@ -608,8 +681,6 @@ struct s5p_mfc_ctx {
 	size_t chroma_dpb_size;
 	size_t me_buffer_size;
 	size_t tmv_buffer_size;
-
-	enum v4l2_mpeg_mfc51_video_force_frame_type force_frame_type;
 
 	struct list_head ref_queue;
 	unsigned int ref_queue_cnt;
@@ -631,6 +702,8 @@ struct s5p_mfc_ctx {
 /*
  * struct s5p_mfc_fmt -	structure used to store information about pixelformats
  *			used by the MFC
+ * @min_version:	minimum FW version supporting given format
+ * @max_version:	maximum FW version supporting given format
  */
 struct s5p_mfc_fmt {
 	char *name;
@@ -638,6 +711,8 @@ struct s5p_mfc_fmt {
 	u32 codec_mode;
 	enum s5p_mfc_fmt_type type;
 	u32 num_planes;
+	u16 min_version;
+	u16 max_version;
 };
 
 /**
@@ -662,6 +737,11 @@ struct mfc_control {
 #define s5p_mfc_hw_call(f, op, args...) \
 	((f && f->op) ? f->op(args) : -ENODEV)
 
+/* Macro for making control specific calls */
+#define s5p_mfc_ctrl_ops_call(dev, op, args...) \
+	(((dev) && ((dev)->mfc_ctrl_ops) && ((dev)->mfc_ctrl_ops->op)) ? \
+	  (dev)->mfc_ctrl_ops->op(args) : -ENODEV)
+
 #define fh_to_ctx(__fh) container_of(__fh, struct s5p_mfc_ctx, fh)
 #define ctrl_to_ctx(__ctrl) \
 	container_of((__ctrl)->handler, struct s5p_mfc_ctx, ctrl_handler)
@@ -671,9 +751,23 @@ void set_work_bit(struct s5p_mfc_ctx *ctx);
 void clear_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 
-#define HAS_PORTNUM(dev)	(dev ? (dev->variant ? \
-				(dev->variant->port_num ? 1 : 0) : 0) : 0)
-#define IS_TWOPORT(dev)		(dev->variant->port_num == 2 ? 1 : 0)
-#define IS_MFCV6(dev)		(dev->variant->version >= 0x60 ? 1 : 0)
+#define HAS_VARIANT(dev) ((dev) && ((dev)->variant))
+#define HAS_PORTNUM(dev) (HAS_VARIANT(dev) && ((dev)->variant->port_num))
+#define IS_TWOPORT(dev)	(HAS_PORTNUM(dev) && ((dev)->variant->port_num == 2))
+
+#define IS_MFCVX(dev, x) (HAS_VARIANT(dev) && ((dev)->variant->version >= (x)))
+#define IS_MFCV6(dev)	IS_MFCVX(dev, 0x60)
+#define IS_MFCV7(dev)	IS_MFCVX(dev, 0x70)
+#define IS_MFCV8(dev)	IS_MFCVX(dev, 0x80)
+#define IS_MFCV_RANGE(dev, min, max) (HAS_VARIANT(dev) \
+					&& ((dev)->variant->version >= (min)) \
+					&& ((dev)->variant->version <= (max)))
+#define IS_FMT_SUPPORTED(dev, fmt) \
+	((fmt) && IS_MFCV_RANGE(dev, (fmt)->min_version, (fmt)->max_version))
+
+#define HAS_MFC_DEF_FMT(dev) ((HAS_VARIANT(dev)) && ((dev)->variant->def_fmt))
+#define GET_MFC_DEF_FMT(dev, fmt_idx) \
+	((HAS_MFC_DEF_FMT(dev)) ? ((dev)->variant->def_fmt[fmt_idx]) : -1)
+#define MFC_VERSION_MAX  0xffff
 
 #endif /* S5P_MFC_COMMON_H_ */

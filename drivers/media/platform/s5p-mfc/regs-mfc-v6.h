@@ -71,6 +71,8 @@
 #define S5P_FIMV_R2H_CMD_ENC_BUFFER_FUL_RET_V6	16
 #define S5P_FIMV_R2H_CMD_ERR_RET_V6		32
 
+#define S5P_FIMV_MFC_BUS_RESET_CTRL		0x7110
+#define S5P_FIMV_MFC_BUS_RESET_CTRL_MASK	0xfffffffe
 #define S5P_FIMV_FW_VERSION_V6			0xf000
 
 #define S5P_FIMV_INSTANCE_ID_V6			0xf008
@@ -80,6 +82,7 @@
 #define S5P_FIMV_PIXEL_FORMAT_V6		0xf020
 
 #define S5P_FIMV_METADATA_ENABLE_V6		0xf024
+#define S5P_FIMV_DBG_INFO_ENABLE_V6		0xf02c
 #define S5P_FIMV_DBG_BUFFER_ADDR_V6		0xf030
 #define S5P_FIMV_DBG_BUFFER_SIZE_V6		0xf034
 #define S5P_FIMV_RET_INSTANCE_ID_V6		0xf070
@@ -90,6 +93,8 @@
 #define S5P_FIMV_ERR_DEC_SHIFT_V6		0
 #define S5P_FIMV_ERR_DSPL_MASK_V6		0xffff0000
 #define S5P_FIMV_ERR_DSPL_SHIFT_V6		16
+/* Error codes */
+#define S5P_FIMV_ERR_CODE_HEADER_NOT_FOUND_V6	102
 
 #define S5P_FIMV_DBG_BUFFER_OUTPUT_SIZE_V6	0xf078
 #define S5P_FIMV_METADATA_STATUS_V6		0xf07C
@@ -132,6 +137,7 @@
 #define S5P_FIMV_D_METADATA_BUFFER_ADDR_V6	0xf448
 #define S5P_FIMV_D_METADATA_BUFFER_SIZE_V6	0xf44c
 #define S5P_FIMV_D_NUM_MV_V6			0xf478
+#define S5P_FIMV_D_INIT_BUFFER_OPTIONS_V6	0xf47c
 #define S5P_FIMV_D_CPB_BUFFER_ADDR_V6		0xf4b0
 #define S5P_FIMV_D_CPB_BUFFER_SIZE_V6		0xf4b4
 
@@ -330,6 +336,10 @@
 #define S5P_FIMV_E_MVC_RC_RPARA_VIEW1_V6		0xfd50
 #define S5P_FIMV_E_MVC_INTER_VIEW_PREDICTION_ON_V6	0xfd80
 
+#define S5P_FIMV_E_GOP_CONFIG_CHANGE_SHIFT_V6		0
+#define S5P_FIMV_E_FRAME_RATE_CHANGE_SHIFT_V6		1
+#define S5P_FIMV_E_BIT_RATE_CHANGE_SHIFT_V6		2
+
 /* Codec numbers  */
 #define S5P_FIMV_CODEC_NONE_V6		-1
 
@@ -374,10 +384,10 @@
 #define S5P_FIMV_NUM_PIXELS_IN_MB_COL_V6	16
 
 /* Buffer size requirements defined by hardware */
-#define S5P_FIMV_TMV_BUFFER_SIZE_V6(w, h)	(((w) + 1) * ((h) + 1) * 8)
+#define S5P_FIMV_TMV_BUFFER_SIZE_V6(w, h)	(((w) + 1) * ((h) + 3) * 8)
 #define S5P_FIMV_ME_BUFFER_SIZE_V6(imw, imh, mbw, mbh) \
-	((DIV_ROUND_UP(imw, 64) *  DIV_ROUND_UP(imh, 64) * 256) + \
-	 (DIV_ROUND_UP((mbw) * (mbh), 32) * 16))
+       ((DIV_ROUND_UP(((imw)+64), 64) *  DIV_ROUND_UP((imh), 64) * 256) + \
+        (DIV_ROUND_UP((mbw) * (mbh), 32) * 16))
 #define S5P_FIMV_SCRATCH_BUF_SIZE_H264_DEC_V6(w, h)	(((w) * 192) + 64)
 #define S5P_FIMV_SCRATCH_BUF_SIZE_MPEG4_DEC_V6(w, h) \
 			((w) * ((h) * 64 + 144) + (2048/16 * (h) * 64) + \
