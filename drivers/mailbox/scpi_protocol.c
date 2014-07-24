@@ -180,8 +180,10 @@ static int send_scpi_cmd(struct scpi_data_buf *scpi_buf, bool high_priority)
 		return PTR_ERR(chan);
 
 	init_completion(&scpi_buf->complete);
-	if (mbox_send_message(chan, (void *)data))
-		return -EIO;
+	if (mbox_send_message(chan, (void *)data) < 0) {
+		status = SCPI_ERR_TIMEOUT;
+		goto free_channel;
+	}
 
 	if (!wait_for_completion_timeout(&scpi_buf->complete,
 					 msecs_to_jiffies(50)))
@@ -189,6 +191,7 @@ static int send_scpi_cmd(struct scpi_data_buf *scpi_buf, bool high_priority)
 	else
 		status = *(u32 *)(data->rx_buf); /* read first word */
 
+free_channel:
 	mbox_free_channel(chan);
 
 	return scpi_to_linux_errno(status);
