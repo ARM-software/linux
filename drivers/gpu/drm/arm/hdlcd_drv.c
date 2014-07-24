@@ -310,8 +310,22 @@ static int hdlcd_show_underrun_count(struct seq_file *m, void *arg)
 	return 0;
 }
 
+static int hdlcd_show_pxlclock(struct seq_file *m, void **arg)
+{
+	struct drm_info_node *node = (struct drm_info_node *)m->private;
+	struct drm_device *dev = node->minor->dev;
+	struct hdlcd_drm_private *hdlcd = dev->dev_private;
+	unsigned long clkrate = clk_get_rate(hdlcd->clk);
+	unsigned long mode_clock = hdlcd->crtc.mode.crtc_clock * 1000;
+
+	seq_printf(m, "hw  : %lu\n", clkrate);
+	seq_printf(m, "mode: %lu\n", mode_clock);
+	return 0;
+}
+
 static struct drm_info_list hdlcd_debugfs_list[] = {
 	{ "interrupt_count", hdlcd_show_underrun_count, 0 },
+	{ "clocks", hdlcd_show_pxlclock, 0 },
 };
 
 static int hdlcd_debugfs_init(struct drm_minor *minor)
