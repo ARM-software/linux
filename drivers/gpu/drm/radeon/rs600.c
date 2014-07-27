@@ -631,10 +631,10 @@ void rs600_gart_set_page(struct radeon_device *rdev, unsigned i, uint64_t addr)
 	void __iomem *ptr = (void *)rdev->gart.ptr;
 
 	addr = addr & 0xFFFFFFFFFFFFF000ULL;
-	if (addr == rdev->dummy_page.addr)
-		addr |= R600_PTE_SYSTEM | R600_PTE_SNOOPED;
-	else
-		addr |= R600_PTE_GART;
+	if (addr != rdev->dummy_page.addr)
+		addr |= R600_PTE_VALID | R600_PTE_READABLE |
+			R600_PTE_WRITEABLE;
+	addr |= R600_PTE_SYSTEM | R600_PTE_SNOOPED;
 	writeq(addr, ptr + (i * 8));
 }
 
