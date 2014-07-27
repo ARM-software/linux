@@ -158,7 +158,7 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 				return -EINVAL;
 			}
 
-			p->relocs[i].prefered_domains = domain;
+			p->relocs[i].lobj.domain = domain;
 			if (domain == RADEON_GEM_DOMAIN_VRAM)
 				domain |= RADEON_GEM_DOMAIN_GTT;
 			p->relocs[i].allowed_domains = domain;

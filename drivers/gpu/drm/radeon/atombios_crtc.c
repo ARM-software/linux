@@ -918,6 +918,9 @@ static void atombios_crtc_program_pll(struct drm_crtc *crtc,
 				case 12:
 					args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_36BPP_V6;
 					break;
+				case 12:
+					args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_36BPP;
+					break;
 				case 16:
 					args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_48BPP;
 					break;
