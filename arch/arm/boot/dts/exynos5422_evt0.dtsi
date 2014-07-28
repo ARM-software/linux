@@ -1,5 +1,4 @@
-/*
- * SAMSUNG EXYNOS5422 SoC device tree source
+/* SAMSUNG EXYNOS5422 SoC device tree source
  *
  * Copyright (c) 2013 Samsung Electronics Co., Ltd.
  *             http://www.samsung.com
@@ -1175,7 +1174,8 @@
 	hdmiphy: hdmiphy@145D0000 {
 		reg = <0x145D0000 0x20>;
 	};
-	
+
+	/*
     dp_phy: video-phy@10040728 {
         compatible = "samsung,exynos5250-dp-video-phy";
         reg = <0x10040728 4>;
@@ -1191,25 +1191,12 @@
         clock-names = "clk_dp1";   
         phys = <&dp_phy>;
         phy-names = "dp";
-
 		samsung,power-domain = <&spd_dp>; 
-		
-        /* HACK? */
-		hsync-active-high = <0>;
-		vsync-active-high = <0>;
-		interlaced = <0>;
-
-		samsung,color-space = <0>;
-        samsung,dynamic-range = <0>;
-        samsung,ycbcr-coeff = <0>;
-        samsung,color-depth = <1>;
-        samsung,link-rate = <0x0a>;
-        samsung,lane-count = <4>;
     };
+	*/
 
     fimd: fimd@14400000 {   
 		compatible = "samsung,exynos5250-fimd";
-        // samsung,power-domain = <&pd_disp1>;
         clocks = <&clock 1061>, <&clock 1329>;
         clock-names = "sclk_fimd1", "clk_fimd1";
         reg = <0x14400000 0x40000>, <0x14500000 0x8000>;
