@@ -211,8 +211,8 @@ static int s3c_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 
 	period = NS_IN_HZ / period_ns;
 
-	pwm_info(s3c, "duty_ns=%d, period_ns=%d (%lu)\n",
-			duty_ns, period_ns, period);
+/*	pwm_info(s3c, "duty_ns=%d, period_ns=%d (%lu)\n",
+			duty_ns, period_ns, period); */
 
 	/* Check to see if we are changing the clock rate of the PWM */
 
@@ -237,8 +237,8 @@ static int s3c_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
 		return -ERANGE;
 	}
 
-	pwm_dbg(s3c, "duty_ns=%d, period_ns=%d (%lu)\n",
-		duty_ns, period_ns, period);
+/*	pwm_dbg(s3c, "duty_ns=%d, period_ns=%d (%lu)\n",
+		duty_ns, period_ns, period); */
 
 	if (tcmp == 0)
 		duty_cycle = DUTY_CYCLE_ZERO;
