@@ -36,6 +36,8 @@ struct cluster_power_coefficients cluster_data[] = {
 
 struct scpi_sensor {
 	u16 sensor_id;
+	unsigned long prev_temp;
+	u32 alpha;
 	struct thermal_zone_device *tzd;
 	struct cpumask cluster[NUM_CLUSTERS];
 	struct thermal_cooling_device *cdevs[NUM_CLUSTERS];
@@ -43,6 +45,23 @@ struct scpi_sensor {
 static struct scpi_sensor scpi_temp_sensor;
 
 static struct scpi_ops *scpi_ops;
+
+#define FRAC_BITS 10
+#define int_to_frac(x) ((x) << FRAC_BITS)
+#define frac_to_int(x) ((x) >> FRAC_BITS)
+
+/**
+ * mul_frac() - multiply two fixed-point numbers
+ * @x:	first multiplicand
+ * @y:	second multiplicand
+ *
+ * Return: the result of multiplying two fixed-point numbers.  The
+ * result is also a fixed-point number.
+ */
+static inline s64 mul_frac(s64 x, s64 y)
+{
+	return (x * y) >> FRAC_BITS;
+}
 
 static unsigned long get_temperature_scale(unsigned long temp)
 {
@@ -101,13 +120,22 @@ static int get_temp_value(void *data, long *temp)
 	struct scpi_sensor *sensor = (struct scpi_sensor *)data;
 	u32 val;
 	int ret;
+	unsigned long est_temp;
 
 	ret = scpi_ops->sensor_get_value(sensor->sensor_id, &val);
+	if (ret)
+		return ret;
 
-	if (!ret)
-		*temp = (unsigned long)val;
+	if (!sensor->prev_temp)
+		sensor->prev_temp = val;
 
-	return ret;
+	est_temp = mul_frac(sensor->alpha, val) +
+		mul_frac((int_to_frac(1) - sensor->alpha), sensor->prev_temp);
+
+	sensor->prev_temp = est_temp;
+	*temp = est_temp;
+
+	return 0;
 }
 
 static struct thermal_zone_of_device_ops scpi_of_ops = {
@@ -173,6 +201,15 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 
 	sensor_data->sensor_id = (u16)sensor;
 	dev_info(&pdev->dev, "Probed %s sensor. Id=%hu\n", SOC_SENSOR, sensor_data->sensor_id);
+
+	/*
+	 * alpha ~= 2 / (N + 1) with N the window of a rolling mean We
+	 * use 8-bit fixed point arithmetic.  For a rolling average of
+	 * window 20, alpha = 2 / (20 + 1) ~= 0.09523809523809523 .
+	 * In 8-bit fixed point arigthmetic, 0.09523809523809523 * 256
+	 * ~= 24
+	 */
+	sensor_data->alpha = 24;
 
 	sensor_data->tzd = thermal_zone_of_sensor_register(&pdev->dev,
 							sensor_data->sensor_id,
