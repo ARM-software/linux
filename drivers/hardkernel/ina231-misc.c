@@ -124,7 +124,8 @@ int		ina231_misc_probe(struct ina231_sensor *sensor)
     pmisc->minor = MISC_DYNAMIC_MINOR;
     pmisc->name = sensor->pd->name;
     pmisc->fops = &ina231_misc_fops;
-    
+    pmisc->mode = S_IWUGO | S_IRUGO;
+        
     sensor->misc = pmisc;
 	
 	if((rc = misc_register(sensor->misc)) < 0)	{
