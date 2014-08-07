@@ -403,6 +403,7 @@ static struct fb_ops hdlcd_fb_ops = {
 	.fb_pan_display = drm_fb_helper_pan_display,
 	.fb_setcmap = drm_fb_helper_setcmap,
 	.fb_ioctl = hdlcd_fb_ioctl,
+	.fb_compat_ioctl = hdlcd_fb_ioctl,
 	.fb_mmap = hdlcd_fb_mmap,
 };
 
