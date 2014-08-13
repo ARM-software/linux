@@ -1234,6 +1234,7 @@ tda998x_encoder_init(struct i2c_client *client,
 	struct device_node *np = client->dev.of_node;
 	u32 video;
 	int rev_lo, rev_hi, ret;
+	unsigned short cec_addr;
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -1245,9 +1246,9 @@ tda998x_encoder_init(struct i2c_client *client,
 
 	priv->current_page = 0xff;
 	priv->hdmi = client;
-	priv->cec = i2c_new_dummy(client->adapter, 0x34);
-	if (!priv->cec)
-		priv->cec = i2c_new_dummy(client->adapter, 0x35);
+	/* CEC I2C address is bound to TDA998x I2C address by configuration pins */
+	cec_addr = 0x34 + (client->addr & 3);
+	priv->cec = i2c_new_dummy(client->adapter, cec_addr);
 	if (!priv->cec) {
 		kfree(priv);
 		return -ENODEV;
