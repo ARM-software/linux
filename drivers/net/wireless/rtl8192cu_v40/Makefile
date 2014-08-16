@@ -1,5 +1,5 @@
 EXTRA_CFLAGS += $(USER_EXTRA_CFLAGS)
-#EXTRA_CFLAGS += -O1
+EXTRA_CFLAGS += -O1
 #EXTRA_CFLAGS += -O3
 #EXTRA_CFLAGS += -Wall
 #EXTRA_CFLAGS += -Wextra
@@ -38,7 +38,6 @@ CONFIG_RTL8192CU_REDEFINE_1X1 = n
 CONFIG_INTEL_WIDI = n
 CONFIG_WAKE_ON_WLAN = n
 
-CONFIG_PLATFORM_ODROID = y
 CONFIG_PLATFORM_I386_PC = n
 CONFIG_PLATFORM_TI_AM3517 = n
 CONFIG_PLATFORM_ANDROID_X86 = n
@@ -235,17 +234,6 @@ endif
 
 ifeq ($(CONFIG_INTEL_WIDI), y)
 EXTRA_CFLAGS += -DCONFIG_INTEL_WIDI
-endif
-
-ifeq ($(CONFIG_PLATFORM_ODROID), y)
-    EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN
-    ARCH := arm
-    CROSS_COMPILE := /opt/toolchains/arm-eabi-4.4.3/bin/arm-eabi-
-    KSRC := /home/odroid/ssd/pegasus/kernel
-    MODULE_NAME := rtl8192cu
-    # KSRC := use kernel direct
-    # ARCH := cpu arch
-    # KVER := kernel version 
 endif
 
 ifeq ($(CONFIG_PLATFORM_I386_PC), y)
@@ -535,6 +523,8 @@ CROSS_COMPILE := arm-none-linux-gnueabi-
 KVER  := 3.3.0
 #KSRC:= ../lichee/linux-3.3/
 endif
+
+EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN
 
 ifneq ($(USER_MODULE_NAME),)
 MODULE_NAME := $(USER_MODULE_NAME)

@@ -1,6 +1,8 @@
 config RTL8192CU_V40
-	tristate "Realtek 8192C USB WiFi Version 20130911(V4.0)"
+	tristate "Realtek 8192C USB WiFi"
 	depends on USB
+	select WIRELESS_EXT
+	select WEXT_PRIV
 	---help---
-	  Help message of RTL8192CU(New Version)
+	  Enable wireless network adapters based on Realtek RTL8192C chipset family, such as EDUP nano series
 
