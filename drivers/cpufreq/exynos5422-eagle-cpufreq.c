@@ -311,11 +311,11 @@ static const unsigned int asv_voltage_5422_CA15[CPUFREQ_LEVEL_END_CA15] = {
 	1275000,    /* L1  2300 */
 	1250000,    /* L2  2200 */
 	1250000,    /* L3  2100 */
-	1200000,    /* L4  2000 */
-	1200000,    /* L5  1900 */
-	1200000,    /* L6  1800 */
-	1200000,    /* L7  1700 */
-	1200000,    /* L8  1600 */
+	1250000,    /* L4  2000 */
+	1250000,    /* L5  1900 */
+	1250000,    /* L6  1800 */
+	1250000,    /* L7  1700 */
+	1250000,    /* L8  1600 */
 	1100000,    /* L9  1500 */
 	1100000,    /* L10 1400 */
 	1100000,    /* L11 1300 */
@@ -551,7 +551,7 @@ static void __init set_volt_table_CA15(void)
 	if(exynos5422_tbl_ver_is_bin2())
 		max_support_idx_CA15 = L6; 
 	else
-		max_support_idx_CA15 = L3;
+		max_support_idx_CA15 = L4;
 		
 	min_support_idx_CA15 = L22;
 }

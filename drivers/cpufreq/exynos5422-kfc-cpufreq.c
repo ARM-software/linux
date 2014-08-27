@@ -177,11 +177,11 @@ static unsigned int exynos5422_kfc_pll_pms_table_CA7[CPUFREQ_LEVEL_END_CA7] = {
  */
 static const unsigned int asv_voltage_5422_CA7[CPUFREQ_LEVEL_END_CA7] = {
 	1200000,    /* LO 1600 */
-	1200000,    /* L1 1500 */
-	1200000,    /* L2 1400 */
-	1200000,    /* L3 1300 */
-	1200000,    /* L4 1200 */
-	1200000,    /* L5 1100 */
+	1250000,    /* L1 1500 */
+	1250000,    /* L2 1400 */
+	1250000,    /* L3 1300 */
+	1250000,    /* L4 1200 */
+	1250000,    /* L5 1100 */
 	1100000,    /* L6 1000 */
 	1100000,    /* L7  900 */
 	1100000,    /* L8  800 */
@@ -409,7 +409,7 @@ static void __init set_volt_table_CA7(void)
 	if(exynos5422_tbl_ver_is_bin2())
 		max_support_idx_CA7 = L3;
 	else
-		max_support_idx_CA7 = L1;
+		max_support_idx_CA7 = L2;
 		
 	if (PKG_ID_DVFS_VERSION == 0x02)
 		min_support_idx_CA7 = L14;
