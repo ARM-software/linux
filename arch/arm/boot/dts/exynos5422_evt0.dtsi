@@ -501,7 +501,7 @@
 		clock-names = "rate_i2c", "gate_i2c";
 		status = "disabled";
 	};
-/*
+
 	i2c_1: i2c@12C70000 {
 		compatible = "samsung,s3c2440-i2c";
 		reg = <0x12C70000 0x1000>;
@@ -514,7 +514,7 @@
 		clock-names = "rate_i2c", "gate_i2c";
 		status = "disabled";
 	};
-*/
+
 	i2c_2: i2c@12C80000 {
 		compatible = "samsung,s3c2440-i2c";
 		reg = <0x12C80000 0x1000>;

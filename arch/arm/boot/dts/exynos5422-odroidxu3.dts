@@ -126,6 +126,11 @@
 		status = "disabled";
 	};
 
+	i2c_1: i2c@12C70000 {
+		clock-frequency = <400000>;
+		status = "okay";
+	};
+
 	hsi2c@12CA0000 {
 		samsung,hs-mode;
 		clock-frequency = <400000>;
