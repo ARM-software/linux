@@ -68,7 +68,7 @@
 
 	/include/ "juno-clocks.dtsi"
 
-	dma@7ff00000 {
+	dma0: dma@7ff00000 {
 		compatible = "arm,pl330", "arm,primecell";
 		reg = <0x0 0x7ff00000 0 0x1000>;
 		#dma-cells = <1>;
@@ -133,9 +133,12 @@
 		i2c-sda-hold-time-ns = <500>;
 		clocks = <&soc_smc50mhz>;
 
-		hdmi-transmitter@70 {
+		hdmi_transmitter0: hdmi-transmitter@70 {
 			compatible = "nxp,tda998x";
 			reg = <0x70>;
+			audio-ports = <0x03>, <0x04>;
+			audio-port-names = "i2s", "spdif";
+			#sound-dai-cells = <1>;
 			port {
 				tda998x_0_input: endpoint@0 {
 					remote-endpoint = <&hdlcd0_output>;
@@ -197,6 +200,37 @@
 		reg = <0x0 0x2d000000 0x0 0x4000>;
 		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
 		interrupt-names = "JOB", "MMU", "GPU";
+	};
+
+	soc_i2s: i2s@7ff90000 {
+		compatible = "snps,designware-i2s";
+		reg = <0x0 0x7ff90000 0x0 0x1000>;
+		clocks = <&scpi_clk 5>, <&soc_refclk100mhz>;
+		clock-names = "i2sclk", "apb_pclk";
+		#sound-dai-cells = <0>;
+		dmas = <&dma0 5>;
+		dma-names = "tx";
+	};
+
+	hdmi_audio: hdmi_audio@0 {
+		compatible = "linux,hdmi-audio";
+		#sound-dai-cells = <0>;
+		status = "okay";
+	};
+
+	sound {
+		compatible = "simple-audio-card";
+
+		simple-audio-card,format = "i2s";
+
+		simple-audio-card,cpu {
+			sound-dai = <&soc_i2s>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&hdmi_transmitter0 0>;
+		};
+
 	};
 
 	hdmi0: connector@0 {
