@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/irq.h>
 #include <sound/asoundef.h>
+#include <sound/pcm_params.h>
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
@@ -27,26 +28,9 @@
 #include <drm/drm_edid.h>
 #include <drm/i2c/tda998x.h>
 
+#include "tda998x_drv.h"
+
 #define DBG(fmt, ...) DRM_DEBUG(fmt"\n", ##__VA_ARGS__)
-
-struct tda998x_priv {
-	struct i2c_client *cec;
-	struct i2c_client *hdmi;
-	struct mutex mutex;
-	struct delayed_work dwork;
-	uint16_t rev;
-	uint8_t current_page;
-	int dpms;
-	bool is_hdmi_sink;
-	u8 vip_cntrl_0;
-	u8 vip_cntrl_1;
-	u8 vip_cntrl_2;
-	struct tda998x_encoder_params params;
-
-	wait_queue_head_t wq_edid;
-	volatile int wq_edid_wait;
-	struct drm_encoder *encoder;
-};
 
 #define to_tda998x_priv(x)  ((struct tda998x_priv *)to_encoder_slave(x)->slave_priv)
 
@@ -663,12 +647,11 @@ static void
 tda998x_configure_audio(struct tda998x_priv *priv,
 		struct drm_display_mode *mode, struct tda998x_encoder_params *p)
 {
-	uint8_t buf[6], clksel_aip, clksel_fs, cts_n, adiv;
+	uint8_t buf[6], clksel_aip, clksel_fs, cts_n, adiv, aclk;
 	uint32_t n;
 
 	/* Enable audio ports */
 	reg_write(priv, REG_ENA_AP, p->audio_cfg);
-	reg_write(priv, REG_ENA_ACLK, p->audio_clk_cfg);
 
 	/* Set audio input source */
 	switch (p->audio_format) {
@@ -677,13 +660,28 @@ tda998x_configure_audio(struct tda998x_priv *priv,
 		clksel_aip = AIP_CLKSEL_AIP_SPDIF;
 		clksel_fs = AIP_CLKSEL_FS_FS64SPDIF;
 		cts_n = CTS_N_M(3) | CTS_N_K(3);
+		aclk = 0;				/* no clock */
 		break;
 
 	case AFMT_I2S:
 		reg_write(priv, REG_MUX_AP, MUX_AP_SELECT_I2S);
 		clksel_aip = AIP_CLKSEL_AIP_I2S;
 		clksel_fs = AIP_CLKSEL_FS_ACLK;
-		cts_n = CTS_N_M(3) | CTS_N_K(3);
+		/* with I2S input, the CTS_N predivider depends on
+		 * the sample width */
+		switch (priv->audio_sample_format) {
+		case SNDRV_PCM_FORMAT_S16_LE:
+			cts_n = CTS_N_M(3) | CTS_N_K(1);
+			break;
+		case SNDRV_PCM_FORMAT_S24_LE:
+			cts_n = CTS_N_M(3) | CTS_N_K(2);
+			break;
+		default:
+		case SNDRV_PCM_FORMAT_S32_LE:
+			cts_n = CTS_N_M(3) | CTS_N_K(3);
+			break;
+		}
+		aclk = 1;				/* clock enable */
 		break;
 
 	default:
@@ -695,6 +693,7 @@ tda998x_configure_audio(struct tda998x_priv *priv,
 	reg_clear(priv, REG_AIP_CNTRL_0, AIP_CNTRL_0_LAYOUT |
 					AIP_CNTRL_0_ACR_MAN);	/* auto CTS */
 	reg_write(priv, REG_CTS_N, cts_n);
+	reg_write(priv, REG_ENA_ACLK, aclk);
 
 	/*
 	 * Audio input somehow depends on HDMI line rate which is
@@ -749,6 +748,24 @@ tda998x_configure_audio(struct tda998x_priv *priv,
 
 	/* Write the audio information packet */
 	tda998x_write_aif(priv, p);
+}
+
+/* tda998x codec interface */
+void tda998x_audio_start(struct tda998x_priv *priv,
+			 int full)
+{
+	struct tda998x_encoder_params *p = &priv->params;
+
+	if (!full) {
+		reg_write(priv, REG_ENA_AP, p->audio_cfg);
+		return;
+	}
+	tda998x_configure_audio(priv, &priv->encoder->crtc->hwmode, p);
+}
+
+void tda998x_audio_stop(struct tda998x_priv *priv)
+{
+	reg_write(priv, REG_ENA_AP, 0);
 }
 
 /* DRM encoder functions */
@@ -1163,6 +1180,11 @@ tda998x_encoder_get_modes(struct tda998x_priv *priv,
 		drm_mode_connector_update_edid_property(connector, edid);
 		n = drm_add_edid_modes(connector, edid);
 		priv->is_hdmi_sink = drm_detect_hdmi_monitor(edid);
+
+		/* keep the EDID as ELD for the audio subsystem */
+		drm_edid_to_eld(connector, edid);
+		priv->eld = connector->eld;
+
 		kfree(edid);
 	}
 
@@ -1198,6 +1220,8 @@ static void tda998x_destroy(struct tda998x_priv *priv)
 		free_irq(priv->hdmi->irq, priv);
 		cancel_delayed_work_sync(&priv->dwork);
 	}
+
+	tda998x_codec_unregister(&priv->hdmi->dev);
 
 	i2c_unregister_device(priv->cec);
 }
@@ -1287,6 +1311,9 @@ static int tda998x_create(struct i2c_client *client, struct tda998x_priv *priv)
 	priv->vip_cntrl_1 = VIP_CNTRL_1_SWAP_C(0) | VIP_CNTRL_1_SWAP_D(1);
 	priv->vip_cntrl_2 = VIP_CNTRL_2_SWAP_E(4) | VIP_CNTRL_2_SWAP_F(5);
 
+	priv->params.audio_frame[1] = 1;		/* channels - 1 */
+	priv->params.audio_sample_rate = 48000;		/* 48kHz */
+
 	priv->current_page = 0xff;
 	priv->hdmi = client;
 	/* CEC I2C address bound to TDA998x I2C addr by configuration pins */
@@ -1296,6 +1323,8 @@ static int tda998x_create(struct i2c_client *client, struct tda998x_priv *priv)
 		return -ENODEV;
 
 	priv->dpms = DRM_MODE_DPMS_OFF;
+
+	i2c_set_clientdata(client, priv);
 
 	mutex_init(&priv->mutex);	/* protect the page access */
 
@@ -1382,6 +1411,9 @@ static int tda998x_create(struct i2c_client *client, struct tda998x_priv *priv)
 
 	/* enable EDID read irq: */
 	reg_set(priv, REG_INT_FLAGS_2, INT_FLAGS_2_EDID_BLK_RD);
+
+	/* register the audio CODEC */
+	tda998x_codec_register(&client->dev);
 
 	if (!np)
 		return 0;		/* non-DT */
