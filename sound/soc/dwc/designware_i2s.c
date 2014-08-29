@@ -280,7 +280,8 @@ static int dw_i2s_trigger(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		dev->active--;
+		if (dev->active > 0)
+			dev->active--;
 		i2s_stop(dev, substream);
 		break;
 	default:
