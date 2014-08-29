@@ -117,6 +117,7 @@ static int tda_hw_params(struct snd_pcm_substream *substream,
 		tda998x_audio_start(priv, 0);
 		return 0;
 	}
+	priv->params.audio_sample_rate = params_rate(params);
 	priv->params.audio_format = dai->id;
 	priv->audio_sample_format = params_format(params);
 	priv->params.audio_cfg =
