@@ -2337,7 +2337,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	video_set_drvdata(vfd, dev);
 
 	/* secure decoder */
-	vfd = video_device_alloc();
+/*	vfd = video_device_alloc();
 	if (!vfd) {
 		v4l2_err(&dev->v4l2_dev, "Failed to allocate video device\n");
 		ret = -ENOMEM;
@@ -2363,10 +2363,10 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 								vfd->num);
 	dev->vfd_dec_drm = vfd;
 
-	video_set_drvdata(vfd, dev);
+	video_set_drvdata(vfd, dev); */
 
 	/* secure encoder */
-	vfd = video_device_alloc();
+/*	vfd = video_device_alloc();
 	if (!vfd) {
 		v4l2_err(&dev->v4l2_dev, "Failed to allocate video device\n");
 		ret = -ENOMEM;
@@ -2391,7 +2391,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 								vfd->num);
 	dev->vfd_enc_drm = vfd;
 
-	video_set_drvdata(vfd, dev);
+	video_set_drvdata(vfd, dev); */
 	/* end of node setting*/
 
 	platform_set_drvdata(pdev, dev);
