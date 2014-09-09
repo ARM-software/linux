@@ -14,6 +14,7 @@
 #include <linux/memblock.h>
 #include <linux/io.h>
 #include <linux/clocksource.h>
+#include <linux/exynos_ion.h>
 
 #include <asm/mach/arch.h>
 #include <mach/regs-pmu.h>
@@ -48,6 +49,9 @@ static void __init exynos5_reserve(void)
 	if (of_scan_flat_dt(s5p_fdt_find_mfc_mem, &mfc_mem))
 		s5p_mfc_reserve_mem(mfc_mem.roff, mfc_mem.rsize, mfc_mem.loff,
 				mfc_mem.lsize);
+#endif
+#ifdef CONFIG_ION_EXYNOS
+	init_exynos_ion_contig_heap();
 #endif
 }
 
