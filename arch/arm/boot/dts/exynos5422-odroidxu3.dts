@@ -842,10 +842,20 @@
         status = "okay";
 	};
 	
-    codec@11000000 {
-                samsung,mfc-r = <0x43000000 0x800000>;
-                samsung,mfc-l = <0x51000000 0x800000>;
-                status = "okay";
-    };
-	
+	ion {
+		compatible = "samsung,exynos5430-ion";
+		contig-names = "common", "mfc_sh", "g2d_wfd", "video", "mfc_input",
+					   "sectbl", "mfc_fw", "mfc_nfw", "secdma";
+		contig = <0 0x6650000 0x0>, <2 0x400000 0x0>, <10 0x800000 0x0>,
+				<11 0x6000000 0x0>, <7 0x1000000 0x0>, <9 0x400000 0x0>,
+				<8 0x400000 0x0>, <12 0x400000 0x0>, <13 0x400000 0x0>;
+
+		ion_noncontig_heap {
+			id-type = <0 0>;
+		};
+
+		exynos_contig_heap {
+			id-type = <4 6>;
+		};
+	};
 };
