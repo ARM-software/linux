@@ -25,10 +25,6 @@ struct scatterlist {
  */
 #define sg_dma_address(sg)	((sg)->dma_address)
 
-#ifdef CONFIG_NEED_SG_DMA_LENGTH
-#define sg_dma_len(sg)		((sg)->dma_length)
-#else
 #define sg_dma_len(sg)		((sg)->length)
-#endif
 
 #endif /* __ASM_GENERIC_SCATTERLIST_H */
