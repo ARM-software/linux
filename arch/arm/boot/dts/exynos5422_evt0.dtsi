@@ -800,7 +800,7 @@
 	dwc3_usb3_phy_0: usbphy@12100000 {
 		compatible = "samsung,exynos5420-usb3phy";
 		reg = <0x12100000 0x100>;
-		clocks = <&clock 1>, <&clock 741>;
+		clocks = <&clock 1>, <&clock 1448>;
 		clock-names = "ext_xtal", "usbdrd30";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -814,7 +814,7 @@
 	dwc3_usb3_phy_1: usbphy@12500000 {
 		compatible = "samsung,exynos5420-usb3phy";
 		reg = <0x12500000 0x100>;
-		clocks = <&clock 1>, <&clock 736>;
+		clocks = <&clock 1>, <&clock 1447>;
 		clock-names = "ext_xtal", "usbdrd30";
 		#address-cells = <1>;
 		#size-cells = <1>;
