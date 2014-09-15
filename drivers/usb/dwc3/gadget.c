@@ -1511,6 +1511,8 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on)
 	u32			timeout = 500;
 	int			ret;
 
+	dwc->softconnect = is_on;
+
 	if (is_on) {
 		/*
 		 * According to the Databook in case of reconnection and
@@ -1609,7 +1611,7 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *g, int is_active)
 	 * Check if upper level usb_gadget_driver was already registerd with
 	 * this udc controller driver (if dwc3_gadget_start was called)
 	 */
-	if (dwc->gadget_driver && dwc->softconnect) {
+	if (dwc->gadget_driver) {
 		if (dwc->vbus_session) {
 			/*
 			 * Both vbus was activated by otg and pullup was

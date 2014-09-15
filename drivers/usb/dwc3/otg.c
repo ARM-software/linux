@@ -204,7 +204,7 @@ static int dwc3_otg_start_host(struct otg_fsm *fsm, int on)
 	if (!dotg->dwc->xhci)
 		return -EINVAL;
 
-	dev_err(dev, "Turn %s host\n", on ? "on" : "off");
+	dev_info(dev, "Turn %s host\n", on ? "on" : "off");
 
 	if (on) {
 		wake_lock(&dotg->wakelock);
@@ -246,7 +246,7 @@ static int dwc3_otg_start_gadget(struct otg_fsm *fsm, int on)
 	if (!otg->gadget)
 		return -EINVAL;
 
-	dev_err(dev, "Turn %s gadget %s\n",
+	dev_info(dev, "Turn %s gadget %s\n",
 		on ? "on" : "off", otg->gadget->name);
 
 	if (on) {
