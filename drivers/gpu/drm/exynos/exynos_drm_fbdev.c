@@ -128,11 +128,11 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	struct fb_info *fbi = helper->fbdev;
 	struct drm_device *dev = helper->dev;
 	struct exynos_drm_gem_buf *buffer;
-	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3) * 3; // * 3 for triple buffering
+	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3);
 	unsigned long offset;
 
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->depth);
-	drm_fb_helper_fill_var(fbi, helper, fb->width, fb->height / 3); 
+	drm_fb_helper_fill_var(fbi, helper, fb->width, fb->height); 
 
 	/* RGB formats use only one buffer */
 	buffer = exynos_drm_fb_buffer(fb, 0);
@@ -191,7 +191,7 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 			sizes->surface_bpp);
 
 	mode_cmd.width = sizes->surface_width;
-	mode_cmd.height = sizes->surface_height * 3; // *3 for triple buffering
+	mode_cmd.height = sizes->surface_height;
 	mode_cmd.pitches[0] = sizes->surface_width * (sizes->surface_bpp >> 3);
 	mode_cmd.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
 							  sizes->surface_depth);
