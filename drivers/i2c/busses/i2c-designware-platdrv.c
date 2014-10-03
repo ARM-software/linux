@@ -122,6 +122,7 @@ static int dw_i2c_probe(struct platform_device *pdev)
 	struct i2c_adapter *adap;
 	struct resource *mem;
 	int irq, r;
+	u32 bus_rate = DW_IC_CON_SPEED_STD;
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
@@ -166,6 +167,22 @@ static int dw_i2c_probe(struct platform_device *pdev)
 		of_property_read_u32(pdev->dev.of_node,
 				     "i2c-scl-falling-time-ns",
 				     &dev->scl_falling_time);
+
+		r = of_property_read_u32(pdev->dev.of_node, "clock-frequency",
+						&bus_rate);
+		if (r)
+			bus_rate = 400000; /* default clock rate */
+		switch (bus_rate) {
+		case 400000:
+			bus_rate = DW_IC_CON_SPEED_FAST;
+			break;
+		case 100000:
+			bus_rate = DW_IC_CON_SPEED_STD;
+			break;
+		default:
+			dev_err(&pdev->dev, "Invalid bus speed (not 100kHz or 400kHz)\n");
+			return -EINVAL;
+		}
 	}
 
 	dev->functionality =
@@ -176,7 +193,7 @@ static int dw_i2c_probe(struct platform_device *pdev)
 		I2C_FUNC_SMBUS_WORD_DATA |
 		I2C_FUNC_SMBUS_I2C_BLOCK;
 	dev->master_cfg =  DW_IC_CON_MASTER | DW_IC_CON_SLAVE_DISABLE |
-		DW_IC_CON_RESTART_EN | DW_IC_CON_SPEED_FAST;
+		DW_IC_CON_RESTART_EN | bus_rate;
 
 	/* Try first if we can configure the device from ACPI */
 	r = dw_i2c_acpi_configure(pdev);
