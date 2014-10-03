@@ -259,6 +259,7 @@ static int dw_i2s_hw_params(struct snd_pcm_substream *substream,
 	 */
 	do {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			i2s_write_reg(dev->i2s_base, TXFFR, 1);
 			i2s_write_reg(dev->i2s_base, TCR(ch_reg),
 				      xfer_resolution);
 			i2s_write_reg(dev->i2s_base, TFCR(ch_reg), 0x02);
@@ -266,6 +267,7 @@ static int dw_i2s_hw_params(struct snd_pcm_substream *substream,
 			i2s_write_reg(dev->i2s_base, IMR(ch_reg), irq & ~0x30);
 			i2s_write_reg(dev->i2s_base, TER(ch_reg), 1);
 		} else {
+			i2s_write_reg(dev->i2s_base, RXFFR, 1);
 			i2s_write_reg(dev->i2s_base, RCR(ch_reg),
 				      xfer_resolution);
 			i2s_write_reg(dev->i2s_base, RFCR(ch_reg), 0x07);
