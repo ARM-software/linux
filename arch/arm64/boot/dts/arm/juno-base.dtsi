@@ -129,7 +129,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		interrupts = <GIC_SPI 104 IRQ_TYPE_LEVEL_HIGH>;
-		clock-frequency = <400000>;
+		clock-frequency = <100000>;
 		i2c-sda-hold-time-ns = <500>;
 		clocks = <&soc_smc50mhz>;
 
