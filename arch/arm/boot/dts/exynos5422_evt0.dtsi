@@ -1164,7 +1164,7 @@
 		reg = <0x145D0000 0x20>;
 	};
 
-	/*
+	/* Remove for Displayport
     dp_phy: video-phy@10040728 {
         compatible = "samsung,exynos5250-dp-video-phy";
         reg = <0x10040728 4>;
@@ -1182,7 +1182,7 @@
         phy-names = "dp";
 		samsung,power-domain = <&spd_dp>; 
     };
-	*/
+	Remove for Displayport */
 
     fimd: fimd@14400000 {   
 		compatible = "samsung,exynos5250-fimd";
