@@ -805,7 +805,7 @@
 	
 	/* AOC 22" DP Config */
 	dp-controller@145B0000 {
-		status = "okay";
+		status = "disabled";
 		samsung,hpd-gpio = <&gpx0 7 3>; 
         pinctrl-names = "default";
         pinctrl-0 = <&dp_hpd_gpio>;
