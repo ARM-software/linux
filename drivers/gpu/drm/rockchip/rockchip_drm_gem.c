@@ -16,6 +16,7 @@
 #include <drm/drmP.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_vma_manager.h>
+#include <drm/rockchip_drm.h>
 
 #include <linux/dma-attrs.h>
 
@@ -255,6 +256,17 @@ int rockchip_gem_dumb_create(struct drm_file *file_priv,
 	rk_obj = rockchip_gem_create_with_handle(file_priv, dev, args->size,
 						 &args->handle);
 
+	return PTR_ERR_OR_ZERO(rk_obj);
+}
+
+int rockchip_gem_create_ioctl(struct drm_device *dev, void *data,
+			      struct drm_file *file_priv)
+{
+	struct drm_rockchip_gem_create *args = data;
+	struct rockchip_gem_object *rk_obj;
+
+	rk_obj = rockchip_gem_create_with_handle(file_priv, dev, args->size,
+						 &args->handle);
 	return PTR_ERR_OR_ZERO(rk_obj);
 }
 
