@@ -255,7 +255,7 @@
 			compatible = "arm,scpi-clk-range";
 			#clock-cells = <1>;
 			clock-indices = <3>, <4>;
-			frequency-range = <23000000 210000000>;
+			frequency-range = <23750000 165000000>;
 			clock-output-names = "pxlclk0", "pxlclk1";
 		};
 
