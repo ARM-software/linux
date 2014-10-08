@@ -37,6 +37,8 @@ __kvm_hyp_code_start:
  *
  * void __kvm_tlb_flush_vmid_ipa(struct kvm *kvm, phys_addr_t ipa);
  *
+ * Invalidate TLB for the given IPA, or invalidate all if ipa is zero.
+ *
  * We rely on the hardware to broadcast the TLB invalidation to all CPUs
  * inside the inner-shareable domain (which is the case for all v7
  * implementations).  If we come across a non-IS SMP implementation, we'll
