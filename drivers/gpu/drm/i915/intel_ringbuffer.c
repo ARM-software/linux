@@ -516,6 +516,8 @@ static int init_ring_common(struct intel_engine_cs *ring)
 		intel_ring_setup_status_page(ring);
 	else
 		ring_setup_phys_status_page(ring);
+	/* Enforce ordering by reading HEAD register back */
+	I915_READ_HEAD(ring);
 
 	/* Initialize the ring. This must happen _after_ we've cleared the ring
 	 * registers with the above sequence (the readback of the HEAD registers
