@@ -310,7 +310,7 @@ static int hdlcd_show_underrun_count(struct seq_file *m, void *arg)
 	return 0;
 }
 
-static int hdlcd_show_pxlclock(struct seq_file *m, void **arg)
+static int hdlcd_show_pxlclock(struct seq_file *m, void *arg)
 {
 	struct drm_info_node *node = (struct drm_info_node *)m->private;
 	struct drm_device *dev = node->minor->dev;
