@@ -17,7 +17,8 @@
 
 #ifndef _GPU_PLATFORM_H_
 #define _GPU_PLATFORM_H_
-#define SOC_NAME 5422
+
+#include "mali_kbase_config_platform.h"
 
 #define GPU_LOG(level, msg, args...) \
 do { \

@@ -12,12 +12,7 @@
 #
 #
 
-MALI_CUSTOMER_RELEASE = 1
-SOC_NAME = 5422
-
 platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
-
-ccflags-$(CONFIG_MALI_T6XX) += -I$(src)/../../t6xx/kbase/src/common
 
 obj-y += mali_kbase_platform.o
 obj-y += gpu_notifier.o

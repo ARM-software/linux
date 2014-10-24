@@ -18,6 +18,8 @@
 #ifndef _GPU_CONTROL_H_
 #define _GPU_CONTROL_H_
 
+#include "mali_kbase_config_platform.h"
+
 typedef enum {
 	GPU_CONTROL_CLOCK_ON = 0,
 	GPU_CONTROL_CLOCK_OFF,
@@ -33,24 +35,6 @@ typedef enum {
 	GPU_CONTROL_PM_QOS_SET,
 	GPU_CONTROL_PM_QOS_RESET,
 } gpu_pmqos_state;
-
-/* mali_kbase_platform */
-#if SOC_NAME == 5422
-#ifdef CONFIG_SOC_EXYNOS5422_REV_0
-#define G3D_MAX_FREQ    600000
-#else
-#define G3D_MAX_FREQ    600000
-#endif /* CONFIG_SOC_EXYNOS5422_REV_0 */
-#define G3D_MIN_FREQ    177000
-#elif SOC_NAME == 5430
-#define G3D_MAX_FREQ    600000
-#define G3D_MIN_FREQ    160000
-#elif SOC_NAME == 5260
-#define G3D_MAX_FREQ    480000
-#define G3D_MIN_FREQ    160000
-#else
-#error SOC_NAME should be specified.
-#endif /* SOC_NAME */
 
 /* GPU NOTIFIER */
 #if SOC_NAME == 5422
@@ -153,22 +137,22 @@ typedef enum {
 
 #define MALI_T6XX_DEFAULT_CLOCK (MALI_DVFS_START_FREQ*MHZ)
 
-struct exynos_pm_domain *gpu_get_pm_domain(kbase_device *kbdev);
+struct exynos_pm_domain *gpu_get_pm_domain(struct kbase_device *kbdev);
 int get_cpu_clock_speed(u32 *cpu_clock);
 int gpu_is_power_on(void);
-int gpu_power_init(kbase_device *kbdev);
+int gpu_power_init(struct kbase_device *kbdev);
 int gpu_is_clock_on(struct exynos_context *platform);
 int gpu_clock_on(struct exynos_context *platform);
 int gpu_clock_off(struct exynos_context *platform);
 int gpu_set_clock(struct exynos_context *platform, int freq);
-int gpu_clock_init(kbase_device *kbdev);
+int gpu_clock_init(struct kbase_device *kbdev);
 int gpu_set_voltage(struct exynos_context *platform, int vol);
 int gpu_regulator_enable(struct exynos_context *platform);
 int gpu_regulator_disable(struct exynos_context *platform);
 int gpu_regulator_init(struct exynos_context *platform);
 
 int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, int param);
-int gpu_control_module_init(kbase_device *kbdev);
-void gpu_control_module_term(kbase_device *kbdev);
+int gpu_control_module_init(struct kbase_device *kbdev);
+void gpu_control_module_term(struct kbase_device *kbdev);
 
 #endif /* _GPU_CONTROL_H_ */

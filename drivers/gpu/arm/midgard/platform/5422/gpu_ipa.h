@@ -4,6 +4,7 @@
 
 #include <mali_kbase.h>
 #include "mali_kbase_platform.h"
+#include "mali_kbase_config_platform.h"
 
 #if SOC_NAME == 5422
 #define POWER_COEFF_GPU 59 /* all core on param */

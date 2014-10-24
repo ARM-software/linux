@@ -22,6 +22,7 @@
 #include <mach/asv-exynos.h>
 
 #include "mali_kbase_platform.h"
+#include "mali_kbase_config_platform.h"
 #include "gpu_dvfs_handler.h"
 #include "gpu_dvfs_governor.h"
 #include "gpu_control.h"
