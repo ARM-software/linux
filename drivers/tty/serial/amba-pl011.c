@@ -501,11 +501,17 @@ static int pl011_dma_tx_refill(struct uart_amba_port *uap)
 		memcpy(&dmatx->buf[0], &xmit->buf[xmit->tail], count);
 	else {
 		size_t first = UART_XMIT_SIZE - xmit->tail;
-		size_t second = xmit->head;
+
+		if (first > count)
+			first = count;
+		else {
+			size_t second = count - first;
+
+			if (second)
+				memcpy(&dmatx->buf[first], &xmit->buf[0], second);
+		}
 
 		memcpy(&dmatx->buf[0], &xmit->buf[xmit->tail], first);
-		if (second)
-			memcpy(&dmatx->buf[first], &xmit->buf[0], second);
 	}
 
 	dmatx->sg.length = count;
