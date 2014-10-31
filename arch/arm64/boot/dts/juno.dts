@@ -371,9 +371,10 @@
 		interrupts = <0 83 4>;
 		clocks = <&soc_uartclk>, <&soc_refclk100mhz>;
 		clock-names = "uartclk", "apb_pclk";
-		/* dmas = <&dma0 1
+		dmas = <&dma0 1
 			&dma0 2>;
-		dma-names = "rx", "tx"; */
+		dma-names = "rx", "tx";
+		auto-poll = <1>;
 	};
 
 	/* this UART is reserved for secure software.
