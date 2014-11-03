@@ -1066,8 +1066,32 @@ int exynos5422_init_asv(struct asv_common *asv_info)
 	chip_id5_value = __raw_readl(CHIP_ID5_REG);
 
 	is_BIN2 = (chip_id3_value >> EXYNOS5422_BIN2_OFFSET) & EXYNOS5422_BIN2_MASK;
+
+    #if defined(CONFIG_MACH_ODROIDXU3)
+        if(!is_BIN2)    {
+            unsigned int    reg;
+            void __iomem    *GPIOX0_BASE = ioremap(EXYNOS5_PA_GPIO2 + 0xC00, 16);
+
+            // GPX0CON BIT5 Input
+            reg  = __raw_readl(GPIOX0_BASE + 0x0);
+            reg &= ~0x00F00000;
+            __raw_writel(reg, (GPIOX0_BASE + 0x0));
+
+            // GPX0PUD BIT5 Pull-Up Enable
+            reg  = __raw_readl(GPIOX0_BASE + 0x8);
+            reg |=  0x00000C00;
+            __raw_writel(reg, (GPIOX0_BASE + 0x8));
+
+            // GPX0DAT BIT5 Read(BIT5 == 0 : BIN2, BIT5 == 1 : BIN1)
+            reg  = __raw_readl(GPIOX0_BASE + 0x4);
+
+            is_BIN2 = reg & 0x20 ? false : true;
+            iounmap(GPIOX0_BASE);
+        }
+    #endif
+
 	printk("CPU Info : Samsung Exynos5422 Soc is %s\n", is_BIN2 ? "BIN2":"BIN1");
-	
+
 	if ((chip_id3_value >> EXYNOS5422_USESG_OFFSET) & EXYNOS5422_USESG_MASK && is_BIN2 == 0) {
 		if (!((chip_id3_value >> EXYNOS5422_SG_BSIGN_OFFSET) & EXYNOS5422_SG_BSIGN_MASK))
 			special_lot_group = ((chip_id3_value >> EXYNOS5422_SG_A_OFFSET) & EXYNOS5422_SG_A_MASK)
