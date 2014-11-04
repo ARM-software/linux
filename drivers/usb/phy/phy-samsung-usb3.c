@@ -499,16 +499,10 @@ static int samsung_usb3phy_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, sphy);
 
 #if defined(CONFIG_MACH_ODROIDXU3)
-    #if defined(CONFIG_ANDROID_PARANOID_NETWORK)
-        #define USB3_PHY0_BASE  0xDF8FE000
-        #define USB3_PHY1_BASE  0xDF94A000
-    #else
-        #define USB3_PHY0_BASE  0xF014A000
-        #define USB3_PHY1_BASE  0xF014C000
-    #endif
-    
-    if(phy_base == USB3_PHY0_BASE)  g_usb3phy[0] = sphy; 
-    else                            g_usb3phy[1] = sphy;
+	if (phy_mem->start == 0x12100000)
+		g_usb3phy[0] = sphy;
+	else if (phy_mem->start == 0x12500000)
+		g_usb3phy[1] = sphy;
 #endif
 
 	return 0;
