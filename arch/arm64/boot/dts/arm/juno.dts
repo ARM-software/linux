@@ -183,6 +183,7 @@
 		soc_thermal {
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
+			sustainable-power = <2500>;
 
 			thermal-sensors = <&scpi_sensor0 3>;
 
@@ -202,10 +203,12 @@
 			cooling-maps {
 			        map0 {
 				     trip = <&target>;
+				     contribution = <1024>;
 				     cooling-device = <&cluster0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 				};
 				map1 {
 				     trip = <&target>;
+				     contribution = <2048>;
 				     cooling-device = <&cluster1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 				};
 
