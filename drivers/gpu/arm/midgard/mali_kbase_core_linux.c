@@ -2523,6 +2523,64 @@ static ssize_t issue_debug(struct device *dev, struct device_attribute *attr, co
 static DEVICE_ATTR(debug_command, S_IRUGO | S_IWUSR, show_debug, issue_debug);
 #endif /* CONFIG_MALI_DEBUG */
 
+/**
+ * kbase_show_gpuinfo - Show callback for the gpuinfo sysfs entry.
+ * @dev: The device this sysfs file is for.
+ * @attr: The attributes of the sysfs file.
+ * @buf: The output buffer to receive the GPU information.
+ *
+ * This function is called to get a description of the present Mali
+ * GPU via the gpuinfo sysfs entry.  This includes the GPU family, the
+ * number of cores, the hardware version and the raw product id.  For
+ * example:
+ *
+ *    Mali-T60x MP4 r0p0 0x6956
+ *
+ * Return: The number of bytes output to buf.
+ */
+static ssize_t kbase_show_gpuinfo(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	static const struct gpu_product_id_name {
+		unsigned id;
+		char *name;
+	} gpu_product_id_names[] = {
+		{ .id = GPU_ID_PI_T60X, .name = "Mali-T60x" },
+		{ .id = GPU_ID_PI_T62X, .name = "Mali-T62x" },
+		{ .id = GPU_ID_PI_T72X, .name = "Mali-T72x" },
+		{ .id = GPU_ID_PI_T76X, .name = "Mali-T76x" },
+#ifdef MALI_INCLUDE_TFRX
+		{ .id = GPU_ID_PI_TFRX, .name = "Mali-TFRX" },
+#endif /* MALI_INCLUDE_TFRX */
+		{ .id = GPU_ID_PI_T86X, .name = "Mali-T86x" },
+	};
+	const char *product_name = "(Unknown Mali GPU)";
+	struct kbase_device *kbdev;
+	u32 gpu_id;
+	unsigned product_id;
+	unsigned i;
+
+	kbdev = to_kbase_device(dev);
+	if (!kbdev)
+		return -ENODEV;
+
+	gpu_id = kbdev->gpu_props.props.raw_props.gpu_id;
+	product_id = gpu_id >> GPU_ID_VERSION_PRODUCT_ID_SHIFT;
+
+	for (i = 0; i < ARRAY_SIZE(gpu_product_id_names); ++i) {
+		if (gpu_product_id_names[i].id == product_id) {
+			product_name = gpu_product_id_names[i].name;
+			break;
+		}
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s MP%d r%dp%d 0x%04X\n",
+		product_name, kbdev->gpu_props.num_cores,
+		(gpu_id & GPU_ID_VERSION_MAJOR) >> GPU_ID_VERSION_MAJOR_SHIFT,
+		(gpu_id & GPU_ID_VERSION_MINOR) >> GPU_ID_VERSION_MINOR_SHIFT,
+		product_id);
+}
+DEVICE_ATTR(gpuinfo, S_IRUGO, kbase_show_gpuinfo, NULL);
 
 #ifdef CONFIG_MALI_NO_MALI
 static int kbase_common_reg_map(struct kbase_device *kbdev)
@@ -2595,6 +2653,7 @@ static int kbase_common_device_init(struct kbase_device *kbdev)
 		inited_timeline = (1u << 12),
 #endif /* CONFIG_MALI_TRACE_LINE */
 		inited_pm_powerup = (1u << 14),
+		inited_gpuinfo = (1u << 15),
 	};
 
 	int inited = 0;
@@ -2720,6 +2779,12 @@ static int kbase_common_device_init(struct kbase_device *kbdev)
 	inited |= inited_force_replay;
 #endif /* !MALI_CUSTOMER_RELEASE */
 
+	if (device_create_file(kbdev->dev, &dev_attr_gpuinfo)) {
+		dev_err(kbdev->dev, "Couldn't create gpuinfo sysfs file\n");
+		goto out_partial;
+	}
+	inited |= inited_gpuinfo;
+
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	if (kbasep_trace_timeline_debugfs_init(kbdev)) {
 		dev_err(kbdev->dev, "Couldn't create mali_timeline_defs debugfs file\n");
@@ -2783,6 +2848,9 @@ static int kbase_common_device_init(struct kbase_device *kbdev)
 	if (inited & inited_sc_split)
 		device_remove_file(kbdev->dev, &dev_attr_sc_split);
 #endif /* CONFIG_MALI_DEBUG_SHADER_SPLIT_FS */
+
+	if (inited & inited_gpuinfo)
+		device_remove_file(kbdev->dev, &dev_attr_gpuinfo);
 
 	if (inited & inited_js)
 		kbasep_js_devdata_halt(kbdev);
@@ -3045,10 +3113,10 @@ static int kbase_common_device_remove(struct kbase_device *kbdev)
 #ifdef CONFIG_DEBUG_FS
 	kbasep_gpu_memory_debugfs_term(kbdev);
 #endif
-
 #ifdef CONFIG_MALI_DEBUG_SHADER_SPLIT_FS
 	device_remove_file(kbdev->dev, &dev_attr_sc_split);
 #endif /* CONFIG_MALI_DEBUG_SHADER_SPLIT_FS */
+	device_remove_file(kbdev->dev, &dev_attr_gpuinfo);
 
 	kbasep_js_devdata_halt(kbdev);
 	kbase_job_slot_halt(kbdev);
