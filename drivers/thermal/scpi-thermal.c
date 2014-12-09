@@ -11,6 +11,19 @@
 
 #define NUM_CLUSTERS 2
 
+struct cluster_power_coefficients {
+	int dyn_coeff;
+};
+
+struct cluster_power_coefficients cluster_data[] = {
+	{
+		.dyn_coeff = 530,
+	},
+	{
+		.dyn_coeff = 140,
+	},
+};
+
 struct scpi_sensor {
 	u16 sensor_id;
 	struct thermal_zone_device *tzd;
@@ -78,8 +91,10 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 		}
 
 		sensor_data->cdevs[j] =
-			of_cpufreq_cooling_register(np,
-						&sensor_data->cluster[i]);
+			of_cpufreq_power_cooling_register(np,
+							  &sensor_data->cluster[i],
+							  cluster_data[i].dyn_coeff,
+							  NULL);
 
 		if (IS_ERR(sensor_data->cdevs[i])) {
 			dev_warn(&pdev->dev,
