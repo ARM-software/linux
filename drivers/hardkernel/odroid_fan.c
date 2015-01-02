@@ -86,10 +86,20 @@ static	ssize_t set_pwm_duty	(struct device *dev, struct device_attribute *attr, 
 static	ssize_t show_pwm_duty	(struct device *dev, struct device_attribute *attr, char *buf);
 static	DEVICE_ATTR(pwm_duty, S_IRWXUGO, show_pwm_duty, set_pwm_duty);
 
+static	ssize_t set_temp_levels		(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+static	ssize_t show_temp_levels	(struct device *dev, struct device_attribute *attr, char *buf);
+static	DEVICE_ATTR(temp_levels, S_IRWXUGO, show_temp_levels, set_temp_levels);
+
+static	ssize_t set_fan_speeds	(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+static	ssize_t show_fan_speeds	(struct device *dev, struct device_attribute *attr, char *buf);
+static	DEVICE_ATTR(fan_speeds, S_IRWXUGO, show_fan_speeds, set_fan_speeds);
+
 static struct attribute *odroid_fan_sysfs_entries[] = {
 	&dev_attr_pwm_enable.attr,
 	&dev_attr_fan_mode.attr,
 	&dev_attr_pwm_duty.attr,
+	&dev_attr_temp_levels.attr,
+	&dev_attr_fan_speeds.attr,
 	NULL
 };
 
@@ -210,6 +220,79 @@ static	ssize_t show_pwm_duty	(struct device *dev, struct device_attribute *attr,
 	return	sprintf(buf, "%d\n", fan->duty);
 }
 
+//[*]------------------------------------------------------------------------------------------------------------------
+//[*]------------------------------------------------------------------------------------------------------------------
+static	ssize_t set_temp_levels	(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct odroid_fan *fan = dev_get_drvdata(dev);
+	unsigned int	level_0, level_1, level_2;
+
+	if(sscanf(buf, "%u %u %u\n", &level_0, &level_1, &level_2) != 3)	return	-EINVAL;
+
+	if(!(level_0 < level_1 && level_1 < level_2)){
+		printk("temperature levels must be increasing in value\n");
+		return count;
+	}
+
+	printk("temp_levels : %s [%d %d %d] \n",__FUNCTION__, level_0, level_1, level_2);
+
+	mutex_lock(&fan->mutex);
+	fan->tmu_level_0 = level_0;
+	fan->tmu_level_1 = level_1;
+	fan->tmu_level_2 = level_2;
+	mutex_unlock(&fan->mutex);
+
+	return count;
+}
+
+static	ssize_t show_temp_levels	(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct odroid_fan *fan = dev_get_drvdata(dev);
+	ssize_t result;
+
+	mutex_lock(&fan->mutex);
+	result = sprintf(buf, "%d %d %d\n", fan->tmu_level_0, fan->tmu_level_1, fan->tmu_level_2);
+	mutex_unlock(&fan->mutex);
+	return	result;
+}
+
+//[*]------------------------------------------------------------------------------------------------------------------
+//[*]------------------------------------------------------------------------------------------------------------------
+static	ssize_t set_fan_speeds	(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct odroid_fan *fan = dev_get_drvdata(dev);
+	unsigned int	speed_0, speed_1, speed_2, speed_3;
+
+	if(sscanf(buf, "%u %u %u %u\n", &speed_0, &speed_1, &speed_2, &speed_3) != 4)	return	-EINVAL;
+
+	if(!(speed_0 < speed_1 && speed_1 < speed_2 && speed_2 < speed_3)){
+		printk("fan speeds must be increasing in value\n");
+		return count;
+	}
+
+	printk("fan_speeds : %s [%d %d %d %d] \n",__FUNCTION__, speed_0, speed_1, speed_2, speed_3);
+
+	mutex_lock(&fan->mutex);
+	fan->fan_speed_0 = speed_0;
+	fan->fan_speed_1 = speed_1;
+	fan->fan_speed_2 = speed_2;
+	fan->fan_speed_3 = speed_3;
+	mutex_unlock(&fan->mutex);
+
+	return count;
+}
+
+static	ssize_t show_fan_speeds	(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct odroid_fan *fan = dev_get_drvdata(dev);
+	ssize_t result;
+
+	mutex_lock(&fan->mutex);
+	result = sprintf(buf, "%d %d %d %d\n", fan->fan_speed_0, fan->fan_speed_1, fan->fan_speed_2, fan->fan_speed_3);
+	mutex_unlock(&fan->mutex);
+	return	result;
+}
+
 //[*]--------------------------------------------------------------------------------------------------[*]
 //[*]--------------------------------------------------------------------------------------------------[*]
 static void odroid_fan_work(struct work_struct *work)
@@ -222,6 +305,7 @@ static void odroid_fan_work(struct work_struct *work)
 
 	temp = exynos_thermal_get_value();
 
+	mutex_lock(&fan->mutex);
 	if(temp<fan->tmu_level_0)		duty_percent=fan->fan_speed_0;
 	else if(temp<fan->tmu_level_1)	duty_percent=fan->fan_speed_1;
 	else if(temp<fan->tmu_level_2)	duty_percent=fan->fan_speed_2;
@@ -229,7 +313,6 @@ static void odroid_fan_work(struct work_struct *work)
 
 	fan->duty = (255 * duty_percent)/100;
 
-	mutex_lock(&fan->mutex);
     if(fan->pwm_status){
 		pwm_disable(fan->pwm);
 		pwm_config(fan->pwm, fan->duty * fan->period / 255, fan->period);
