@@ -332,13 +332,13 @@ static int bmp180_probe(struct i2c_client *client, const struct i2c_device_id *i
 		return -ENOMEM;
 	}
 
-    if(bmp180_detect(client) < 0)     goto error;
-
 	i2c_set_clientdata(client, bmp180);
 	
     dev_set_drvdata(&client->dev, bmp180);
 	
 	bmp180->client = client;
+
+    if(bmp180_detect(client) < 0)     goto error;
 
 	err = bmp180_read_store_eeprom_val(bmp180);
 
@@ -364,7 +364,7 @@ static int bmp180_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 error:
     printk("\n=================== ioboard_%s FAIL! ===================\n\n", __func__);
-	kfree(bmp180);
+
 	return err;
 }
 
@@ -379,7 +379,6 @@ static int bmp180_remove(struct i2c_client *client)
 	sysfs_remove_group(&client->dev.kobj, &bmp180_attribute_group);
 
 	kfree(bmp180);
-
 	return 0;
 }
 

@@ -302,7 +302,9 @@ static	int		ioboard_keyled_remove		(struct platform_device *pdev)
 	}
 
     sysfs_remove_group(&pdev->dev.kobj, &ioboard_sysfs_attr_group);
-    
+
+    hrtimer_cancel(&BoardTestTimer);
+
     return	0;
 }
 

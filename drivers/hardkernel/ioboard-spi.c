@@ -427,7 +427,6 @@ static int ioboard_spi_probe        (struct spi_device *spi)
 
 err:
     printk("\n=================== %s FAIL! ===================\n\n", __func__);
-    kfree(ioboard_spi);
 
     return  ret;
         
@@ -436,6 +435,12 @@ err:
 //[*]--------------------------------------------------------------------------------------------------[*]
 static int ioboard_spi_remove   (struct spi_device *spi)
 {
+    struct ioboard_spi  *ioboard_spi = dev_get_drvdata(&spi->dev);
+
+    if(wp_gpio)     gpio_free(wp_gpio);
+
+    kfree(ioboard_spi);
+
 	return 0;
 }
 

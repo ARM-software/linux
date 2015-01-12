@@ -221,14 +221,14 @@ static int bh1780_probe(struct i2c_client *client, const struct i2c_device_id *i
 		return -ENOMEM;
 	}
 
-	/* detect and init hardware */
-	if ((err = bh1780_detect(client, NULL)) != 0)   goto error;
-
 	i2c_set_clientdata(client, bh1780);
 	
     dev_set_drvdata(&client->dev, bh1780);
 	
 	bh1780->client = client;
+
+	/* detect and init hardware */
+	if ((err = bh1780_detect(client, NULL)) != 0)   goto error;
 
 	if((err = i2c_smbus_write_byte(bh1780->client, (BH1780_COMMAND_REG + BH1780_PART_REV_REG))) < 0)	{
 		dev_err(&client->dev, "I2C write byte error: data=0x%02x\n", (BH1780_COMMAND_REG + BH1780_PART_REV_REG));
@@ -260,7 +260,7 @@ static int bh1780_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 error:
     printk("\n=================== ioboard_%s FAIL! ===================\n\n", __func__);
-	kfree(bh1780);
+
 	return err;
 }
 
