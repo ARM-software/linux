@@ -516,7 +516,8 @@ static void __exit hdlcd_exit(void)
 	platform_driver_unregister(&hdlcd_platform_driver);
 }
 
-module_init(hdlcd_init);
+/* need late_initcall() so we load after i2c driver */
+late_initcall(hdlcd_init);
 module_exit(hdlcd_exit);
 
 MODULE_AUTHOR("Liviu Dudau");
