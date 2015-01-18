@@ -1159,6 +1159,27 @@
 		samsung,syscon-phandle = <&pmu_system_controller>;
 		status = "enabled";
 	};
+
+        cec@101B0000 {
+                compatible = "samsung,exynos5-cec_driver";
+                reg = <0x101B0000 0x1000>;
+                interrupts = <0 114 0>;
+
+                gpios = <&gpx3 6 0xf>;
+                pinctrl-names = "hdmi_cec";
+                pinctrl-0 = <&hdmi_cec>;
+
+                clock-names = "pclk_hdmi_cec";
+                clocks = <&clock 966>;
+
+                #address-cells = <1>;
+                #size-cells = <1>;
+                ranges;
+
+                hdmiphy-sys {
+                        reg = <0x10040700 0x4>;
+                };
+        };
 	
 	hdmiphy: hdmiphy@145D0000 {
 		reg = <0x145D0000 0x20>;
@@ -1273,12 +1294,11 @@
 		bts-status = "enabled";
 	};
 
-	pd_mfc0: pd-mfc@10044060 {
-		compatible = "samsung,exynos-pd";
-		reg = <0x10044060 0x20>;
-		bts-status = "enabled";
-		status = "enabled";
-	};
+        pd_mfc0: pd-mfc@10044060 {
+                compatible = "samsung,exynos-pd";
+                reg = <0x10044060 0x20>;
+                bts-status = "disable";
+        };
 
 	pd_g3d: pd-g3d@0x10044080 {
 		compatible = "samsung,exynos-pd";
