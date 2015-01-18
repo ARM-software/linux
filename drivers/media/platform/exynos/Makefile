@@ -9,4 +9,6 @@ obj-$(CONFIG_VIDEO_EXYNOS_FIMG2D)	+= fimg2d/
 obj-$(CONFIG_VIDEO_EXYNOS_JPEG)		+= jpeg4/
 obj-$(CONFIG_VIDEO_EXYNOS_HX_JPEG)	+= jpeg_hx/
 obj-$(CONFIG_VIDEO_EXYNOS_TV)		+= tv/
+obj-$(CONFIG_VIDEO_EXYNOS_HDMI_CEC) += s5p-hdmi_cec.o
+s5p-hdmi_cec-y += tv/hdmi_cec.o tv/hdmi_cec_ctrl.o
 EXTRA_CLAGS += -Idrivers/media/video
