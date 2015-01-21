@@ -127,7 +127,7 @@
 	};
 
 	i2c_1: i2c@12C70000 {
-		clock-frequency = <400000>;
+		samsung,i2c-max-bus-freq = <400000>;
 		status = "okay";
 	};
 
