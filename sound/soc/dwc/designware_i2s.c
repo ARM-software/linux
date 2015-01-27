@@ -611,9 +611,7 @@ static struct platform_driver dw_i2s_driver = {
 	.driver		= {
 		.name	= "designware-i2s",
 		.owner	= THIS_MODULE,
-#ifdef CONFIG_OF
 		.of_match_table = of_match_ptr(dw_i2s_of_match),
-#endif
 	},
 };
 
