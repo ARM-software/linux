@@ -636,6 +636,7 @@ bool __clk_is_enabled(struct clk *clk)
 out:
 	return !!ret;
 }
+EXPORT_SYMBOL_GPL(__clk_is_enabled);
 
 static struct clk *__clk_lookup_subtree(const char *name, struct clk *clk)
 {

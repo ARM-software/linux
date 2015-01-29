@@ -64,6 +64,7 @@ unsigned int get_match_volt(enum asv_type_id target_type, unsigned int target_fr
 	/* If there is no matched freq, return max supplied voltage */
 	return match_asv_info->max_volt_value;
 }
+EXPORT_SYMBOL(get_match_volt);
 
 unsigned int get_match_abb(enum asv_type_id target_type, unsigned int target_freq)
 {

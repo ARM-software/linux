@@ -1006,6 +1006,7 @@ void bts_scen_update(enum bts_scen_type type, unsigned int val)
 
 	spin_unlock(&bts_lock);
 }
+EXPORT_SYMBOL(bts_scen_update);
 
 void bts_initialize(const char *pd_name, bool on)
 {

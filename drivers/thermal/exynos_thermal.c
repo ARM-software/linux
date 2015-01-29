@@ -534,6 +534,7 @@ void exynos_gpu_call_notifier(enum gpu_noti_state_t cur_state)
 		gpu_old_state = cur_state;
 	}
 }
+EXPORT_SYMBOL(exynos_gpu_add_notifier);
 
 static void exynos_check_tmu_noti_state(int min_temp, int max_temp)
 {
