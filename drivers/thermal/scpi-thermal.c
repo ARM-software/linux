@@ -9,18 +9,28 @@
 
 #define SOC_SENSOR "SENSOR_TEMP_SOC"
 
-#define NUM_CLUSTERS 2
+enum cluster_type {
+	CLUSTER_BIG = 0,
+	CLUSTER_LITTLE,
+	NUM_CLUSTERS
+};
 
 struct cluster_power_coefficients {
 	int dyn_coeff;
+	int static_coeff;
+	int cache_static_coeff;
 };
 
 struct cluster_power_coefficients cluster_data[] = {
-	{
+	[CLUSTER_BIG] = {
 		.dyn_coeff = 530,
+		.static_coeff = 103,		/* 75 mW @ 85C/0.9V */
+		.cache_static_coeff = 88,	/* 64 mW @ 85C/0.9V */
 	},
-	{
+	[CLUSTER_LITTLE] = {
 		.dyn_coeff = 140,
+		.static_coeff = 36,		/* 26 mW @ 85C/0.9V */
+		.cache_static_coeff = 73,	/* 53 mW @ 85C/0.9V */
 	},
 };
 
@@ -33,6 +43,58 @@ struct scpi_sensor {
 static struct scpi_sensor scpi_temp_sensor;
 
 static struct scpi_ops *scpi_ops;
+
+static unsigned long get_temperature_scale(unsigned long temp)
+{
+	int i, t_exp = 1, t_scale = 0;
+	int coeff[] = { 32000, 4700, -80, 2 }; // * 1E6
+
+	for (i = 0; i < 4; i++) {
+		t_scale += coeff[i] * t_exp;
+		t_exp *= temp;
+	}
+
+	return t_scale / 1000; // the value returned needs to be /1E3
+}
+
+static unsigned long get_voltage_scale(unsigned long u_volt)
+{
+	unsigned long m_volt = u_volt / 1000;
+	unsigned long v_scale;
+
+	v_scale = m_volt * m_volt * m_volt; // = (m_V^3) / (900 ^ 3) =
+
+	return v_scale / 1000000; // the value returned needs to be /(1E3)
+}
+
+/* voltage in uV and temperature in mC */
+static int get_static_power(cpumask_t *cpumask, int interval,
+		unsigned long u_volt, u32 *power)
+{
+	struct thermal_zone_device *tzd = scpi_temp_sensor.tzd;
+	unsigned long t_scale, v_scale, milli_temp = 0;
+	u32 cpu_coeff;
+	int nr_cpus = cpumask_weight(cpumask);
+	enum cluster_type cluster =
+		topology_physical_package_id(cpumask_any(cpumask));
+
+	cpu_coeff = cluster_data[cluster].static_coeff;
+
+	if (tzd)
+		milli_temp = tzd->temperature;
+
+	t_scale = get_temperature_scale(milli_temp / 1000);
+	v_scale = get_voltage_scale(u_volt);
+
+	*power = nr_cpus * (cpu_coeff * t_scale * v_scale) / 1000000;
+
+	if (nr_cpus) {
+		u32 cache_coeff = cluster_data[cluster].cache_static_coeff;
+		*power += (cache_coeff * v_scale * t_scale) / 1000000; /* cache leakage */
+	}
+
+	return 0;
+}
 
 static int get_temp_value(void *data, long *temp)
 {
@@ -94,7 +156,7 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 			of_cpufreq_power_cooling_register(np,
 							  &sensor_data->cluster[i],
 							  cluster_data[i].dyn_coeff,
-							  NULL);
+							  get_static_power);
 
 		if (IS_ERR(sensor_data->cdevs[i])) {
 			dev_warn(&pdev->dev,
