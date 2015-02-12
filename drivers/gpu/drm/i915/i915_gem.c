@@ -5131,18 +5131,12 @@ i915_gem_shrinker_scan(struct shrinker *shrinker, struct shrink_control *sc)
 	unsigned long freed;
 	bool unlock;
 
-	if (!i915_gem_shrinker_lock(dev, &unlock))
-		return SHRINK_STOP;
-
-	freed = i915_gem_purge(dev_priv, sc->nr_to_scan);
-	if (freed < sc->nr_to_scan)
-		freed += __i915_gem_shrink(dev_priv,
-					   sc->nr_to_scan - freed,
-					   false);
-	if (unlock)
-		mutex_unlock(&dev->struct_mutex);
-
-	return freed;
+#if defined(CONFIG_SMP) && !defined(CONFIG_DEBUG_MUTEXES)
+	return mutex->owner == task;
+#else
+	/* Since UP may be pre-empted, we cannot assume that we own the lock */
+	return false;
+#endif
 }
 
 static int
