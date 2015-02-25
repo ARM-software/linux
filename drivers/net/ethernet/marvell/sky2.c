@@ -101,6 +101,10 @@ static int legacy_pme = 0;
 module_param(legacy_pme, int, 0);
 MODULE_PARM_DESC(legacy_pme, "Legacy power management");
 
+/* Ugh!  Let the firmware tell us the hardware address */
+static int mac_address[ETH_ALEN] = { 0, };
+module_param_array(mac_address, int, NULL, 0);
+
 static const struct pci_device_id sky2_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_SYSKONNECT, 0x9000) }, /* SK-9Sxx */
 	{ PCI_DEVICE(PCI_VENDOR_ID_SYSKONNECT, 0x9E00) }, /* SK-9Exx */
@@ -4813,13 +4817,21 @@ static struct net_device *sky2_init_netdev(struct sky2_hw *hw, unsigned port,
 	/* try to get mac address in the following order:
 	 * 1) from device tree data
 	 * 2) from internal registers set by bootloader
+	 * 3) from the command line parameter
 	 */
 	iap = of_get_mac_address(hw->pdev->dev.of_node);
 	if (iap)
 		memcpy(dev->dev_addr, iap, ETH_ALEN);
-	else
+	else {
 		memcpy_fromio(dev->dev_addr, hw->regs + B2_MAC_1 + port * 8,
 			      ETH_ALEN);
+		if (!is_valid_ether_addr(&dev->dev_addr[0])) {
+			int i;
+
+			for (i = 0; i < ETH_ALEN; i++)
+				dev->dev_addr[i] = mac_address[i];
+		}
+	}
 
 	return dev;
 }
