@@ -368,6 +368,7 @@ int exynos_drm_gem_mmap_buffer(struct file *filp,
 	if (vm_size > buffer->size)
 		return -EINVAL;
 
+	vma->vm_pgoff = 0;
 	ret = dma_mmap_attrs(drm_dev->dev, vma, buffer->pages,
 				buffer->dma_addr, buffer->size,
 				&buffer->dma_attrs);
