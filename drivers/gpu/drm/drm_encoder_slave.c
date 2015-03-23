@@ -117,7 +117,8 @@ void drm_i2c_encoder_destroy(struct drm_encoder *drm_encoder)
 	struct i2c_client *client = drm_i2c_encoder_get_client(drm_encoder);
 	struct module *module = client->dev.driver->owner;
 
-	i2c_unregister_device(client);
+	if (!client->dev.of_node)
+		i2c_unregister_device(client);
 	encoder->bus_priv = NULL;
 
 	module_put(module);
