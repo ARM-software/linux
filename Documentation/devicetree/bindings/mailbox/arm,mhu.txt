@@ -1,0 +1,29 @@
+ARM Message Handling Unit(MHU)
+------------------------------
+
+Required properties:
+
+- compatible : should be "arm,mhu"
+- reg : exactly one register range with length 0x1000(4kB)
+- interrupts : list of interrupt specifiers associated with the device
+- interrupt-names : contains names of the interrupt in the order in which
+		    they were specified in the interrupts property
+- #mbox-cells : number of cells in a mailbox specifier, should be 1.
+		The 'mboxes' specifier should be a linear index to the
+		mailbox this device supports.
+
+See Documentation/devicetree/bindings/mailbox/mailbox.txt
+for more details about the generic mailbox controller and
+client driver bindings.
+
+Example:
+
+mailbox: mhu@2b1f0000 {
+	compatible = "arm,mhu";
+	reg = <0x0 0x2b1f0000 0x0 0x1000>;
+	interrupts = <0 35 4>,
+		     <0 36 4>;
+	interrupt-names = "mhu_hpri_rx",
+			  "mhu_lpri_rx";
+	#mbox-cells = <1>;
+};
