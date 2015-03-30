@@ -24,6 +24,15 @@ config ARM_VEXPRESS_SPC_CPUFREQ
           This add the CPUfreq driver support for Versatile Express
 	  big.LITTLE platforms using SPC for power management.
 
+config ARM_SCPI_CPUFREQ
+        tristate "SCPI based CPUfreq driver"
+	depends on ARM_BIG_LITTLE_CPUFREQ && ARM_SCPI_PROTOCOL
+        help
+          This add the CPUfreq driver support for ARM big.LITTLE platforms
+	  using SCPI interface for CPU power management.
+
+	  This driver works only if firmware the supporting CPU DVFS adhere
+	  to SCPI protocol.
 
 config ARM_EXYNOS_CPUFREQ
 	tristate "SAMSUNG EXYNOS CPUfreq Driver"
