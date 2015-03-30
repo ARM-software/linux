@@ -37,6 +37,7 @@ struct scpi_clk {
 #define to_scpi_clk(clk) container_of(clk, struct scpi_clk, hw)
 
 static struct scpi_ops *scpi_ops;
+static struct platform_device *cpufreq_dev;
 
 static unsigned long scpi_clk_recalc_rate(struct clk_hw *hw,
 					  unsigned long parent_rate)
@@ -270,11 +271,23 @@ static int scpi_clk_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, clk_data);
 
+	if (clk_ops_init == scpi_dvfs_ops_init) {
+		/* Add virtual cpufreq device depending SCPI clock */
+		cpufreq_dev = platform_device_register_simple("scpi-cpufreq",
+							      -1, NULL, 0);
+		if (!cpufreq_dev)
+			pr_warn("unable to register cpufreq device");
+	}
 	return 0;
 }
 
 static int scpi_clk_remove(struct platform_device *pdev)
 {
+	if (cpufreq_dev) {
+		platform_device_unregister(cpufreq_dev);
+		cpufreq_dev = NULL;
+	}
+
 	of_clk_del_provider(pdev->dev.of_node);
 	platform_set_drvdata(pdev, NULL);
 	return 0;
