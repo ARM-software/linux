@@ -186,6 +186,8 @@ bL_cpufreq_set_rate(u32 cpu, u32 old_cluster, u32 new_cluster, u32 rate)
 		mutex_unlock(&cluster_lock[old_cluster]);
 	}
 
+	if (bL_cpufreq_get_rate(cpu) != new_rate)
+		return -EIO;
 	return 0;
 }
 
