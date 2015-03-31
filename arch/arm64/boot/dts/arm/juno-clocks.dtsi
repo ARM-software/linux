@@ -42,3 +42,26 @@
 		clock-frequency = <400000000>;
 		clock-output-names = "faxi_clk";
 	};
+
+	scpi {
+		compatible = "arm,scpi";
+		mboxes = <&mailbox 1>;
+		shmem = <&cpu_scp_hpri>;
+
+		clocks {
+			compatible = "arm,scpi-clocks";
+
+			scpi_dvfs: scpi_clocks@0 {
+				compatible = "arm,scpi-dvfs";
+				#clock-cells = <1>;
+				clock-indices = <0>, <1>, <2>;
+				clock-output-names = "vbig", "vlittle", "vgpu";
+			};
+			scpi_clk: scpi_clocks@3 {
+				compatible = "arm,scpi-clk";
+				#clock-cells = <1>;
+				clock-indices = <3>, <4>;
+				clock-output-names = "pxlclk0", "pxlclk1";
+			};
+		};
+	};
