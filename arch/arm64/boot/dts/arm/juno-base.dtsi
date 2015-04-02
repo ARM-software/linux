@@ -93,6 +93,34 @@
 		clock-names = "apb_pclk";
 	};
 
+	hdlcd@7ff50000 {
+		compatible = "arm,hdlcd";
+		reg = <0 0x7ff50000 0 0x1000>;
+		interrupts = <GIC_SPI 93 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&pixel_clk 1>;
+		clock-names = "pxlclk";
+
+		port {
+			hdlcd1_output: endpoint@0 {
+				remote-endpoint = <&tda998x_1_input>;
+			};
+		};
+	};
+
+	hdlcd@7ff60000 {
+		compatible = "arm,hdlcd";
+		reg = <0 0x7ff60000 0 0x1000>;
+		interrupts = <GIC_SPI 85 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&pixel_clk 0>;
+		clock-names = "pxlclk";
+
+		port {
+			hdlcd0_output: endpoint@0 {
+				remote-endpoint = <&tda998x_0_input>;
+			};
+		};
+	};
+
 	soc_uart0: uart@7ff80000 {
 		compatible = "arm,pl011", "arm,primecell";
 		reg = <0x0 0x7ff80000 0x0 0x1000>;
@@ -111,14 +139,32 @@
 		i2c-sda-hold-time-ns = <500>;
 		clocks = <&soc_smc50mhz>;
 
-		dvi0: dvi-transmitter@70 {
+		hdmi-transmitter@70 {
 			compatible = "nxp,tda998x";
 			reg = <0x70>;
+			port {
+				tda998x_0_input: endpoint@0 {
+					remote-endpoint = <&hdlcd0_output>;
+				};
+
+				tda998x_0_output: endpoint@1 {
+					remote-endpoint = <&hdmi0_connector_output>;
+				};
+			};
 		};
 
-		dvi1: dvi-transmitter@71 {
+		hdmi-transmitter@71 {
 			compatible = "nxp,tda998x";
 			reg = <0x71>;
+			port {
+				tda998x_1_input: endpoint@0 {
+					remote-endpoint = <&hdlcd1_output>;
+				};
+
+				tda998x_1_output: endpoint@1 {
+					remote-endpoint = <&hdmi1_connector_output>;
+				};
+			};
 		};
 	};
 
@@ -143,6 +189,26 @@
 			     <GIC_SPI 87 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&soc_smc50mhz>;
 		clock-names = "apb_pclk";
+	};
+
+	hdmi0: connector@0 {
+		compatible = "hdmi-connector";
+		type = "a";
+		port {
+			hdmi0_connector_output: endpoint {
+				remote-endpoint = <&tda998x_0_output>;
+			};
+		};
+	};
+
+	hdmi1: connector@1 {
+		compatible = "hdmi-connector";
+		type = "a";
+		port {
+			hdmi1_connector_output: endpoint {
+				remote-endpoint = <&tda998x_1_output>;
+			};
+		};
 	};
 
 	smb {
