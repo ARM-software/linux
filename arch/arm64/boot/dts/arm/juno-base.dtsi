@@ -5,7 +5,7 @@
 	memtimer: timer@2a810000 {
 		compatible = "arm,armv7-timer-mem";
 		reg = <0x0 0x2a810000 0x0 0x10000>;
-		clock-frequency = <100000000>;
+		clock-frequency = <50000000>;
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
