@@ -42,6 +42,9 @@ Example:
 
 - reg : The control frame base address.
 
+- arm,cnttidr : The value of the CNTTIDR register if not accessible from
+  the level the kernel is running at. To be used only in extreme cases.
+
 Note that #address-cells, #size-cells, and ranges shall be present to ensure
 the CPU can address a frame's registers.
 
