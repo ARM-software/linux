@@ -169,11 +169,18 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 					dev->mode_config.num_crtc,
 					dev->mode_config.num_connector);
 
+	if (IS_ERR(hdlcd->fbdev)) {
+		DRM_ERROR("failed to initialise fbdev buffer\n");
+		ret = PTR_ERR(hdlcd->fbdev);
+		hdlcd->fbdev = NULL;
+		goto fail;
+	}
+
 	return 0;
 
 fail:
-	dev->dev_private = NULL;
-	platform_set_drvdata(dev->platformdev, NULL);
+	hdlcd_unload(dev);
+
 	return ret;
 }
 
