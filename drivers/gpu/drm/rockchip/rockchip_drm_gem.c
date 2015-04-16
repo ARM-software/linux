@@ -97,6 +97,11 @@ int rockchip_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -EACCES;
 	}
 
+	/* Set vm_pgoff (used as a fake buffer offset by DRM) to 0 and map the
+	 * whole buffer from the start.
+	 */
+	vma->vm_pgoff = 0;
+
 	obj = container_of(node, struct drm_gem_object, vma_node);
 	ret = rockchip_gem_mmap_buf(obj, vma);
 
