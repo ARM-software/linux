@@ -77,8 +77,10 @@ static u32 exynos_fb_get_dma_buf( struct fb_info *info)
     {
         struct dma_buf *buf = NULL;
         buf = dev->driver->gem_prime_export( dev, &exynos_gem_obj->base, O_RDWR);
-        if(buf)
+        if(buf) {
             fd = dma_buf_fd(buf, O_RDWR);
+            drm_gem_object_reference(&exynos_gem_obj->base);
+        }
     }
 
     return fd;
