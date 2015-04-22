@@ -34,21 +34,25 @@
 
 static int init_juno_opps_from_scpi(struct device *dev)
 {
-	struct scpi_opp *sopp;
+	struct scpi_ops *scpi;
+	struct scpi_dvfs_info *info;
 	int i;
 
+	scpi = get_scpi_ops();
+	if (!scpi)
+		return 0; /* Really need to defer until scpi available */
+
 	/* Hard coded for Juno. 2 is GPU domain */
-	sopp = scpi_dvfs_get_opps(2);
-	if (IS_ERR_OR_NULL(sopp))
-		return PTR_ERR(sopp);
+	info = scpi->dvfs_get_info(2);
+	if (IS_ERR_OR_NULL(info))
+		return PTR_ERR(info);
 
-	for (i = 0; i < sopp->count; i++) {
-		struct scpi_opp_entry *e = &sopp->opp[i];
-
+	for (i = 0; i < info->count; i++) {
+		struct scpi_opp *e = &info->opps[i];
 		dev_info(dev, "Mali OPP from SCPI: %u Hz @ %u mV\n",
-				e->freq_hz, e->volt_mv);
+				e->freq, e->m_volt);
 
-		dev_pm_opp_add(dev, e->freq_hz, e->volt_mv * 1000);
+		dev_pm_opp_add(dev, e->freq, e->m_volt * 1000);
 	}
 
 	return 0;
