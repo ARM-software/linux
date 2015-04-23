@@ -393,7 +393,7 @@ static unsigned long scpi_clk_get_val(u16 clk_id)
 static int scpi_clk_set_val(u16 clk_id, unsigned long rate)
 {
 	int stat;
-	struct clk_set_value clk = { cpu_to_le16(clk_id), cpu_to_le32(rate) };
+	struct clk_set_value clk = { cpu_to_le16(clk_id), 0, cpu_to_le32(rate) };
 
 	return scpi_send_message(SCPI_CMD_SET_CLOCK_VALUE,
 				 &clk, sizeof(clk), &stat);
