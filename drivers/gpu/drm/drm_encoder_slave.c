@@ -97,7 +97,8 @@ int drm_i2c_encoder_init(struct drm_device *dev,
 	return 0;
 
 fail_unregister:
-	i2c_unregister_device(client);
+	if (!info->of_node)
+		i2c_unregister_device(client);
 	module_put(module);
 fail:
 	return err;
