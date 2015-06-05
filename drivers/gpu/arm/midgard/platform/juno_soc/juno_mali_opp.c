@@ -32,6 +32,8 @@
 #endif /* Linux >= 3.13 */
 
 
+#include <mali_kbase.h>
+
 static int init_juno_opps_from_scpi(struct device *dev)
 {
 	struct scpi_ops *scpi;
@@ -58,7 +60,7 @@ static int init_juno_opps_from_scpi(struct device *dev)
 	return 0;
 }
 
-static int juno_setup_opps(void)
+int setup_opps(void)
 {
 	struct device_node *np;
 	struct platform_device *pdev;
@@ -83,6 +85,3 @@ static int juno_setup_opps(void)
 
 	return err;
 }
-
-module_init(juno_setup_opps);
-MODULE_LICENSE("GPL");
