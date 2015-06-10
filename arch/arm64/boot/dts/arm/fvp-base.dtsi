@@ -1,0 +1,267 @@
+	bp_clock35mhz: clock35mhz {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <35000000>;
+		clock-output-names = "bp:clock35mhz";
+	};
+
+	bp_clock24mhz: clock24mhz {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+		clock-output-names = "bp:clock24mhz";
+	};
+
+	flash@8000000 {
+		compatible = "arm,vexpress-flash", "cfi-flash";
+		reg = <0x0 0x08000000 0x0 0x04000000>,
+		      <0x0 0x0C000000 0x0 0x04000000>;
+		bank-width = <4>;
+	};
+
+	bp_video_ram: vram@18000000 {
+		compatible = "arm,vexpress-vram";
+		reg = <0x0 0x18000000 0x0 0x00800000>;
+	};
+
+	ethernet@1a000000 {
+		compatible = "smsc,lan91c111";
+		reg = <0x0 0x1a000000 0x0 0x10000>;
+		interrupts = <GIC_SPI 15 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	bp_sysreg: sysreg@1c010000 {
+		compatible = "arm,vexpress-sysreg";
+		reg = <0x0 0x1c010000 0x0 0x1000>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+
+	mcc {
+		compatible = "arm,vexpress,config-bus";
+		arm,vexpress,config-bridge = <&bp_sysreg>;
+
+		bp_oscclk1: oscclk1 {
+			compatible = "arm,vexpress-osc";
+			arm,vexpress-sysreg,func = <1 1>;
+			freq-range = <23750000 63500000>;
+			#clock-cells = <0>;
+			clock-output-names = "bp:oscclk1";
+		};
+
+		muxfpga {
+			compatible = "arm,vexpress-muxfpga";
+			arm,vexpress-sysreg,func = <7 0>;
+		};
+
+		shutdown {
+			compatible = "arm,vexpress-shutdown";
+			arm,vexpress-sysreg,func = <8 0>;
+		};
+
+		reboot {
+			compatible = "arm,vexpress-reboot";
+			arm,vexpress-sysreg,func = <9 0>;
+		};
+	};
+
+	sysctl_refclk: sysctl-refclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <1000000>;
+		clock-output-names = "sysctl:refclk";
+	};
+
+	sysctl_timclk: sysctl-timclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <32768>;
+		clock-output-names = "sysctl:timclk";
+	};
+
+	bp_sysctl: sysctl@1c020000 {
+		compatible = "arm,sp810", "arm,primecell";
+		reg = <0x0 0x1c020000 0x0 0x1000>;
+		clocks = <&sysctl_refclk>, <&sysctl_timclk>, <&bp_clock35mhz>;
+		clock-names = "refclk", "timclk", "apb_pclk";
+		#clock-cells = <1>;
+		clock-output-names = "timerclken0", "timerclken1", "timerclken2", "timerclken3";
+		assigned-clocks = <&bp_sysctl 0>, <&bp_sysctl 1>, <&bp_sysctl 3>, <&bp_sysctl 3>;
+		assigned-clock-parents = <&sysctl_timclk>, <&sysctl_timclk>, <&sysctl_timclk>, <&sysctl_timclk>;
+	};
+
+	aaci@1c040000 {
+		compatible = "arm,pl041", "arm,primecell";
+		reg = <0x0 0x1c040000 0x0 0x1000>;
+		interrupts = <GIC_SPI 11 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_clock24mhz>;
+		clock-names = "apb_pclk";
+	};
+
+	bp_fixed_3v3: bp-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "3V3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
+
+	mmci@1c050000 {
+		compatible = "arm,pl180", "arm,primecell";
+		reg = <0x0 0x1c050000 0x0 0x1000>;
+		interrupts = <GIC_SPI 9 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 10 IRQ_TYPE_LEVEL_HIGH>;
+		cd-gpios = <&bp_sysreg 0 0>;
+		wp-gpios = <&bp_sysreg 1 0>;
+		max-frequency = <12000000>;
+		vmmc-supply = <&bp_fixed_3v3>;
+		clocks = <&bp_clock24mhz>, <&bp_clock24mhz>;
+		clock-names = "mclk", "apb_pclk";
+	};
+
+	kmi@1c060000 {
+		compatible = "arm,pl050", "arm,primecell";
+		reg = <0x0 0x1c060000 0x0 0x1000>;
+		interrupts = <GIC_SPI 12 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_clock24mhz>, <&bp_clock24mhz>;
+		clock-names = "KMIREFCLK", "apb_pclk";
+	};
+
+	kmi@1c070000 {
+		compatible = "arm,pl050", "arm,primecell";
+		reg = <0x0 0x1c070000 0x0 0x1000>;
+		interrupts = <GIC_SPI 13 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_clock24mhz>, <&bp_clock24mhz>;
+		clock-names = "KMIREFCLK", "apb_pclk";
+	};
+
+	bp_serial0: uart@1c090000 {
+		compatible = "arm,pl011", "arm,primecell";
+		reg = <0x0 0x1c090000 0x0 0x1000>;
+		interrupts = <GIC_SPI 5 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_clock24mhz>, <&bp_clock24mhz>;
+		clock-names = "uartclk", "apb_pclk";
+	};
+
+	bp_serial1: uart@1c0a0000 {
+		compatible = "arm,pl011", "arm,primecell";
+		reg = <0x0 0x1c0a0000 0x0 0x1000>;
+		interrupts = <GIC_SPI 6 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_clock24mhz>, <&bp_clock24mhz>;
+		clock-names = "uartclk", "apb_pclk";
+	};
+
+	bp_serial2: uart@1c0b0000 {
+		compatible = "arm,pl011", "arm,primecell";
+		reg = <0x0 0x1c0b0000 0x0 0x1000>;
+		interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_clock24mhz>, <&bp_clock24mhz>;
+		clock-names = "uartclk", "apb_pclk";
+	};
+
+	bp_serial3: uart@1c0c0000 {
+		compatible = "arm,pl011", "arm,primecell";
+		reg = <0x0 0x1c0c0000 0x0 0x1000>;
+		interrupts = <GIC_SPI 8 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_clock24mhz>, <&bp_clock24mhz>;
+		clock-names = "uartclk", "apb_pclk";
+	};
+
+	wdt@1c0f0000 {
+		compatible = "arm,sp805", "arm,primecell";
+		reg = <0x0 0x1c0f0000 0x0 0x1000>;
+		interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_clock24mhz>, <&bp_clock24mhz>;
+		clock-names = "wdogclk", "apb_pclk";
+	};
+
+	bp_timer01: timer@1c110000 {
+		compatible = "arm,sp804", "arm,primecell";
+		reg = <0x0 0x1c110000 0x0 0x1000>;
+		interrupts = <GIC_SPI 2 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_sysctl 0>, <&bp_sysctl 1>, <&bp_clock35mhz>;
+		clock-names = "timclken1", "timclken2", "apb_pclk";
+	};
+
+	bp_timer23: timer@1c120000 {
+		compatible = "arm,sp804", "arm,primecell";
+		reg = <0x0 0x1c120000 0x0 0x1000>;
+		interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_sysctl 2>, <&bp_sysctl 3>, <&bp_clock35mhz>;
+		clock-names = "timclken1", "timclken2", "apb_pclk";
+	};
+
+	virtio_block@1c0130000 {
+		compatible = "virtio,mmio";
+		reg = <0x0 0x1c130000 0x0 0x200>;
+		interrupts = <GIC_SPI 42 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	rtc@1c170000 {
+		compatible = "arm,pl031", "arm,primecell";
+		reg = <0x0 0x1c170000 0x0 0x1000>;
+		interrupts = <GIC_SPI 4 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_clock24mhz>;
+		clock-names = "apb_pclk";
+	};
+
+	clcd@1c1f0000 {
+		compatible = "arm,pl111", "arm,primecell";
+		reg = <0x0 0x1c1f0000 0x0 0x1000>;
+		interrupt-names = "combined";
+		interrupts = <GIC_SPI 14 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&bp_oscclk1>, <&bp_clock24mhz>;
+		clock-names = "clcdclk", "apb_pclk";
+		arm,pl11x,framebuffer = <0x18000000 0x00180000>;
+		memory-region = <&bp_video_ram>;
+		max-memory-bandwidth = <130000000>; /* 16bpp @ 63.5MHz */
+
+		port {
+			bp_clcd_pads: endpoint {
+				remote-endpoint = <&bp_clcd_panel>;
+				arm,pl11x,tft-r0g0b0-pads = <0 8 16>;
+			};
+		};
+
+		panel {
+			compatible = "panel-dpi";
+
+			port {
+				bp_clcd_panel: endpoint {
+					remote-endpoint = <&bp_clcd_pads>;
+				};
+			};
+
+			panel-timing {
+				clock-frequency = <63500127>;
+				hactive = <1024>;
+				hback-porch = <152>;
+				hfront-porch = <48>;
+				hsync-len = <104>;
+				vactive = <768>;
+				vback-porch = <23>;
+				vfront-porch = <3>;
+				vsync-len = <4>;
+			};
+		};
+	};
+
+	timer@2a810000 {
+		compatible = "arm,armv7-timer-mem";
+		reg = <0x0 0x2a810000 0x0 0x1000>;
+		clock-frequency = <50000000>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		frame@2a830000 {
+			frame-number = <1>;
+			interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
+			reg = <0x0 0x2a830000 0x0 0x1000>;
+		};
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x00000000 0x80000000 0 0x80000000>,
+		      <0x00000008 0x80000000 0 0x80000000>;
+	};
