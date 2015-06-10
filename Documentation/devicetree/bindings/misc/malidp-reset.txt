@@ -1,0 +1,24 @@
+* Mali-DP Reset Widget
+
+This node is for a reset widget included in Mali-DP development bitfiles. It
+provides an interface to the HW reset lines of the Mali-DP device(s).
+
+Required properties:
+- compatible: Should be "arm,malidp-reset"
+- reg: The register location and length (length should be 4)
+
+Optional properties:
+- mask: The default reset mask to use (if not specified, a driver-internal
+default is used). This should be a 3-bit number, where the bits have the
+following meanings:
+ bit 2: Global reset
+ bit 1: Primary core reset
+ bit 0: Secodary core reset
+
+Example:
+
+	widget0: widget@0x6f020058 {
+		compatible = "arm,malidp-reset";
+		reg = <0 0x6f020058 0 0x4>;
+		mask = <0x7>;
+	};

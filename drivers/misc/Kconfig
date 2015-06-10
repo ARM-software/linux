@@ -528,6 +528,15 @@ config UID_SYS_STATS_DEBUG
 	help
 	  Per TASK based io statistics exported to /proc/uid_io
 
+config MALIDP_RESET
+	tristate "Mali-DP Reset Widget"
+	default n
+	help
+	  Development platforms for the Mali-DP family of display processors
+	  can include a piece of external hardware to force a hardware reset.
+	  This driver allows a reset to be conducted from userspace via sysfs
+	  or during system suspend via the PM callbacks.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
