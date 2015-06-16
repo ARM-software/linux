@@ -38,7 +38,7 @@ static struct scpi_dvfs_info *scpi_get_dvfs_info(struct device *cpu_dev)
 	return scpi_ops->dvfs_get_info(domain);
 }
 
-static int scpi_opp_table_ops(struct device *cpu_dev, bool remove)
+static int scpi_init_opp_table(struct device *cpu_dev)
 {
 	int idx, ret = 0;
 	struct scpi_opp *opp;
@@ -51,16 +51,10 @@ static int scpi_opp_table_ops(struct device *cpu_dev, bool remove)
 		return -EIO;
 
 	for (opp = info->opps, idx = 0; idx < info->count; idx++, opp++) {
-		if (remove)
-			dev_pm_opp_remove(cpu_dev, opp->freq);
-		else
-			ret = dev_pm_opp_add(cpu_dev, opp->freq,
-					     opp->m_volt * 1000);
+		ret = dev_pm_opp_add(cpu_dev, opp->freq, opp->m_volt * 1000);
 		if (ret) {
 			dev_warn(cpu_dev, "failed to add opp %uHz %umV\n",
 				 opp->freq, opp->m_volt);
-			while (idx-- > 0)
-				dev_pm_opp_remove(cpu_dev, (--opp)->freq);
 			return ret;
 		}
 	}
@@ -76,21 +70,10 @@ static int scpi_get_transition_latency(struct device *cpu_dev)
 	return info->latency;
 }
 
-static int scpi_init_opp_table(struct device *cpu_dev)
-{
-	return scpi_opp_table_ops(cpu_dev, false);
-}
-
-static void scpi_free_opp_table(struct device *cpu_dev)
-{
-	scpi_opp_table_ops(cpu_dev, true);
-}
-
 static struct cpufreq_arm_bL_ops scpi_cpufreq_ops = {
 	.name	= "scpi",
 	.get_transition_latency = scpi_get_transition_latency,
 	.init_opp_table = scpi_init_opp_table,
-	.free_opp_table = scpi_free_opp_table,
 };
 
 static int scpi_cpufreq_probe(struct platform_device *pdev)
