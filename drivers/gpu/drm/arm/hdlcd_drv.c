@@ -136,6 +136,12 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 		goto fail;
 	}
 
+	hdlcd->clk = clk_get(dev->dev, NULL);
+	if (IS_ERR(hdlcd->clk)) {
+		ret = PTR_ERR(hdlcd->clk);
+		goto fail;
+	}
+
 	ret = component_bind_all(dev->dev, dev);
 	if (ret) {
 		DRM_ERROR("Failed to bind all components\n");
