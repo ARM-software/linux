@@ -65,50 +65,46 @@ static int exynos_drm_fb_mmap(struct fb_info *info,
 	return 0;
 }
 
-static u32 exynos_fb_get_dma_buf( struct fb_info *info)
+static u32 exynos_fb_get_dma_buf(struct fb_info *info)
 {
-    int fd = -1;
-    struct drm_fb_helper *helper = info->par;
-    struct drm_device *dev = helper->dev;
-    struct exynos_drm_fbdev *exynos_fbd = to_exynos_fbdev(helper);
-    struct exynos_drm_gem_obj *exynos_gem_obj = exynos_fbd->exynos_gem_obj;
+	int fd = -1;
+	struct drm_fb_helper *helper = info->par;
+	struct drm_device *dev = helper->dev;
+	struct exynos_drm_fbdev *exynos_fbd = to_exynos_fbdev(helper);
+	struct exynos_drm_gem_obj *exynos_gem_obj = exynos_fbd->exynos_gem_obj;
 
-    if( dev->driver->gem_prime_export )
-    {
-        struct dma_buf *buf = NULL;
-        buf = dev->driver->gem_prime_export( dev, &exynos_gem_obj->base, O_RDWR);
-        if(buf) {
-            fd = dma_buf_fd(buf, O_RDWR);
-            drm_gem_object_reference(&exynos_gem_obj->base);
-        }
-    }
+	if( dev->driver->gem_prime_export ) {
+		struct dma_buf *buf = NULL;
+		buf = dev->driver->gem_prime_export( dev, &exynos_gem_obj->base, O_RDWR);
+		if(buf) {
+			fd = dma_buf_fd(buf, O_RDWR);
+			drm_gem_object_reference(&exynos_gem_obj->base);
+		}
+	}
 
-    return fd;
+	return fd;
 }
 
 static int fb_ioctl(struct fb_info *info, unsigned int cmd,
             unsigned long arg)
 {
-    int ret;
+	int ret;
 
-    switch (cmd) {
-    case IOCTL_GET_FB_DMA_BUF:
-    {
-        u32 __user *out_ptr = (u32 __user *)arg;
-        u32 buf_fd = exynos_fb_get_dma_buf(info);
-        if(buf_fd == -1)
-        {
-           ret = -ENOMEM;
-            break;
-        }
-        ret = put_user(buf_fd, out_ptr);
-        break;
-    }
-    default:
-        ret = -ENOTTY;
-    }
+	switch (cmd) {
+	case IOCTL_GET_FB_DMA_BUF:
+		u32 __user *out_ptr = (u32 __user *)arg;
+		u32 buf_fd = exynos_fb_get_dma_buf(info);
+		if(buf_fd == -1) {
+			ret = -ENOMEM;
+			break;
+		}
+		ret = put_user(buf_fd, out_ptr);
+		break;
+	default:
+		ret = -ENOTTY;
+	}
 
-    return ret;
+	return ret;
 }
 
 static struct fb_ops exynos_drm_fb_ops = {
