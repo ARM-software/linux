@@ -34,17 +34,35 @@ static int rockchip_fbdev_mmap(struct fb_info *info,
 	return rockchip_gem_mmap_buf(private->fbdev_bo, vma);
 }
 
+static struct dma_buf *rockchip_fbdev_get_dma_buf(struct fb_info *info)
+{
+	struct dma_buf *buf = NULL;
+	struct drm_fb_helper *helper = info->par;
+	struct rockchip_drm_private *private = to_drm_private(helper);
+	struct drm_device *dev = helper->dev;
+
+	if (dev->driver->gem_prime_export) {
+		buf = dev->driver->gem_prime_export(dev, private->fbdev_bo, O_RDWR);
+		if (buf) {
+			drm_gem_object_reference(private->fbdev_bo);
+		}
+	}
+
+	return buf;
+}
+
 static struct fb_ops rockchip_drm_fbdev_ops = {
-	.owner		= THIS_MODULE,
-	.fb_mmap	= rockchip_fbdev_mmap,
-	.fb_fillrect	= cfb_fillrect,
-	.fb_copyarea	= cfb_copyarea,
-	.fb_imageblit	= cfb_imageblit,
-	.fb_check_var	= drm_fb_helper_check_var,
-	.fb_set_par	= drm_fb_helper_set_par,
-	.fb_blank	= drm_fb_helper_blank,
-	.fb_pan_display	= drm_fb_helper_pan_display,
-	.fb_setcmap	= drm_fb_helper_setcmap,
+	.owner			= THIS_MODULE,
+	.fb_mmap		= rockchip_fbdev_mmap,
+	.fb_fillrect		= cfb_fillrect,
+	.fb_copyarea		= cfb_copyarea,
+	.fb_imageblit		= cfb_imageblit,
+	.fb_check_var		= drm_fb_helper_check_var,
+	.fb_set_par		= drm_fb_helper_set_par,
+	.fb_blank		= drm_fb_helper_blank,
+	.fb_pan_display		= drm_fb_helper_pan_display,
+	.fb_setcmap		= drm_fb_helper_setcmap,
+	.fb_dmabuf_export	= rockchip_fbdev_get_dma_buf,
 };
 
 static int rockchip_drm_fbdev_create(struct drm_fb_helper *helper,
