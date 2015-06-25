@@ -254,6 +254,14 @@ config DB8500_CPUFREQ_COOLING
 	  bound cpufreq cooling device turns active to set CPU frequency low to
 	  cool down the CPU.
 
+config SCPI_THERMAL
+	tristate "Temperature sensor on ARM SoC based on SCPI Firmware interface"
+	depends on ARM_SCPI_PROTOCOL
+	depends on OF
+	help
+	  Support for the SCPI thermal sensor driver in the Linux thermal
+	  framework.
+
 config INTEL_POWERCLAMP
 	tristate "Intel PowerClamp idle injection driver"
 	depends on THERMAL
