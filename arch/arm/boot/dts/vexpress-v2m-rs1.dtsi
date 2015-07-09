@@ -220,6 +220,9 @@
 				dvi-transmitter@39 {
 					compatible = "sil,sii9022-tpi", "sil,sii9022";
 					reg = <0x39>;
+
+					v2m_dvi_port: port {
+					};
 				};
 
 				dvi-transmitter@60 {
@@ -243,7 +246,7 @@
 				reg-shift = <2>;
 			};
 
-			clcd@1f0000 {
+			v2m_clcd: clcd@1f0000 {
 				compatible = "arm,pl111", "arm,primecell";
 				reg = <0x1f0000 0x1000>;
 				interrupt-names = "combined";
