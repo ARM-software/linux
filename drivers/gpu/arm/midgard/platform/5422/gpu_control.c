@@ -47,22 +47,22 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 	case GPU_CONTROL_CLOCK_ON:
 		ret = gpu_clock_on(platform);
 #ifdef CONFIG_MALI_MIDGARD_DVFS
-		if (!kbdev->pm.metrics.timer_active) {
-			spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
-			kbdev->pm.metrics.timer_active = true;
-			spin_unlock_irqrestore(&kbdev->pm.metrics.lock, flags);
-			hrtimer_start(&kbdev->pm.metrics.timer, HR_TIMER_DELAY_MSEC(platform->polling_speed), HRTIMER_MODE_REL);
+		if (!kbdev->pm.backend.metrics.timer_active) {
+			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock, flags);
+			kbdev->pm.backend.metrics.timer_active = true;
+			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock, flags);
+			hrtimer_start(&kbdev->pm.backend.metrics.timer, HR_TIMER_DELAY_MSEC(platform->polling_speed), HRTIMER_MODE_REL);
 		}
 		gpu_dvfs_handler_control(kbdev, GPU_HANDLER_UPDATE_TIME_IN_STATE, 0);
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
 		break;
 	case GPU_CONTROL_CLOCK_OFF:
 #ifdef CONFIG_MALI_MIDGARD_DVFS
-		if (platform->dvfs_status && kbdev->pm.metrics.timer_active) {
-			spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
-			kbdev->pm.metrics.timer_active = false;
-			spin_unlock_irqrestore(&kbdev->pm.metrics.lock, flags);
-			hrtimer_cancel(&kbdev->pm.metrics.timer);
+		if (platform->dvfs_status && kbdev->pm.backend.metrics.timer_active) {
+			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock, flags);
+			kbdev->pm.backend.metrics.timer_active = false;
+			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock, flags);
+			hrtimer_cancel(&kbdev->pm.backend.metrics.timer);
 		}
 		gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_RESET);
 		gpu_dvfs_handler_control(kbdev, GPU_HANDLER_UPDATE_TIME_IN_STATE, platform->cur_clock);

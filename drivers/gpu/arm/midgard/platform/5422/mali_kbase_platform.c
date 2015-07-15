@@ -42,21 +42,21 @@ int gpu_get_debug_level(void)
 /**
  ** Exynos5 hardware specific initialization
  **/
-static mali_bool kbase_platform_exynos5_init(struct kbase_device *kbdev)
+int kbase_platform_exynos5_init(struct kbase_device *kbdev)
 {
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 	unsigned long flags;
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
 	struct exynos_context *platform;
+	int stat;
 
 	platform = kmalloc(sizeof(struct exynos_context), GFP_KERNEL);
-
-	if (NULL == platform)
-		return MALI_FALSE;
+	if (!platform)
+		return -ENOMEM;
 
 	memset(platform, 0, sizeof(struct exynos_context));
 
-	kbdev->platform_context = (void *) platform;
+	kbdev->platform_context = platform;
 
 	platform->cmu_pmu_status = 0;
 	platform->dvfs_wq = NULL;
@@ -68,7 +68,8 @@ static mali_bool kbase_platform_exynos5_init(struct kbase_device *kbdev)
 	spin_lock_init(&platform->gpu_dvfs_spinlock);
 
 	/* gpu control module init*/
-	if (gpu_control_module_init(kbdev))
+	stat = gpu_control_module_init(kbdev);
+	if (stat)
 		goto clock_init_fail;
 
 	/* dvfs gobernor init*/
@@ -81,15 +82,17 @@ static mali_bool kbase_platform_exynos5_init(struct kbase_device *kbdev)
 	/* dvfs handler init*/
 	gpu_dvfs_handler_init(kbdev);
 
-	if (!gpu_notifier_init(kbdev))
+	stat = gpu_notifier_init(kbdev);
+	if (stat)
 		goto notifier_init_fail;
 
 #ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
-	if (gpu_create_sysfs_file(kbdev->dev))
+	stat = gpu_create_sysfs_file(kbdev->dev);
+	if (stat)
 		goto sysfs_init_fail;
 #endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
-	return MALI_TRUE;
+	return 0;
 
 clock_init_fail:
 notifier_init_fail:
@@ -98,7 +101,7 @@ sysfs_init_fail:
 #endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 	kfree(platform);
 
-	return MALI_FALSE;
+	return stat;
 }
 
 /**
@@ -125,52 +128,22 @@ static void kbase_platform_exynos5_term(struct kbase_device *kbdev)
 #endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 }
 
-kbase_platform_funcs_conf platform_funcs = {
+struct kbase_platform_funcs_conf platform_funcs = {
 	.platform_init_func = &kbase_platform_exynos5_init,
 	.platform_term_func = &kbase_platform_exynos5_term,
 };
 
-extern kbase_pm_callback_conf pm_callbacks;
-extern int get_cpu_clock_speed(u32 *cpu_clock);
-
-static kbase_attribute config_attributes[] = {
-#ifdef CONFIG_MALI_MIDGARD_RT_PM
-	{
-		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_CALLBACKS,
-		(uintptr_t)&pm_callbacks
-	},
-#endif /* CONFIG_MALI_MIDGARD_RT_PM */
-	{
-		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_DVFS_FREQ,
-		100
-	}, /* 100ms */
-	{
-		KBASE_CONFIG_ATTR_PLATFORM_FUNCS,
-		(uintptr_t)&platform_funcs
-	},
-	{
-		KBASE_CONFIG_ATTR_JS_RESET_TIMEOUT_MS,
-		500 /* 500ms before cancelling stuck jobs */
-	},
-	{
-		KBASE_CONFIG_ATTR_CPU_SPEED_FUNC,
-		(uintptr_t)&get_cpu_clock_speed
-	},
-	{
-		KBASE_CONFIG_ATTR_END,
-		0
-	}
-};
-
-kbase_platform_config platform_config = {
-		.attributes                = config_attributes,
-};
-
-kbase_platform_config platform_config;
-kbase_platform_config e5422_platform_config;
-
-kbase_platform_config *kbase_get_platform_config(void) {
-                e5422_platform_config.attributes = config_attributes;
-                return &e5422_platform_config;
- 
+int kbase_platform_early_init(void)
+{
+	/* Nothing needed at this stage */
+	return 0;
 }
+
+struct kbase_platform_config e5422_platform_config;
+
+struct kbase_platform_config *kbase_get_platform_config(void) {
+	return &e5422_platform_config;
+}
+
+extern struct kbase_pm_callback_conf pm_callbacks;
+extern int get_cpu_clock_speed(u32 *cpu_clock);

@@ -147,10 +147,10 @@ static struct notifier_block gpu_pm_nb = {
 	.notifier_call = gpu_pm_notifier
 };
 
-static mali_error gpu_device_runtime_init(struct kbase_device *kbdev)
+static int gpu_device_runtime_init(struct kbase_device *kbdev)
 {
 	pm_suspend_ignore_children(kbdev->dev, true);
-	return MALI_ERROR_NONE;
+	return 0;
 }
 
 static void gpu_device_runtime_disable(struct kbase_device *kbdev)
@@ -181,7 +181,7 @@ static void pm_callback_runtime_off(struct kbase_device *kbdev)
 	gpu_control_state_set(kbdev, GPU_CONTROL_CLOCK_OFF, 0);
 }
 
-kbase_pm_callback_conf pm_callbacks = {
+struct kbase_pm_callback_conf pm_callbacks = {
 	.power_on_callback = gpu_power_on,
 	.power_off_callback = gpu_power_off,
 #ifdef CONFIG_PM_RUNTIME
@@ -200,6 +200,7 @@ kbase_pm_callback_conf pm_callbacks = {
 
 int gpu_notifier_init(struct kbase_device *kbdev)
 {
+	int stat;
 	struct exynos_context *platform = (struct exynos_context *)kbdev->platform_context;
 	if (!platform)
 		return -ENODEV;
@@ -213,13 +214,14 @@ int gpu_notifier_init(struct kbase_device *kbdev)
 #endif /* CONFIG_EXYNOS_THERMAL */
 
 #ifdef CONFIG_MALI_MIDGARD_RT_PM
-	if (register_pm_notifier(&gpu_pm_nb))
-		return MALI_FALSE;
+	stat = register_pm_notifier(&gpu_pm_nb);
+	if (stat)
+		return stat;
 #endif /* CONFIG_MALI_MIDGARD_RT_PM */
 
 	pm_runtime_enable(kbdev->dev);
 
-	return MALI_TRUE;
+	return 0;
 }
 
 void gpu_notifier_term(void)

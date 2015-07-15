@@ -153,6 +153,4 @@ struct mali_debug_utilisation_stats
 void gpu_set_debug_level(int level);
 int gpu_get_debug_level(void);
 
-int kbase_platform_early_init(struct platform_device *pdev);
-
 #endif /* _GPU_PLATFORM_H_ */

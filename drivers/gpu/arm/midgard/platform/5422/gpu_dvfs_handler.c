@@ -124,11 +124,11 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation,
 #ifdef CONFIG_CPU_THERMAL_IPA
 	if (platform->time_tick < GPU_DVFS_TIME_INTERVAL) {
 		platform->time_tick++;
-		platform->time_busy += kbdev->pm.metrics.time_busy;
-		platform->time_idle += kbdev->pm.metrics.time_idle;
+		platform->time_busy += kbdev->pm.backend.metrics.time_busy;
+		platform->time_idle += kbdev->pm.backend.metrics.time_idle;
 	} else {
-		platform->time_busy = kbdev->pm.metrics.time_busy;
-		platform->time_idle = kbdev->pm.metrics.time_idle;
+		platform->time_busy = kbdev->pm.backend.metrics.time_busy;
+		platform->time_idle = kbdev->pm.backend.metrics.time_idle;
 		platform->time_tick = 0;
 	}
 #endif /* CONFIG_CPU_THERMAL_IPA */
@@ -141,9 +141,9 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation,
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 #if defined(SLSI_INTEGRATION) && defined(CL_UTILIZATION_BOOST_BY_TIME_WEIGHT)
-	atomic_set(&kbdev->pm.metrics.time_compute_jobs, 0);
-	atomic_set(&kbdev->pm.metrics.time_vertex_jobs, 0);
-	atomic_set(&kbdev->pm.metrics.time_fragment_jobs, 0);
+	atomic_set(&kbdev->pm.backend.metrics.time_compute_jobs, 0);
+	atomic_set(&kbdev->pm.backend.metrics.time_vertex_jobs, 0);
+	atomic_set(&kbdev->pm.backend.metrics.time_fragment_jobs, 0);
 #endif
 
 	if (platform->dvfs_wq)
@@ -208,21 +208,21 @@ static int gpu_dvfs_on_off(struct kbase_device *kbdev, bool enable)
 		platform->dvfs_status = true;
 		gpu_control_state_set(kbdev, GPU_CONTROL_CHANGE_CLK_VOL, platform->cur_clock);
 		gpu_dvfs_handler_init(kbdev);
-		if (!kbdev->pm.metrics.timer_active) {
-			spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
-			kbdev->pm.metrics.timer_active = true;
-			spin_unlock_irqrestore(&kbdev->pm.metrics.lock, flags);
-			hrtimer_start(&kbdev->pm.metrics.timer, HR_TIMER_DELAY_MSEC(platform->polling_speed), HRTIMER_MODE_REL);
+		if (!kbdev->pm.backend.metrics.timer_active) {
+			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock, flags);
+			kbdev->pm.backend.metrics.timer_active = true;
+			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock, flags);
+			hrtimer_start(&kbdev->pm.backend.metrics.timer, HR_TIMER_DELAY_MSEC(platform->polling_speed), HRTIMER_MODE_REL);
 		}
 	} else if (!enable && platform->dvfs_status) {
 		platform->dvfs_status = false;
 		gpu_dvfs_handler_deinit(kbdev);
 		gpu_control_state_set(kbdev, GPU_CONTROL_CHANGE_CLK_VOL, MALI_DVFS_BL_CONFIG_FREQ);
-		if (kbdev->pm.metrics.timer_active) {
-			spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
-			kbdev->pm.metrics.timer_active = false;
-			spin_unlock_irqrestore(&kbdev->pm.metrics.lock, flags);
-			hrtimer_cancel(&kbdev->pm.metrics.timer);
+		if (kbdev->pm.backend.metrics.timer_active) {
+			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock, flags);
+			kbdev->pm.backend.metrics.timer_active = false;
+			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock, flags);
+			hrtimer_cancel(&kbdev->pm.backend.metrics.timer);
 		}
 	} else {
 		GPU_LOG(DVFS_WARNING, "impossible state to change dvfs status (current: %d, request: %d)\n",
