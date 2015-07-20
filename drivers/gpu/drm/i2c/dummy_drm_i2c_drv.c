@@ -108,26 +108,15 @@ static const u8 edid_1024x768[] = {
 	0x47, 0x41, 0x0a, 0x20, 0x20, 0x20, 0x00, 0x55
 };
 
-static int dummy_read_edid_block(void *data, u8 *buf, unsigned int blk, size_t length)
-{
-	memcpy(buf, edid_1024x768, min(sizeof(edid_1024x768),length));
-	return 0;
-}
-
 static int
 dummy_encoder_get_modes(struct dummy_priv *priv,
 			  struct drm_connector *connector)
 {
-	struct edid *edid;
+	struct edid *edid = (struct edid *)edid_1024x768;
 	int n;
-
-	edid = drm_do_get_edid(connector, dummy_read_edid_block, priv);
-	if (!edid)
-		return 0;
 
 	drm_mode_connector_update_edid_property(connector, edid);
 	n = drm_add_edid_modes(connector, edid);
-	kfree(edid);
 
 	return n;
 }
