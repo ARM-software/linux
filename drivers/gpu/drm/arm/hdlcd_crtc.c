@@ -162,13 +162,26 @@ static int hdlcd_crtc_colour_set(struct hdlcd_drm_private *hdlcd,
 	 * pixel is outside the visible frame area or when there is a
 	 * buffer underrun.
 	 */
-	hdlcd_write(hdlcd, HDLCD_REG_RED_SELECT, default_color |
-		format->red.offset | (format->red.length & 0xf) << 8);
-	hdlcd_write(hdlcd, HDLCD_REG_GREEN_SELECT, default_color |
-		format->green.offset | (format->green.length & 0xf) << 8);
-	hdlcd_write(hdlcd, HDLCD_REG_BLUE_SELECT, default_color |
-		format->blue.offset | (format->blue.length & 0xf) << 8);
-
+	if(!config_enabled(CONFIG_ARM)) {
+		hdlcd_write(hdlcd, HDLCD_REG_RED_SELECT, default_color |
+			format->red.offset | (format->red.length & 0xf) << 8);
+		hdlcd_write(hdlcd, HDLCD_REG_GREEN_SELECT, default_color |
+			format->green.offset | (format->green.length & 0xf) << 8);
+		hdlcd_write(hdlcd, HDLCD_REG_BLUE_SELECT, default_color |
+			format->blue.offset | (format->blue.length & 0xf) << 8);
+	} else {
+		/*
+		 * This is a hack to swap read and blue when building for
+		 * 32-bit ARM, because Versatile Express motherboard seems
+		 * to be wired up differently.
+		 */
+		hdlcd_write(hdlcd, HDLCD_REG_BLUE_SELECT, default_color |
+			format->red.offset | (format->red.length & 0xf) << 8);
+		hdlcd_write(hdlcd, HDLCD_REG_GREEN_SELECT, default_color |
+			format->green.offset | (format->green.length & 0xf) << 8);
+		hdlcd_write(hdlcd, HDLCD_REG_RED_SELECT, default_color |
+			format->blue.offset | (format->blue.length & 0xf) << 8);
+	}
 	return 0;
 }
 
