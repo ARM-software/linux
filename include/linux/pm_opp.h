@@ -28,6 +28,8 @@ enum dev_pm_opp_event {
 
 unsigned long dev_pm_opp_get_voltage(struct dev_pm_opp *opp);
 
+unsigned long dev_pm_opp_get_voltage_always(struct dev_pm_opp *opp);
+
 unsigned long dev_pm_opp_get_freq(struct dev_pm_opp *opp);
 
 bool dev_pm_opp_is_turbo(struct dev_pm_opp *opp);
@@ -67,6 +69,11 @@ void dev_pm_opp_put_regulator(struct device *dev);
 int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq);
 #else
 static inline unsigned long dev_pm_opp_get_voltage(struct dev_pm_opp *opp)
+{
+	return 0;
+}
+
+static inline unsigned long dev_pm_opp_get_voltage_always(struct dev_pm_opp *opp)
 {
 	return 0;
 }
