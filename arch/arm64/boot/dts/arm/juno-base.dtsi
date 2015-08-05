@@ -114,8 +114,8 @@
 			scpi_clk: scpi_clocks@3 {
 				compatible = "arm,scpi-variable-clocks";
 				#clock-cells = <1>;
-				clock-indices = <3>, <4>;
-				clock-output-names = "pxlclk0", "pxlclk1";
+				clock-indices = <3>, <4>, <5>;
+				clock-output-names = "pxlclk0", "pxlclk1", "i2sclk";
 			};
 		};
 	};
