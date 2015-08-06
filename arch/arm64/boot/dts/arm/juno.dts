@@ -213,6 +213,7 @@
 				};
 				map2 {
 				     trip = <&target>;
+				     contribution = <1024>;
 				     cooling-device = <&gpu 0 4>;
 				};
 
