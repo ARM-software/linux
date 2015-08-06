@@ -146,8 +146,9 @@
 		      <0x00000008 0x80000000 0x1 0x80000000>;
 	};
 
-	gpu@0x2d000000 {
+	gpu: gpu@0x2d000000 {
 		compatible = "arm,malit6xx", "arm,mali";
+		#cooling-cells = <2>; /* min followed by max */
 		reg = <0x0 0x2d000000 0x0 0x4000>;
 		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
 		interrupt-names = "JOB", "MMU", "GPU";
