@@ -185,6 +185,15 @@ static int hdlcd_crtc_colour_set(struct hdlcd_drm_private *hdlcd,
 	return 0;
 }
 
+static int hdlcd_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
+	struct drm_framebuffer *old_fb)
+{
+	struct hdlcd_drm_private *hdlcd = crtc_to_hdlcd_priv(crtc);
+	hdlcd_set_scanout(hdlcd);
+	return 0;
+}
+
+
 static int hdlcd_crtc_mode_set(struct drm_crtc *crtc,
 			struct drm_display_mode *mode,
 			struct drm_display_mode *adjusted_mode,
@@ -254,6 +263,7 @@ static const struct drm_crtc_helper_funcs hdlcd_crtc_helper_funcs = {
 	.prepare	= hdlcd_crtc_prepare,
 	.commit		= hdlcd_crtc_commit,
 	.mode_set	= hdlcd_crtc_mode_set,
+	.mode_set_base	= hdlcd_crtc_mode_set_base,
 	.load_lut	= hdlcd_crtc_load_lut,
 };
 
