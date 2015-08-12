@@ -12,6 +12,7 @@ struct hdlcd_drm_private {
 	struct drm_framebuffer		*fb;
 	struct drm_pending_vblank_event	*event;
 	struct drm_crtc			crtc;
+	struct completion		frame_completion;
 #ifdef CONFIG_DEBUG_FS
 	atomic_t buffer_underrun_count;
 	atomic_t bus_error_count;
@@ -61,8 +62,6 @@ static inline int hdlcd_create_virtual_connector(struct drm_device *dev)
 	return -ENXIO;
 }
 #endif
-
-void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd);
 
 /* common function used by all connectors */
 extern struct drm_encoder *hdlcd_connector_best_encoder(struct drm_connector *con);
