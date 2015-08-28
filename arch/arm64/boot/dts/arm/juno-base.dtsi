@@ -205,6 +205,8 @@
 		reg = <0x0 0x2d000000 0x0 0x4000>;
 		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
 		interrupt-names = "JOB", "MMU", "GPU";
+		clocks = <&scpi_dvfs 2>;
+		clock-names = "clk_mali";
 	};
 
 	smb {
