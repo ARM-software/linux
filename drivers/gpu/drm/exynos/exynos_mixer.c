@@ -1010,6 +1010,10 @@ static void mixer_wait_for_vblank(struct exynos_drm_manager *mgr)
 	}
 	mutex_unlock(&mixer_ctx->mixer_mutex);
 
+#if IS_ENABLED(CONFIG_DRM_EXYNOS_EXPERIMENTAL_VSYNC)
+	drm_vblank_get(mgr->crtc->dev, mixer_ctx->pipe);
+#endif
+
 	atomic_set(&mixer_ctx->wait_vsync_event, 1);
 
 	/*
@@ -1020,6 +1024,10 @@ static void mixer_wait_for_vblank(struct exynos_drm_manager *mgr)
 				!atomic_read(&mixer_ctx->wait_vsync_event),
 				HZ/20))
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
+
+#if IS_ENABLED(CONFIG_DRM_EXYNOS_EXPERIMENTAL_VSYNC)
+	drm_vblank_put(mgr->crtc->dev, mixer_ctx->pipe);
+#endif
 }
 
 static void mixer_window_suspend(struct exynos_drm_manager *mgr)
@@ -1156,7 +1164,11 @@ static struct exynos_drm_manager_ops mixer_manager_ops = {
 	.win_disable		= mixer_win_disable,
 };
 
+#if IS_ENABLED(CONFIG_DRM_EXYNOS_EXPERIMENTAL_VSYNC)
+struct exynos_drm_manager mixer_manager = {
+#else
 static struct exynos_drm_manager mixer_manager = {
+#endif
 	.type			= EXYNOS_DISPLAY_TYPE_HDMI,
 	.ops			= &mixer_manager_ops,
 };

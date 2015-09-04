@@ -80,6 +80,13 @@ config DRM_EXYNOS_IPP
 	help
 	  Choose this option if you want to use IPP feature for DRM.
 
+config DRM_EXYNOS_EXPERIMENTAL_VSYNC
+	bool "Exynos DRM experimental Vsync"
+	depends on DRM_EXYNOS
+	help
+	  Choose this option if you want to use EXPERIMENTAL vsync
+	  implementation for Exynos DRM driver.
+
 config DRM_EXYNOS_FIMC
 	bool "Exynos DRM FIMC"
 	depends on DRM_EXYNOS_IPP && MFD_SYSCON

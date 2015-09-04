@@ -66,6 +66,18 @@ static int exynos_drm_fb_mmap(struct fb_info *info,
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_DRM_EXYNOS_EXPERIMENTAL_VSYNC)
+static int exynos_drm_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
+{
+	extern struct exynos_drm_manager mixer_manager;
+	int ret = drm_fb_helper_pan_display(var, info);
+
+	mixer_manager.ops->wait_for_vblank(&mixer_manager);
+
+	return ret;
+}
+#endif
+
 static struct dma_buf *exynos_fb_get_dma_buf(struct fb_info *info)
 {
 	struct dma_buf *buf = NULL;
@@ -93,7 +105,11 @@ static struct fb_ops exynos_drm_fb_ops = {
 	.fb_check_var		= drm_fb_helper_check_var,
 	.fb_set_par		= drm_fb_helper_set_par,
 	.fb_blank		= drm_fb_helper_blank,
+#if IS_ENABLED(CONFIG_DRM_EXYNOS_EXPERIMENTAL_VSYNC)
+	.fb_pan_display		= exynos_drm_pan_display,
+#else
 	.fb_pan_display		= drm_fb_helper_pan_display,
+#endif
 	.fb_setcmap		= drm_fb_helper_setcmap,
 	.fb_dmabuf_export	= exynos_fb_get_dma_buf,
 };
