@@ -13,7 +13,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
-#include <drm/drm_fb_cma_helper.h>
+#include "hdlcd_fb_helper.h"
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_of.h>
 #include <drm/drm_plane_helper.h>
@@ -46,7 +46,7 @@ void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd, bool wait)
 	dma_addr_t scanout_start;
 
 	drm_fb_get_bpp_depth(fb->pixel_format, &depth, &bpp);
-	gem = drm_fb_cma_get_gem_obj(fb, 0);
+	gem = hdlcd_fb_get_gem_obj(fb, 0);
 
 	scanout_start = gem->paddr + fb->offsets[0] +
 		(hdlcd->crtc.y * fb->pitches[0]) + (hdlcd->crtc.x * bpp/8);

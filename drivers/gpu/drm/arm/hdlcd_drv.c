@@ -19,7 +19,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
-#include <drm/drm_fb_cma_helper.h>
+#include "hdlcd_fb_helper.h"
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_of.h>
 
@@ -61,7 +61,7 @@ static int hdlcd_unload(struct drm_device *dev)
 
 	drm_kms_helper_poll_fini(dev);
 	if (hdlcd->fbdev)
-		drm_fbdev_cma_fini(hdlcd->fbdev);
+		hdlcd_drm_fbdev_fini(hdlcd->fbdev);
 
 	drm_vblank_cleanup(dev);
 	drm_mode_config_cleanup(dev);
@@ -184,7 +184,7 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 		preferred_bpp = 32; /* If Mali present, assume 32bpp */
 	}
 
-	hdlcd->fbdev = drm_fbdev_cma_init(dev, preferred_bpp,
+	hdlcd->fbdev = hdlcd_drm_fbdev_init(dev, preferred_bpp,
 					dev->mode_config.num_crtc,
 					dev->mode_config.num_connector);
 
@@ -207,12 +207,12 @@ static void hdlcd_fb_output_poll_changed(struct drm_device *dev)
 {
 	struct hdlcd_drm_private *hdlcd = dev->dev_private;
 	if (hdlcd->fbdev) {
-		drm_fbdev_cma_hotplug_event(hdlcd->fbdev);
+		hdlcd_drm_fbdev_hotplug_event(hdlcd->fbdev);
 	}
 }
 
 static const struct drm_mode_config_funcs hdlcd_mode_config_funcs = {
-	.fb_create = drm_fb_cma_create,
+	.fb_create = hdlcd_fb_create,
 	.output_poll_changed = hdlcd_fb_output_poll_changed,
 };
 
@@ -233,7 +233,7 @@ static void hdlcd_preclose(struct drm_device *dev, struct drm_file *file)
 static void hdlcd_lastclose(struct drm_device *dev)
 {
 	struct hdlcd_drm_private *hdlcd = dev->dev_private;
-	drm_fbdev_cma_restore_mode(hdlcd->fbdev);
+	hdlcd_drm_fbdev_restore_mode(hdlcd->fbdev);
 }
 
 static irqreturn_t hdlcd_irq(int irq, void *arg)

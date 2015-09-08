@@ -8,7 +8,7 @@
 struct hdlcd_drm_private {
 	void __iomem			*mmio;
 	struct clk			*clk;
-	struct drm_fbdev_cma		*fbdev;
+	struct hdlcd_drm_fbdev		*fbdev;
 	struct drm_framebuffer		*fb;
 	struct drm_pending_vblank_event	*event;
 	struct drm_crtc			crtc;
