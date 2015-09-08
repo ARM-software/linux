@@ -26,6 +26,111 @@
 #include "hdlcd_fb_helper.h"
 #include <linux/module.h>
 
+
+#define MAX_FRAMES 2
+
+/******************************************************************************
+ * Code copied from drivers/gpu/drm/drm_fb_helper.c as of Linux 3.18
+ ******************************************************************************/
+
+/**
+ * Copy of drm_fb_helper_check_var modified to allow MAX_FRAMES * height
+ */
+int hdlcd_fb_helper_check_var(struct fb_var_screeninfo *var,
+			    struct fb_info *info)
+{
+	struct drm_fb_helper *fb_helper = info->par;
+	struct drm_framebuffer *fb = fb_helper->fb;
+	int depth;
+
+	if (var->pixclock != 0 || in_dbg_master())
+		return -EINVAL;
+
+	/* Need to resize the fb object !!! */
+	if (var->bits_per_pixel > fb->bits_per_pixel ||
+	    var->xres > fb->width || var->yres > fb->height ||
+	    var->xres_virtual > fb->width || var->yres_virtual > fb->height * MAX_FRAMES) {
+		DRM_DEBUG("fb userspace requested width/height/bpp is greater than current fb "
+			  "request %dx%d-%d (virtual %dx%d) > %dx%d-%d\n",
+			  var->xres, var->yres, var->bits_per_pixel,
+			  var->xres_virtual, var->yres_virtual,
+			  fb->width, fb->height, fb->bits_per_pixel);
+		return -EINVAL;
+	}
+
+	switch (var->bits_per_pixel) {
+	case 16:
+		depth = (var->green.length == 6) ? 16 : 15;
+		break;
+	case 32:
+		depth = (var->transp.length > 0) ? 32 : 24;
+		break;
+	default:
+		depth = var->bits_per_pixel;
+		break;
+	}
+
+	switch (depth) {
+	case 8:
+		var->red.offset = 0;
+		var->green.offset = 0;
+		var->blue.offset = 0;
+		var->red.length = 8;
+		var->green.length = 8;
+		var->blue.length = 8;
+		var->transp.length = 0;
+		var->transp.offset = 0;
+		break;
+	case 15:
+		var->red.offset = 10;
+		var->green.offset = 5;
+		var->blue.offset = 0;
+		var->red.length = 5;
+		var->green.length = 5;
+		var->blue.length = 5;
+		var->transp.length = 1;
+		var->transp.offset = 15;
+		break;
+	case 16:
+		var->red.offset = 11;
+		var->green.offset = 5;
+		var->blue.offset = 0;
+		var->red.length = 5;
+		var->green.length = 6;
+		var->blue.length = 5;
+		var->transp.length = 0;
+		var->transp.offset = 0;
+		break;
+	case 24:
+		var->red.offset = 16;
+		var->green.offset = 8;
+		var->blue.offset = 0;
+		var->red.length = 8;
+		var->green.length = 8;
+		var->blue.length = 8;
+		var->transp.length = 0;
+		var->transp.offset = 0;
+		break;
+	case 32:
+		var->red.offset = 16;
+		var->green.offset = 8;
+		var->blue.offset = 0;
+		var->red.length = 8;
+		var->green.length = 8;
+		var->blue.length = 8;
+		var->transp.length = 8;
+		var->transp.offset = 24;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/******************************************************************************
+ * Code copied from drivers/gpu/drm/drm_fb_cma_helper.c as of Linux 3.18
+ ******************************************************************************/
+
 struct hdlcd_fb {
 	struct drm_framebuffer		fb;
 	struct drm_gem_cma_object	*obj[4];
@@ -238,7 +343,7 @@ static struct fb_ops hdlcd_drm_fbdev_ops = {
 	.fb_fillrect	= sys_fillrect,
 	.fb_copyarea	= sys_copyarea,
 	.fb_imageblit	= sys_imageblit,
-	.fb_check_var	= drm_fb_helper_check_var,
+	.fb_check_var	= hdlcd_fb_helper_check_var,
 	.fb_set_par	= drm_fb_helper_set_par,
 	.fb_blank	= drm_fb_helper_blank,
 	.fb_pan_display	= drm_fb_helper_pan_display,
@@ -271,7 +376,7 @@ static int hdlcd_drm_fbdev_create(struct drm_fb_helper *helper,
 	mode_cmd.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
 		sizes->surface_depth);
 
-	size = mode_cmd.pitches[0] * mode_cmd.height;
+	size = mode_cmd.pitches[0] * mode_cmd.height * MAX_FRAMES;
 	obj = drm_gem_cma_create(dev, size);
 	if (IS_ERR(obj))
 		return -ENOMEM;
@@ -315,6 +420,7 @@ static int hdlcd_drm_fbdev_create(struct drm_fb_helper *helper,
 	fbi->fix.smem_start = (unsigned long)(obj->paddr + offset);
 	fbi->screen_size = size;
 	fbi->fix.smem_len = size;
+	fbi->var.yres_virtual = fbi->var.yres * MAX_FRAMES;
 
 	return 0;
 
