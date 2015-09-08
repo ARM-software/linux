@@ -24,10 +24,13 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_gem_cma_helper.h>
 #include "hdlcd_fb_helper.h"
+#include <linux/dma-buf.h>
 #include <linux/module.h>
-
+#include "hdlcd_drv.h"
 
 #define MAX_FRAMES 2
+
+static int hdlcd_fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg);
 
 /******************************************************************************
  * Code copied from drivers/gpu/drm/drm_fb_helper.c as of Linux 3.18
@@ -348,6 +351,8 @@ static struct fb_ops hdlcd_drm_fbdev_ops = {
 	.fb_blank	= drm_fb_helper_blank,
 	.fb_pan_display	= drm_fb_helper_pan_display,
 	.fb_setcmap	= drm_fb_helper_setcmap,
+	.fb_ioctl	= hdlcd_fb_ioctl,
+	.fb_compat_ioctl= hdlcd_fb_ioctl,
 };
 
 static int hdlcd_drm_fbdev_create(struct drm_fb_helper *helper,
@@ -555,3 +560,77 @@ void hdlcd_drm_fbdev_hotplug_event(struct hdlcd_drm_fbdev *hdlcd_fbdev)
 		drm_fb_helper_hotplug_event(&hdlcd_fbdev->fb_helper);
 }
 EXPORT_SYMBOL_GPL(hdlcd_drm_fbdev_hotplug_event);
+
+
+/******************************************************************************
+ * IOCTL Interface
+ ******************************************************************************/
+
+/*
+ * Used for sharing buffers with Mali userspace
+ */
+struct fb_dmabuf_export {
+	uint32_t fd;
+	uint32_t flags;
+};
+
+#define FBIOGET_DMABUF       _IOR('F', 0x21, struct fb_dmabuf_export)
+
+static int hdlcd_get_dmabuf_ioctl(struct fb_info *info, unsigned int cmd,
+				  unsigned long arg)
+{
+	void __user *argp = (void __user *)arg;
+	struct fb_dmabuf_export ebuf;
+	struct drm_fb_helper *helper = info->par;
+	struct hdlcd_drm_private *hdlcd = helper->dev->dev_private;
+	struct drm_gem_cma_object *obj = hdlcd->fbdev->fb->obj[0];
+	struct dma_buf *dma_buf;
+	uint32_t fd;
+
+	if (copy_from_user(&ebuf, argp, sizeof(ebuf)))
+		return -EFAULT;
+
+	/*
+	 * We need a reference on the gem object. This will be released by
+	 * drm_gem_dmabuf_release when the file descriptor is closed.
+	 */
+	drm_gem_object_reference(&obj->base);
+
+	dma_buf = drm_gem_prime_export(helper->dev, &obj->base, ebuf.flags | O_RDWR);
+	if (!dma_buf) {
+		dev_info(info->dev, "Failed to export DMA buffer\n");
+		goto err_export;
+	}
+
+	fd = dma_buf_fd(dma_buf, O_CLOEXEC);
+	if (fd < 0) {
+		dev_info(info->dev, "Failed to get file descriptor for DMA buffer\n");
+		goto err_export_fd;
+	}
+	ebuf.fd = fd;
+
+	if (copy_to_user(argp, &ebuf, sizeof(ebuf)))
+		goto err_export_fd;
+
+	return 0;
+
+err_export_fd:
+	dma_buf_put(dma_buf);
+err_export:
+	drm_gem_object_unreference(&obj->base);
+	return -EFAULT;
+}
+
+static int hdlcd_fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
+{
+	switch (cmd) {
+	case FBIOGET_DMABUF:
+		return hdlcd_get_dmabuf_ioctl(info, cmd, arg);
+	case FBIO_WAITFORVSYNC:
+		return 0; /* Nothing to do as we wait when page flipping anyway */
+	default:
+		printk(KERN_INFO "HDLCD FB does not handle ioctl 0x%x\n", cmd);
+	}
+
+	return -EFAULT;
+}
