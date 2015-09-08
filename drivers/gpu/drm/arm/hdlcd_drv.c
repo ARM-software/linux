@@ -117,6 +117,12 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 		(version & HDLCD_VERSION_MAJOR_MASK) >> 8,
 		version & HDLCD_VERSION_MINOR_MASK);
 
+	/* Make sure hardware is in a safe reset state */
+	hdlcd_write(hdlcd, HDLCD_REG_COMMAND, 0);
+	hdlcd_write(hdlcd, HDLCD_REG_INT_MASK, 0);
+	hdlcd_write(hdlcd, HDLCD_REG_INT_CLEAR,~0);
+	hdlcd_write(hdlcd, HDLCD_REG_INT_RAWSTAT, 0);
+
 	/* Get the optional coherent memory resource */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	if (res) {
