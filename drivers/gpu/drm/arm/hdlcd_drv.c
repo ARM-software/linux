@@ -389,23 +389,6 @@ static const struct file_operations fops = {
 	.mmap		= drm_gem_cma_mmap,
 };
 
-struct sg_table *hdlcd_gem_cma_prime_get_sg_table(struct drm_gem_object *obj)
-{
-	struct sg_table *sgt;
-
-	sgt = drm_gem_cma_prime_get_sg_table(obj);
-	if (sgt) {
-		struct drm_gem_cma_object *cma_obj;
-
-		cma_obj = to_drm_gem_cma_obj(obj);
-		sg_dma_address(sgt->sgl) = cma_obj->paddr;
-		sg_set_page(sgt->sgl, pfn_to_page(PFN_DOWN(cma_obj->paddr)),
-				PAGE_ALIGN(obj->size), 0);
-	}
-
-	return sgt;
-}
-
 static struct drm_driver hdlcd_driver = {
 	.driver_features	= DRIVER_HAVE_IRQ | DRIVER_GEM |
 					DRIVER_MODESET | DRIVER_PRIME,
@@ -430,7 +413,7 @@ static struct drm_driver hdlcd_driver = {
 	.prime_fd_to_handle	= drm_gem_prime_fd_to_handle,
 	.gem_prime_export	= drm_gem_prime_export,
 	.gem_prime_import	= drm_gem_prime_import,
-	.gem_prime_get_sg_table	= hdlcd_gem_cma_prime_get_sg_table,
+	.gem_prime_get_sg_table	= drm_gem_cma_prime_get_sg_table,
 	.gem_prime_vmap		= drm_gem_cma_prime_vmap,
 	.gem_prime_vunmap	= drm_gem_cma_prime_vunmap,
 	.gem_prime_mmap		= drm_gem_cma_prime_mmap,
