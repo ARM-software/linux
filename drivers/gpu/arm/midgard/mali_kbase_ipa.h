@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -15,12 +15,18 @@
 
 
 
-#ifndef _KBASE_CPU_VEXPRESS_H_
-#define _KBASE_CPU_VEXPRESS_H_
+struct kbase_ipa_context;
 
 /**
- * Versatile Express implementation of @ref kbase_cpuprops_clock_speed_function.
+ * kbase_ipa_init - initialize the kbase ipa core
+ * @kbdev:      kbase device
+ *
+ * Return:      pointer to the IPA context or NULL on failure
  */
-int kbase_get_vexpress_cpu_clock_speed(u32 *cpu_clock);
+struct kbase_ipa_context *kbase_ipa_init(struct kbase_device *kbdev);
 
-#endif				/* _KBASE_CPU_VEXPRESS_H_ */
+/**
+ * kbase_ipa_term - terminate the kbase ipa core
+ * @ctx:        pointer to the IPA context
+ */
+void kbase_ipa_term(struct kbase_ipa_context *ctx);
