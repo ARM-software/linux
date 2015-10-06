@@ -109,7 +109,7 @@
 				compatible = "arm,scpi-dvfs-clocks";
 				#clock-cells = <1>;
 				clock-indices = <0>, <1>, <2>;
-				clock-output-names = "atlclk", "aplclk","gpuclk";
+				clock-output-names = "atlclk", "aplclk","clk_mali";
 			};
 			scpi_clk: scpi_clocks@3 {
 				compatible = "arm,scpi-variable-clocks";
