@@ -80,8 +80,6 @@
 #define FW_REV_MINOR(x)		(((x) & FW_REV_MINOR_MASK) >> FW_REV_MINOR_BITS)
 #define FW_REV_PATCH(x)		((x) & FW_REV_PATCH_MASK)
 
-#define MAX_RX_TIMEOUT		(msecs_to_jiffies(20))
-
 enum scpi_error_codes {
 	SCPI_SUCCESS = 0, /* Success */
 	SCPI_ERR_PARAM = 1, /* Invalid parameter(s) */
@@ -320,6 +318,18 @@ static void scpi_tx_prepare(struct mbox_client *c, void *msg)
 	mem->command = cpu_to_le32(t->cmd);
 }
 
+static void scpi_tx_done(struct mbox_client *c, void *msg, int result)
+{
+	struct scpi_xfer *t = msg;
+
+	if (!t->rx_buf)
+		complete(&t->done);
+	/*
+	 * Messages with rx_buf are expecting a reply and will be on the
+	 * rx_pending list, so leave them alone.
+	 */
+}
+
 static struct scpi_xfer *get_scpi_xfer(struct scpi_chan *ch)
 {
 	struct scpi_xfer *t;
@@ -366,17 +376,24 @@ static int scpi_send_message(u8 cmd, void *tx_buf, unsigned int tx_len,
 	init_completion(&msg->done);
 
 	ret = mbox_send_message(scpi_chan->chan, msg);
-	if (ret < 0 || !rx_buf)
-		goto out;
+	if (ret >= 0) {
+		/*
+		 * Wait for message to be processed. If we end up having to wait
+		 * for a very long time then there is a serious bug, probably in
+		 * the firmware.
+		 *
+		 * IMPORTANT: We must not try and continue after the timeout
+		 * because this driver and the mailbox framework still has data
+		 * structures referring to the failed request and further
+		 * serious bugs will result.
+		 */
+		if (!wait_for_completion_timeout(&msg->done, msecs_to_jiffies(10000)))
+			BUG();
 
-	if (!wait_for_completion_timeout(&msg->done, MAX_RX_TIMEOUT))
-		ret = -ETIMEDOUT;
-	else
 		/* first status word */
-		ret = le32_to_cpu(msg->status);
-out:
-	if (ret < 0 && rx_buf) /* remove entry from the list if timed-out */
-		scpi_process_cmd(scpi_chan, msg->cmd);
+		if (rx_buf)
+			ret = le32_to_cpu(msg->status);
+	}
 
 	put_scpi_xfer(msg, scpi_chan);
 	/* SCPI error codes > 0, translate them to Linux scale*/
@@ -698,8 +715,7 @@ static int scpi_probe(struct platform_device *pdev)
 		cl->dev = dev;
 		cl->rx_callback = scpi_handle_remote_msg;
 		cl->tx_prepare = scpi_tx_prepare;
-		cl->tx_block = true;
-		cl->tx_tout = 50;
+		cl->tx_done = scpi_tx_done;
 		cl->knows_txdone = false; /* controller can't ack */
 
 		INIT_LIST_HEAD(&pchan->rx_pending);
