@@ -9,6 +9,7 @@
 /dts-v1/;
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/thermal/thermal.h>
 
 / {
 	model = "ARM Juno development board (r2)";
@@ -35,7 +36,8 @@
 		#size-cells = <0>;
 
 		cpu-map {
-			cluster0 {
+			cluster0: cluster0 {
+				#cooling-cells = <2>; /* min followed by max */
 				core0 {
 					cpu = <&A72_0>;
 				};
@@ -44,7 +46,8 @@
 				};
 			};
 
-			cluster1 {
+			cluster1: cluster1 {
+				#cooling-cells = <2>; /* min followed by max */
 				core0 {
 					cpu = <&A53_0>;
 				};
@@ -169,6 +172,53 @@
 				     <&A53_1>,
 				     <&A53_2>,
 				     <&A53_3>;
+	};
+
+	scpi_sensor0: scpi-sensor@0 {
+		compatible = "arm,scpi-thermal";
+		#thermal-sensor-cells = <1>;
+	};
+
+	thermal-zones {
+		soc_thermal {
+			polling-delay = <1000>;
+			polling-delay-passive = <100>;
+			sustainable-power = <2500>;
+
+			thermal-sensors = <&scpi_sensor0 3>;
+
+			trips {
+				threshold: trip-point@0 {
+					temperature = <55000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+				target: trip-point@1 {
+					temperature = <65000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+			};
+
+			cooling-maps {
+			        map0 {
+				     trip = <&target>;
+				     contribution = <1024>;
+				     cooling-device = <&cluster0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+				map1 {
+				     trip = <&target>;
+				     contribution = <2048>;
+				     cooling-device = <&cluster1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+				map2 {
+				     trip = <&target>;
+				     contribution = <1024>;
+				     cooling-device = <&gpu 0 4>;
+				};
+
+			};
+		};
 	};
 
 	#include "juno-base.dtsi"
