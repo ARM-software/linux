@@ -19,6 +19,7 @@
 #include <drm/rockchip_drm.h>
 
 #include <linux/dma-attrs.h>
+#include <linux/dma-buf.h>
 
 #include "rockchip_drm_drv.h"
 #include "rockchip_drm_gem.h"
@@ -111,6 +112,36 @@ int rockchip_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	return ret;
 }
 
+struct drm_gem_object *
+rockchip_gem_prime_import_sg_table(struct drm_device *drm,
+				   struct dma_buf_attachment *attach,
+				   struct sg_table *sgt)
+{
+	struct rockchip_gem_object *rk_obj;
+	struct drm_gem_object *obj;
+
+	/*
+	 * Todo: only support continuous buffer now, plan to found a method
+	 * to import non continuous with iommu.
+	 */
+	if (sgt->nents != 1)
+		return ERR_PTR(-EINVAL);
+
+	rk_obj = kzalloc(sizeof(*rk_obj), GFP_KERNEL);
+	if (!rk_obj)
+		return ERR_PTR(-ENOMEM);
+
+	obj = &rk_obj->base;
+
+	drm_gem_private_object_init(drm, obj, attach->dmabuf->size);
+
+	rk_obj->dma_addr = sg_dma_address(sgt->sgl);
+	rk_obj->sgt = sgt;
+	obj->size = sg_dma_len(sgt->sgl);
+
+	return obj;
+}
+
 struct rockchip_gem_object *
 	rockchip_gem_create_object(struct drm_device *drm, unsigned int size,
 				   bool alloc_kmap)
@@ -148,11 +179,14 @@ void rockchip_gem_free_object(struct drm_gem_object *obj)
 {
 	struct rockchip_gem_object *rk_obj;
 
-	drm_gem_free_mmap_offset(obj);
-
 	rk_obj = to_rockchip_obj(obj);
 
-	rockchip_gem_free_buf(rk_obj);
+	if (obj->import_attach) {
+		drm_prime_gem_destroy(obj, rk_obj->sgt);
+	} else {
+		drm_gem_free_mmap_offset(obj);
+		rockchip_gem_free_buf(rk_obj);
+	}
 
 	kfree(rk_obj);
 }
