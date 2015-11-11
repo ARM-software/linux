@@ -31,7 +31,10 @@ static int dma_init_coherent_memory(phys_addr_t phys_addr, dma_addr_t device_add
 	if (!size)
 		goto out;
 
-	mem_base = ioremap(phys_addr, size);
+	if (flags & DMA_MEMORY_MAP)
+		mem_base = ioremap_wc(phys_addr, size);
+	else
+		mem_base = ioremap(phys_addr, size);
 	if (!mem_base)
 		goto out;
 
