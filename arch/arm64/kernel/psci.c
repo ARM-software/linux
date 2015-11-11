@@ -22,6 +22,7 @@
 #include <linux/pm.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <uapi/linux/psci.h>
 
 #include <asm/compiler.h>
@@ -273,6 +274,26 @@ static void psci_sys_poweroff(void)
 	invoke_psci_fn(PSCI_0_2_FN_SYSTEM_OFF, 0, 0, 0);
 }
 
+/* FIXME: This is not the actual implementation of system suspend.
+ * It needs to handled by adding SYSTEM_SUSPEND(0x8400 000E)
+ * functionID, and issuing smc call with this functionID
+ */
+static int psci_system_suspend_enter(suspend_state_t state)
+{
+
+	return pm_suspend(state);
+}
+
+static const struct platform_suspend_ops psci_suspend_ops = {
+	.valid	= suspend_valid_only_mem,
+	.enter	= psci_system_suspend_enter,
+};
+
+static void __init psci_init_system_suspend(void)
+{
+	suspend_set_ops(&psci_suspend_ops);
+}
+
 /*
  * PSCI Function IDs for v0.2+ are well defined so use
  * standard values.
@@ -330,6 +351,7 @@ static int __init psci_0_2_init(struct device_node *np)
 
 	pm_power_off = psci_sys_poweroff;
 
+	psci_init_system_suspend();
 out_put_node:
 	of_node_put(np);
 	return err;
