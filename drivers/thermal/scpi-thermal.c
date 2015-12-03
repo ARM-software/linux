@@ -179,6 +179,29 @@ static struct thermal_zone_params gpu_dummy_tzp = {
 	.governor_name = "user_space",
 };
 
+int sensor_get_id(const char* name)
+{
+	u16 sensors, sensor_id;
+	int ret;
+
+	ret = scpi_ops->sensor_get_capability(&sensors);
+	if (ret)
+		return ret;
+
+	for (sensor_id = 0; sensor_id < sensors; sensor_id++) {
+
+		struct scpi_sensor_info info;
+		ret = scpi_ops->sensor_get_info(sensor_id, &info);
+		if (ret)
+			return ret;
+
+		if (strcmp(name, info.name) == 0)
+			return sensor_id;
+	}
+
+	return -ENODEV;
+}
+
 static int scpi_thermal_probe(struct platform_device *pdev)
 {
 	struct scpi_sensor *sensor_data = &scpi_temp_sensor;
@@ -231,7 +254,7 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 		j++;
 	}
 
-	if ((sensor = scpi_ops->sensor_get_id(SOC_SENSOR)) < 0) {
+	if ((sensor = sensor_get_id(SOC_SENSOR)) < 0) {
 		dev_warn(&pdev->dev, "%s not found. ret=%d\n", SOC_SENSOR, sensor);
 		goto error;
 	}
