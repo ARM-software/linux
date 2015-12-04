@@ -24,6 +24,10 @@ config ARM_SCPI_PROTOCOL
 	  This protocol library provides interface for all the client drivers
 	  making use of the features offered by the SCP.
 
+config ARM_SCPI_PROTOCOL_TEST
+	tristate "Test code for SCPI Message Protocol"
+	default ARM_SCPI_PROTOCOL
+
 config EDD
 	tristate "BIOS Enhanced Disk Drive calls determine boot disk"
 	depends on X86
