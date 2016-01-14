@@ -44,7 +44,7 @@ scpi_show_sensor(struct device *dev, struct device_attribute *attr, char *buf)
 	struct scpi_sensors *scpi_sensors = dev_get_drvdata(dev);
 	struct scpi_ops *scpi_ops = scpi_sensors->scpi_ops;
 	struct sensor_data *sensor;
-	u32 value;
+	u64 value;
 	int ret;
 
 	sensor = container_of(attr, struct sensor_data, dev_attr_input);
@@ -53,7 +53,7 @@ scpi_show_sensor(struct device *dev, struct device_attribute *attr, char *buf)
 	if (ret)
 		return ret;
 
-	return sprintf(buf, "%u\n", value);
+	return sprintf(buf, "%llu\n", value);
 }
 
 static ssize_t
