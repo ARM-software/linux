@@ -243,6 +243,8 @@ config DMA_SHARED_BUFFER
 	  APIs extension; the file's descriptor can then be passed on to other
 	  driver.
 
+source "drivers/base/dma_buf_test_exporter/Kconfig"
+
 config FENCE_TRACE
 	bool "Enable verbose FENCE_TRACE messages"
 	depends on DMA_SHARED_BUFFER
