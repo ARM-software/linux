@@ -148,8 +148,8 @@
 					assigned-clock-parents = <&v2m_refclk1mhz>, <&v2m_refclk1mhz>, <&v2m_refclk1mhz>, <&v2m_refclk1mhz>;
 				};
 
-				apbregs@10000 {
-					compatible = "syscon", "simple-mfd";
+				v2m_sysreg: apbregs@010000 {
+					compatible = "syscon", "simple-mfd", "arm,vexpress-sysreg";
 					reg = <0x010000 0x1000>;
 
 					led0 {
