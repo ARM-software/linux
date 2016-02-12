@@ -1,0 +1,86 @@
+/*
+ * Mali-DP FPGA bitfile framework - APB slaves
+ *
+ * All addresses are relative to the VExpress A9 memory map, with
+ * address 0 in this file corresponding to physical address 0xf0000000
+ * on VExpress A9x4
+ */
+
+	dpu_aclk: dpu_aclk {
+		/* 77.1 MHz derived from 24 MHz reference clock */
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <77100000>;
+		clock-output-names = "fpga:dpu_aclk";
+	};
+
+	dpu_mclk: dpu_mclk {
+		/* 67.5 MHz derived from 24 MHz reference clock */
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <67500000>;
+		clock-output-names = "fpga:dpu_mclk";
+	};
+
+	dcc_lt {
+		compatible = "arm,vexpress,config-bus";
+		arm,vexpress,site = <2>;
+		arm,vexpress,config-bridge = <&v2m_sysreg>;
+
+		fpgaosc0: osc@0 {
+			compatible = "arm,vexpress-osc";
+			arm,vexpress-sysreg,func = <1 0>;
+			freq-range = <2000000 40000000>;
+			#clock-cells = <0>;
+			clock-output-names = "db2:osc0";
+		};
+
+		fpgaosc2: osc@2 {
+			compatible = "arm,vexpress-osc";
+			arm,vexpress-sysreg,func = <1 2>;
+			freq-range = <2000000 172400000>;
+			#clock-cells = <0>;
+			clock-output-names = "db2:osc2";
+		};
+	};
+
+	i2c_fpga: i2c@90000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "arm,versatile-i2c";
+		reg = <0x90000 0x1000>;
+		status = "disabled";
+	};
+
+	dp_reset: malidp_reset@c000058 {
+		compatible = "arm,malidp-reset";
+		reg = <0xc000058 0x4>;
+		mask = <0x7>;
+	};
+
+	gpu_fpga: mali@c010000 {
+		reg = <0xc010000 0x4000>;
+		compatible = "arm,malit6xx", "arm,mali";
+		interrupts = <0>, <0>, <0>;
+		interrupt-names = "JOB", "MMU", "GPU";
+		clocks = <&fpgaosc0>;
+		clock-names = "clk_mali";
+		status = "disabled";
+	};
+
+	smmu_fpga0: smmu@c070000 {
+		compatible = "arm,mmu-400";
+		reg = <0xc070000 0x10000>;
+		#global-interrupts = <1>;
+		interrupts = <3>, <3>;
+		status = "disabled";
+	};
+
+	smmu_fpga1: smmu@c080000 {
+		compatible = "arm,mmu-400";
+		reg = <0xc080000 0x10000>;
+		#global-interrupts = <1>;
+		interrupts = <3>, <3>;
+		status = "disabled";
+		#iommu-cells = <0x1>;
+	};
