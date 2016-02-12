@@ -1,0 +1,80 @@
+/*
+ * ARM Juno development platform with single Virtex 7 logic tile
+ * and HDMI daughterboard.
+ * Configured for a bitfile containing a Mali GPU, dual-display DP550 and
+ * corresponding MMU-500 shared between the DPs
+ */
+
+#include "juno.dts"
+
+/ {
+	aliases {
+		malidp0 = &dp0;
+		malidp1 = &dp1;
+	};
+};
+
+&site2 {
+	juno_wrapper {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		/*
+		 * The mapping on Juno is rather complicated.
+		 * The lowest slaves: 0-0x0009ffff are mapped to 0x6f100000 (physical)
+		 * The "mid" slaves:  0x00200000-0x004fffff are mapped to 0x6f200000 (physical)
+		 * The "high" slaves: 0x0c000000-0x0c09ffff are mapped to 0x6f000000 (physical)
+		 */
+		ranges = <0          0x0f100000 0x0a0000>,
+			 <0x00200000 0x0f200000 0x300000>,
+			 <0x0c000000 0x0f000000 0x0a0000>;
+
+		/include/ "v2f-1xv7-malidp-framework.dtsi"
+		/include/ "v2f-1xv7-malidp-dp550.dtsi"
+	};
+};
+
+&i2c_fpga {
+	status = "okay";
+	/include/ "v2c-hdmi.dtsi"
+};
+
+&gpu_fpga {
+	status = "okay";
+};
+
+/* Configure DP0 with daughterboard transmitter and MMU-400 */
+&dp0 {
+	status = "okay";
+};
+
+&dp0_out {
+	remote-endpoint = <&db_dvi0_in>;
+};
+
+&db_dvi0_in {
+	remote-endpoint = <&dp0_out>;
+};
+
+&smmu_fpga0 {
+	mmu-masters = <&dp0 0x8 0x9 0xa 0xb 0xc>;
+	status = "okay";
+};
+
+/* Configure DP1 with daughterboard transmitter and MMU-400 */
+&dp1 {
+	status = "okay";
+};
+
+&dp1_out {
+	remote-endpoint = <&db_dvi1_in>;
+};
+
+&db_dvi1_in {
+	remote-endpoint = <&dp1_out>;
+};
+
+&smmu_fpga1 {
+	mmu-masters = <&dp1 0x8 0x9 0xa 0xb 0xc>;
+	status = "okay";
+};
