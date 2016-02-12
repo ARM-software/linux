@@ -1,0 +1,37 @@
+	dp0: display@60000 {
+		compatible = "arm,mali-dp500";
+		reg = <0x60000 0x1000>;
+		memory-region = <&display_reserved>;
+		interrupts = <3>, <3>;
+		interrupt-names = "DE", "SE";
+		iommus = <&smmu_fpga0 0x0>;
+		clocks = <&fpgaosc2>, <&dpu_mclk>, <&dpu_aclk>, <&dpu_aclk>;
+		clock-names = "pxlclk", "mclk", "aclk", "pclk";
+		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
+		#stream-id-cells = <1>;
+		status = "disabled";
+		port {
+			dp0_out: endpoint {
+
+			};
+		};
+	};
+
+	dp1: display@61000 {
+		compatible = "arm,mali-dp500";
+		reg = <0x61000 0x1000>;
+		memory-region = <&display_reserved>;
+		interrupts = <3>, <3>;
+		interrupt-names = "DE", "SE";
+		iommus = <&smmu_fpga0 0x0>;
+		clocks = <&fpgaosc2>, <&dpu_mclk>, <&dpu_aclk>, <&dpu_aclk>;
+		clock-names = "pxlclk", "mclk", "aclk", "pclk";
+		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
+		#stream-id-cells = <1>;
+		status = "disabled";
+		port {
+			dp1_out: endpoint {
+
+			};
+		};
+	};
