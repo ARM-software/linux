@@ -1,0 +1,51 @@
+	dp0: display@200000 {
+		compatible = "arm,mali-dp650";
+		reg = <0x200000 0x20000>;
+		interrupts = <3>, <3>;
+		interrupt-names = "DE", "SE";
+		clocks = <&fpgaosc2>, <&dpu_mclk>, <&dpu_aclk>, <&dpu_aclk>;
+		clock-names = "pxlclk", "mclk", "aclk", "pclk";
+		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
+		#stream-id-cells = <5>;
+		status = "disabled";
+		port {
+			dp0_out: endpoint {
+
+			};
+		};
+	};
+
+	dp1: display@220000 {
+		compatible = "arm,mali-dp650";
+		reg = <0x220000 0x20000>;
+		interrupts = <3>, <3>;
+		interrupt-names = "DE", "SE";
+		clocks = <&fpgaosc2>, <&dpu_mclk>, <&dpu_aclk>, <&dpu_aclk>;
+		clock-names = "pxlclk", "mclk", "aclk", "pclk";
+		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
+		#stream-id-cells = <5>;
+		status = "disabled";
+		port {
+			dp1_out: endpoint {
+
+			};
+		};
+	};
+
+	smmu_dp0: smmu@300000 {
+		compatible = "arm,mmu-500";
+		reg = <0x300000 0x10000>;
+		#global-interrupts = <1>;
+		interrupts = <3>, <3>, <3>;
+		mmu-masters = <&dp0 0x000 0x400 0x800 0xc00 0x1000>;
+		status = "disabled";
+	};
+
+	smmu_dp1: smmu@400000 {
+		compatible = "arm,mmu-500";
+		reg = <0x400000 0x10000>;
+		#global-interrupts = <1>;
+		interrupts = <3>, <3>, <3>;
+		mmu-masters = <&dp1 0x000 0x400 0x800 0xc00 0x1000>;
+		status = "disabled";
+	};
