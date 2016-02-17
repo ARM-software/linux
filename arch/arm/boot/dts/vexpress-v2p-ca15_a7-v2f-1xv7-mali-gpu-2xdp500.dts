@@ -1,0 +1,91 @@
+/*
+ * ARM Versatile Express development platform with an A15x2 A7x3 CoreTile
+ * and a single Virtex 7 LogicTile.
+ * Configured for a bitfile containing a Mali GPU, dual-display DP500 and
+ * corresponding MMU-400s
+ */
+
+#include "vexpress-v2p-ca15_a7.dts"
+
+/ {
+	aliases {
+		malidp0 = &dp0;
+		malidp1 = &dp1;
+	};
+
+	video_transmitters {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		tx0: video_tx@0 {
+			compatible = "generic,video_transmitter";
+			reg = <0>;
+			port {
+				tx0_in: endpoint {
+					remote-endpoint = <&dp0_out>;
+				};
+			};
+		};
+
+		tx1: video_tx@1 {
+			compatible = "generic,video_transmitter";
+			reg = <1>;
+			port {
+				tx1_in: endpoint {
+					remote-endpoint = <&dp1_out>;
+				};
+			};
+		};
+	};
+};
+
+&site2 {
+
+	tc2_wrapper {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		/*
+		 * On VE TC2, all of the APB slaves are shifted up to
+		 * 0x70000000.
+		 * So we map 0 to (0x40000000 + 0x30000000)
+		 */
+		ranges = <0 0x30000000 0x10000000>;
+
+		/include/ "v2f-1xv7-malidp-framework.dtsi"
+		/include/ "v2f-1xv7-malidp-dp500.dtsi"
+	};
+};
+
+&gpu_fpga {
+	status = "okay";
+};
+
+/* Enable DP500s */
+&dp0 {
+	status = "okay";
+};
+
+&dp0_out {
+	remote-endpoint = <&tx0_in>;
+};
+
+&dp1 {
+	status = "okay";
+};
+
+&dp1_out {
+	remote-endpoint = <&tx1_in>;
+};
+
+/* Enable both DP500 MMUs */
+&smmu_fpga0 {
+	status = "okay";
+	mmu-masters = <&dp0 0>;
+};
+
+&smmu_fpga1 {
+	status = "okay";
+	mmu-masters = <&dp1 0>;
+};

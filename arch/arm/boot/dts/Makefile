@@ -478,7 +478,8 @@ dtb-$(CONFIG_ARCH_VERSATILE) += versatile-ab.dtb \
 dtb-$(CONFIG_ARCH_VEXPRESS) += vexpress-v2p-ca5s.dtb \
 	vexpress-v2p-ca9.dtb \
 	vexpress-v2p-ca15-tc1.dtb \
-	vexpress-v2p-ca15_a7.dtb
+	vexpress-v2p-ca15_a7.dtb \
+	vexpress-v2p-ca15_a7-v2f-1xv7-mali-gpu-2xdp500.dtb
 dtb-$(CONFIG_ARCH_VIRT) += xenvm-4.2.dtb
 dtb-$(CONFIG_ARCH_VT8500) += vt8500-bv07.dtb \
 	wm8505-ref.dtb \
