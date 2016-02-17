@@ -1,0 +1,64 @@
+/*
+ * ARM Versatile Express development platform with an A15x2 A7x3 CoreTile
+ * and a single Virtex 7 LogicTile.
+ * Configured for a bitfile containing a Mali GPU, single-display DP650 and
+ * corresponding MMU-500
+ */
+
+#include "vexpress-v2p-ca15_a7.dts"
+
+/ {
+	aliases {
+		malidp0 = &dp0;
+	};
+
+	video_transmitters {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		tx0: video_tx@0 {
+			compatible = "generic,video_transmitter";
+			reg = <0>;
+			port {
+				tx0_in: endpoint {
+					remote-endpoint = <&dp0_out>;
+				};
+			};
+		};
+	};
+};
+
+&site2 {
+	tc2_wrapper {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		/*
+		 * On VE TC2, all of the APB slaves are shifted up to
+		 * 0x70000000.
+		 * So we map 0 to (0x40000000 + 0x30000000)
+		 */
+		ranges = <0 0x30000000 0x10000000>;
+
+		/include/ "v2f-1xv7-malidp-framework.dtsi"
+		/include/ "v2f-1xv7-malidp-dp650.dtsi"
+	};
+};
+
+&gpu_fpga {
+	status = "okay";
+};
+
+/* Configure DP0 with test-transmitter */
+&dp0 {
+	status = "okay";
+};
+
+&dp0_out {
+	remote-endpoint = <&tx0_in>;
+};
+
+&smmu_dp0 {
+	status = "okay";
+};
