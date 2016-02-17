@@ -14,6 +14,8 @@
 		reg = <0x0 0x6e000000 0x0 0x4000>;
 		interrupts = <0 168 4>, <0 168 4>, <0 168 4>;
 		interrupt-names = "JOB", "MMU", "GPU";
+		snoop_enable_smc = <0x8200ff04>;
+		snoop_disable_smc = <0x8200ff05>;
 		system-coherency = <1>;
 	};
 };
