@@ -20,6 +20,7 @@
 
 	aliases {
 		serial0 = &soc_uart0;
+		malidp0 = &dp0;
 	};
 
 	chosen {
@@ -225,4 +226,12 @@
 			};
 		};
 	};
+};
+
+&tile_i2c {
+	status = "okay";
+};
+
+&dp0 {
+	status = "okay";
 };
