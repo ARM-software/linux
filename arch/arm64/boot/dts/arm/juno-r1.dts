@@ -305,3 +305,11 @@
 &cpu_debug5 {
 	cpu = <&A53_3>;
 };
+
+&tile_i2c {
+	status = "okay";
+};
+
+&dp0 {
+	status = "okay";
+};

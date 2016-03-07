@@ -789,4 +789,109 @@
 		interrupt-map-mask = <0 0>;
 		interrupt-map = <0 0 &gic 0 0 0 168 IRQ_TYPE_LEVEL_HIGH>;
 	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		display_reserved: framebuffer@60000000 {
+			compatible = "shared-dma-pool";
+			reg = <0 0x60000000 0 0x08000000>;
+		};
+	};
+
+	tile_i2c: i2c@6f190000 {
+		compatible = "arm,versatile-i2c";
+		reg = <0 0x6f190000 0 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+
+		dvi2: hdmi-transmitter@70 {
+			compatible = "nxp,tda998x";
+			reg = <0x70>;
+			video-ports = <0x234501>;
+			port {
+				tda998x_2_input: endpoint@0 {
+					remote-endpoint = <&dp0_output>;
+				};
+
+				tda998x_2_output: endpoint@1 {
+					remote-endpoint = <&hdmi2_connector_output>;
+				};
+			};
+		};
+
+		dvi3: hdmi-transmitter@71 {
+			compatible = "nxp,tda998x";
+			reg = <0x71>;
+			video-ports = <0x234501>;
+			port {
+				tda998x_3_input: endpoint@0 {
+					remote-endpoint = <&dp1_output>;
+				};
+
+				tda998x_3_output: endpoint@1 {
+					remote-endpoint = <&hdmi3_connector_output>;
+				};
+			};
+		};
+	};
+
+	dp0: malidp@6f200000 {
+		compatible = "arm,mali-dp650";
+		reg = <0 0x6f200000 0 0x20000>;
+		memory-region = <&display_reserved>;
+		interrupts = <0 168 IRQ_TYPE_LEVEL_HIGH>,
+			     <0 168 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "DE", "SE";
+		clocks = <&oscclk2>, <&fpgaosc0>, <&fpgaosc1>, <&fpgaosc1>;
+		clock-names = "pxlclk", "mclk", "aclk", "pclk";
+		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
+		status = "disabled";
+		port {
+			dp0_output: endpoint {
+				remote-endpoint = <&tda998x_2_input>;
+			};
+		};
+	};
+
+	dp1: malidp@6f220000 {
+		compatible = "arm,mali-dp650";
+		reg = <0 0x6f220000 0 0x20000>;
+		memory-region = <&display_reserved>;
+		interrupts = <0 168 IRQ_TYPE_LEVEL_HIGH>,
+			     <0 168 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "DE", "SE";
+		clocks = <&oscclk2>, <&fpgaosc0>, <&fpgaosc1>, <&fpgaosc1>;
+		clock-names = "pxlclk", "mclk", "aclk", "pclk";
+		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
+		status = "disabled";
+		port {
+			dp1_output: endpoint {
+				remote-endpoint = <&tda998x_3_input>;
+			};
+		};
+	};
+
+	hdmi2: connector@2 {
+		compatible = "hdmi-connector";
+		type = "a";
+		port {
+			hdmi2_connector_output: endpoint {
+				remote-endpoint = <&tda998x_2_output>;
+			};
+		};
+	};
+
+	hdmi3: connector@3 {
+		compatible = "hdmi-connector";
+		type = "a";
+		port {
+			hdmi3_connector_output: endpoint {
+				remote-endpoint = <&tda998x_3_output>;
+			};
+		};
+	};
 };
