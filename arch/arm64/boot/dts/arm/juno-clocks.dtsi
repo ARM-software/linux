@@ -42,4 +42,20 @@
 		clock-frequency = <400000000>;
 		clock-output-names = "faxi_clk";
 	};
+
+	fpgaosc0: fpgaosc@0 {
+		/* Internal FPGA clock @ 77 MHz */
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <77000000>;
+		clock-output-names = "fpga:osc0";
+	};
+
+	fpgaosc1: fpgaosc@1 {
+		/* Internal FPGA clock @ 67 MHz */
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <67000000>;
+		clock-output-names = "fpga:osc1";
+	};
 };

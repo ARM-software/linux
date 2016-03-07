@@ -148,71 +148,14 @@
 					assigned-clock-parents = <&v2m_refclk1mhz>, <&v2m_refclk1mhz>, <&v2m_refclk1mhz>, <&v2m_refclk1mhz>;
 				};
 
-				apbregs@10000 {
-					compatible = "syscon", "simple-mfd";
+				v2m_sysreg: apbreg@10000 {
+					compatible = "arm,vexpress-sysreg", "simple-mfd";
 					reg = <0x010000 0x1000>;
 
-					led0 {
-						compatible = "register-bit-led";
-						offset = <0x08>;
-						mask = <0x01>;
-						label = "vexpress:0";
-						linux,default-trigger = "heartbeat";
-						default-state = "on";
-					};
-					led1 {
-						compatible = "register-bit-led";
-						offset = <0x08>;
-						mask = <0x02>;
-						label = "vexpress:1";
-						linux,default-trigger = "mmc0";
-						default-state = "off";
-					};
-					led2 {
-						compatible = "register-bit-led";
-						offset = <0x08>;
-						mask = <0x04>;
-						label = "vexpress:2";
-						linux,default-trigger = "cpu0";
-						default-state = "off";
-					};
-					led3 {
-						compatible = "register-bit-led";
-						offset = <0x08>;
-						mask = <0x08>;
-						label = "vexpress:3";
-						linux,default-trigger = "cpu1";
-						default-state = "off";
-					};
-					led4 {
-						compatible = "register-bit-led";
-						offset = <0x08>;
-						mask = <0x10>;
-						label = "vexpress:4";
-						linux,default-trigger = "cpu2";
-						default-state = "off";
-					};
-					led5 {
-						compatible = "register-bit-led";
-						offset = <0x08>;
-						mask = <0x20>;
-						label = "vexpress:5";
-						linux,default-trigger = "cpu3";
-						default-state = "off";
-					};
-					led6 {
-						compatible = "register-bit-led";
-						offset = <0x08>;
-						mask = <0x40>;
-						label = "vexpress:6";
-						default-state = "off";
-					};
-					led7 {
-						compatible = "register-bit-led";
-						offset = <0x08>;
-						mask = <0x80>;
-						label = "vexpress:7";
-						default-state = "off";
+					v2m_led_gpios: sys_led@08 {
+						compatible = "arm,vexpress-sysreg,sys_led";
+						gpio-controller;
+						#gpio-cells = <2>;
 					};
 				};
 
@@ -287,5 +230,72 @@
 					interrupt-controller;
 					#interrupt-cells = <2>;
 				};
+			};
+
+			leds {
+				compatible = "gpio-leds";
+
+				led@08.0 {
+					label = "vexpress:0";
+					gpios = <&v2m_led_gpios 0 0>;
+					linux,default-trigger = "heartbeat";
+					default-state = "on";
+				};
+				led@08.1 {
+					label = "vexpress:1";
+					gpios = <&v2m_led_gpios 1 0>;
+					linux,default-trigger = "mmc0";
+					default-state = "off";
+				};
+				led@08.2 {
+					label = "vexpress:2";
+					gpios = <&v2m_led_gpios 2 0>;
+					linux,default-trigger = "cpu0";
+					default-state = "off";
+				};
+				led@08.3 {
+					label = "vexpress:3";
+					gpios = <&v2m_led_gpios 3 0>;
+					linux,default-trigger = "cpu1";
+					default-state = "off";
+				};
+				led@08.4 {
+					label = "vexpress:4";
+					gpios = <&v2m_led_gpios 4 0>;
+					linux,default-trigger = "cpu2";
+					default-state = "off";
+				};
+				led@08.5 {
+					label = "vexpress:5";
+					gpios = <&v2m_led_gpios 5 0>;
+					linux,default-trigger = "cpu3";
+					default-state = "off";
+				};
+				led@08.6 {
+					label = "vexpress:6";
+					gpios = <&v2m_led_gpios 6 0>;
+					linux,default-trigger = "cpu4";
+					default-state = "off";
+				};
+				led@08.7 {
+					label = "vexpress:7";
+					gpios = <&v2m_led_gpios 7 0>;
+					linux,default-trigger = "cpu5";
+					default-state = "off";
+				};
+			};
+		};
+
+		dcc {
+			compatible = "arm,vexpress,config-bus";
+			arm,vexpress,site = <2>;
+			arm,vexpress,config-bridge = <&v2m_sysreg>;
+
+			oscclk2: osc@0 {
+				compatible = "arm,vexpress-osc";
+				arm,vexpress-sysreg,func = <1 2>;
+				freq-range = <2000000 230000000>;
+				#clock-cells = <0>;
+				clock-output-names = "oscclk2";
 			};
 		};
