@@ -1143,6 +1143,8 @@ extern struct drm_property *drm_mode_create_rotation_property(struct drm_device 
 extern unsigned int drm_rotation_simplify(unsigned int rotation,
 					  unsigned int supported_rotations);
 
+extern int drm_create_virtual_connector(struct drm_device *dev);
+
 /* Helpers */
 
 static inline struct drm_plane *drm_plane_find(struct drm_device *dev,
