@@ -217,6 +217,14 @@ config DRM_VGEM
 	  as used by Mesa's software renderer for enhanced performance.
 	  If M is selected the module will be called vgem.
 
+config DRM_VIRT_ENCODER
+	tristate "Virtual OF-based encoder"
+	depends on DRM && OF
+	help
+	  Choose this option to get a virtual encoder and its associated
+	  connector that will use the device tree to read the display
+	  timings information. If M is selected the module will be called
+	  drm_vencoder.
 
 source "drivers/gpu/drm/exynos/Kconfig"
 
