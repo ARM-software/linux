@@ -1,0 +1,19 @@
+config DRM_ARM
+	bool
+	help
+	  Choose this option to select drivers for ARM's devices
+
+config DRM_MALI_DISPLAY
+	tristate "ARM Mali Display Processor"
+	depends on DRM && OF && (ARM || ARM64)
+	depends on COMMON_CLK
+	select DRM_ARM
+	select DRM_KMS_HELPER
+	select DRM_KMS_CMA_HELPER
+	select DRM_GEM_CMA_HELPER
+	select VIDEOMODE_HELPERS
+	help
+	  Choose this option if you want to compile the ARM Mali Display
+	  Processor driver. It supports all the variants of the hardware.
+
+	  If compiled as a module it will be called malidp.
