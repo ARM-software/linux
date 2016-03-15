@@ -1,0 +1,74 @@
+DRM Virtual Encoder
+
+The DRM Virtual Encoder is a component-based basic encoder that fetches
+the display timings information from the device tree and "discovers" a
+DRM output with the given data. It is helpful in a simulated environment
+where there is no actual hardware to be probed and the configuration of
+the display happens outside the kernel world.
+
+Required properties:
+  - compatible: should be "drm,virtual-encoder"
+
+Required sub-nodes:
+  - display-timings: node describing the virtual output timings information,
+    as specified in panel/display-timing.txt file.
+  - port: the input port connection as modelled using the OF graph bindings
+    specified in Documentation/devicetree/bindings/graph.txt
+
+
+Example:
+
+/ {
+	...
+
+	vencoder {
+		compatible = "drm,virtual-encoder";
+		display-timings {
+			native-mode = <&timing1>;
+			timing0: timing@0 {
+				/* 640x480 framebuffer */
+				clock-frequency = <23750>;
+				hactive = <640>;
+				vactive = <480>;
+				hfront-porch = <48>;
+				hback-porch = <16>;
+				hsync-len = <96>;
+				vfront-porch = <33>;
+				vback-porch = <9>;
+				vsync-len = <3>;
+			};
+			timing1: timing@1 {
+				/* 1280x720 framebuffer */
+				clock-frequency = <74440000>;
+				hactive = <1280>;
+				vactive = <720>;
+				hfront-porch = <56>;
+				hback-porch = <192>;
+				hsync-len = <136>;
+				vfront-porch = <1>;
+				vback-porch = <22>;
+				vsync-len = <3>;
+			};
+		};
+
+		port {
+			vencoder_in: endpoint {
+				remote-endpoint = <&driver_out>;
+			};
+		};
+	};
+
+	drm_driver: driver@f00bad {
+		...
+
+		port {
+			driver_out: endpoint {
+				remote-endpoint = <&vencoder_in>;
+			};
+		};
+
+		...
+	};
+
+	...
+};
