@@ -221,7 +221,7 @@
 
 			virtio-block@0130000 {
 				compatible = "virtio,mmio";
-				reg = <0x130000 0x200>;
+				reg = <0x130000 0x1000>;
 				interrupts = <42>;
 			};
 		};
@@ -235,14 +235,14 @@
 		};
 
 		mcc {
-			compatible = "arm,vexpress,config-bus";
+			compatible = "arm,vexpress,config-bus", "simple-bus";
 			arm,vexpress,config-bridge = <&v2m_sysreg>;
 
 			v2m_oscclk1: oscclk1 {
 				/* CLCD clock */
 				compatible = "arm,vexpress-osc";
 				arm,vexpress-sysreg,func = <1 1>;
-				freq-range = <23750000 63500000>;
+				freq-range = <23750000 230000000>;
 				#clock-cells = <0>;
 				clock-output-names = "v2m:oscclk1";
 			};
