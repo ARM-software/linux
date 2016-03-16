@@ -117,9 +117,9 @@ static bool check_name(const char *name)
 	return true;
 }
 
-static u32 get_sensor(u16 id)
+static u64 get_sensor(u16 id)
 {
-	u32 val;
+	u64 val;
 	int ret;
 
 	ret = scpi->sensor_get_value(id, &val);
@@ -167,7 +167,7 @@ static void init_sensors(void)
 		if (fail_on(strlen(name) >= sizeof(info.name) || !check_name(name)))
 			pr_err("FAILED bad name\n");
 
-		pr_info("sensor[%d] value is %u\n", id, get_sensor(id));
+		pr_info("sensor[%d] value is %llu\n", id, get_sensor(id));
 		if (strstr(name, "PMIC"))
 			sensor_pmic = id;
 	}
