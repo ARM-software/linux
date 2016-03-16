@@ -120,7 +120,7 @@ static int get_static_power(cpumask_t *cpumask, int interval,
 static int get_temp_value(void *data, long *temp)
 {
 	struct scpi_sensor *sensor = (struct scpi_sensor *)data;
-	u32 val;
+	u64 val;
 	int ret;
 	unsigned long est_temp;
 
