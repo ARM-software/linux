@@ -9,6 +9,12 @@
 #include "juno-r1.dtsi"
 
 / {
+	gpu_secure_switch: secure-mode-switcher {
+		compatible = "arm,secure-mode-switcher";
+		arm,smc,secure_enable = <0xff06>;
+		arm,smc,secure_disable = <0xff07>;
+	};
+
 	gpu: gpu@0x2d000000 {
 		compatible = "arm,malit6xx", "arm,mali";
 		#cooling-cells = <2>; /* min followed by max */
@@ -18,6 +24,7 @@
 		clocks = <&scpi_dvfs 2>;
 		clock-names = "clk_mali";
 		system-coherency = <0>;
+		secure-mode-switcher = <&gpu_secure_switch>;
 		power_model {
 			compatible = "arm,mali-simple-power-model";
 			voltage = <800>;
