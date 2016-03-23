@@ -205,7 +205,7 @@
 		clock-names = "apb_pclk";
 	};
 
-	clcd@1c1f0000 {
+	clcd: clcd@1c1f0000 {
 		compatible = "arm,pl111", "arm,primecell";
 		reg = <0x0 0x1c1f0000 0x0 0x1000>;
 		interrupt-names = "combined";
@@ -258,6 +258,53 @@
 			interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
 			reg = <0x0 0x2a830000 0x0 0x1000>;
 		};
+	};
+
+	fake_hdlcd_clk: fake-hdlcd-clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <63500000>;
+		clock-output-names = "pxlclk";
+	};
+
+
+	hdlcd: hdlcd@7ff60000 {
+		compatible = "arm,hdlcd";
+		reg = <0 0x7ff60000 0 0x1000>;
+		interrupts = <GIC_SPI 85 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&fake_hdlcd_clk>;
+		clock-names = "pxlclk";
+
+		port {
+			hdlcd_out: endpoint {
+				remote-endpoint = <&bp_hdlcd_display>;
+			};
+		};
+	};
+
+	vencoder {
+		compatible = "drm,virtual-encoder";
+
+		port {
+			bp_hdlcd_display: endpoint {
+				remote-endpoint = <&hdlcd_out>;
+			};
+		};
+
+		display-timings {
+			panel-timing {
+				clock-frequency = <63500127>;
+				hactive = <1024>;
+				hback-porch = <152>;
+				hfront-porch = <48>;
+				hsync-len = <104>;
+				vactive = <768>;
+				vback-porch = <23>;
+				vfront-porch = <3>;
+				vsync-len = <4>;
+			};
+		};
+
 	};
 
 	memory@80000000 {
