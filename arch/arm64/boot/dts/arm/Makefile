@@ -9,7 +9,12 @@ dtb-$(CONFIG_ARCH_VEXPRESS) += \
 	juno-r1-midgard-acelite.dtb \
 	juno-r1-bifrost.dtb \
 	juno-r1-bifrost-acelite.dtb \
-	juno-r1-bifrost-ace.dtb
+	juno-r1-bifrost-ace.dtb \
+	juno-r2-midgard.dtb \
+	juno-r2-midgard-acelite.dtb \
+	juno-r2-bifrost.dtb \
+	juno-r2-bifrost-ace.dtb \
+	juno-r2-bifrost-acelite.dtb
 
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
