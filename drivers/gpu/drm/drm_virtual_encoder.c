@@ -54,7 +54,7 @@ drm_virtcon_detect(struct drm_connector *connector, bool force)
 }
 
 static const struct drm_connector_funcs drm_virtcon_funcs = {
-	.dpms = drm_atomic_helper_connector_dpms,
+	.dpms = drm_helper_connector_dpms,
 	.reset = drm_atomic_helper_connector_reset,
 	.detect	= drm_virtcon_detect,
 	.fill_modes = drm_helper_probe_single_connector_modes,
