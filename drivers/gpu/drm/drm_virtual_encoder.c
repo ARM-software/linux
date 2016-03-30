@@ -101,20 +101,10 @@ struct drm_encoder *drm_virtcon_best_encoder(struct drm_connector *connector)
 	return &priv->encoder;
 }
 
-struct drm_encoder *
-drm_virtcon_atomic_best_encoder(struct drm_connector *connector,
-				 struct drm_connector_state *connector_state)
-{
-	struct drm_virt_priv *priv = connector_to_drm_virt_priv(connector);
-
-	return &priv->encoder;
-}
-
 static const struct drm_connector_helper_funcs drm_virtcon_helper_funcs = {
 	.get_modes = drm_virtcon_get_modes,
 	.mode_valid = drm_virtcon_mode_valid,
 	.best_encoder = drm_virtcon_best_encoder,
-	.atomic_best_encoder = drm_virtcon_atomic_best_encoder,
 };
 
 static void drm_vencoder_destroy(struct drm_encoder *encoder)
@@ -211,7 +201,7 @@ static int drm_vencoder_bind(struct device *dev, struct device *master,
 	encoder->possible_clones = 0;
 
 	ret = drm_encoder_init(drm, encoder, &drm_vencoder_funcs,
-			       DRM_MODE_ENCODER_VIRTUAL, "virtual-encoder");
+			       DRM_MODE_ENCODER_VIRTUAL);
 	if (ret)
 		goto encoder_init_err;
 
