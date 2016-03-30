@@ -173,17 +173,7 @@ static int drm_vencoder_bind(struct device *dev, struct device *master,
 	encoder = &con->encoder;
 
 	if (dev->of_node) {
-		struct drm_bridge *bridge;
 		crtcs = drm_of_find_possible_crtcs(drm, dev->of_node);
-		bridge = of_drm_find_bridge(dev->of_node);
-		if (bridge) {
-			ret = drm_bridge_attach(drm, bridge);
-			if (ret) {
-				DRM_ERROR("Failed to initialize bridge\n");
-				return ret;
-			}
-			encoder->bridge = bridge;
-		}
 		con->timings = of_get_display_timings(dev->of_node);
 		if (!con->timings) {
 			dev_err(dev, "failed to get display panel timings\n");
