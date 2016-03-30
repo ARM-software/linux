@@ -19,7 +19,6 @@
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
-#include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_of.h>
 #include <linux/component.h>
@@ -55,12 +54,9 @@ drm_virtcon_detect(struct drm_connector *connector, bool force)
 
 static const struct drm_connector_funcs drm_virtcon_funcs = {
 	.dpms = drm_helper_connector_dpms,
-	.reset = drm_atomic_helper_connector_reset,
 	.detect	= drm_virtcon_detect,
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.destroy = drm_virtcon_destroy,
-	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 };
 
 static int drm_virtcon_get_modes(struct drm_connector *connector)
