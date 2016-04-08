@@ -254,6 +254,19 @@
 		      <0x00000008 0x80000000 0x1 0x80000000>;
 	};
 
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		gpu_reserved: secure_heap@880000000 {
+			#address-cells = <2>;
+			#size-cells = <2>;
+			compatible = "ion,secure_heap";
+			reg = <0x8 0x80000000 0x0 0x10000000>;
+		};
+	};
+
 	soc_i2s: i2s@7ff90000 {
 		compatible = "snps,designware-i2s";
 		reg = <0x0 0x7ff90000 0x0 0x1000>;

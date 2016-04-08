@@ -22,6 +22,8 @@
 #include <linux/memblock.h>
 #include <linux/sizes.h>
 #include <linux/io.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include "ion.h"
 #include "ion_priv.h"
 
@@ -71,8 +73,6 @@ static struct ion_platform_heap dummy_heaps[] = {
 			.id	= ION_HEAP_TYPE_SECURE_MEMORY,
 			.type	= ION_HEAP_TYPE_CARVEOUT,
 			.name	= "secure",
-			.size	= SZ_256M,
-			.base	= 0x880000000UL,
 		},
 };
 
@@ -81,11 +81,52 @@ static struct ion_platform_data dummy_ion_pdata = {
 	.heaps = dummy_heaps,
 };
 
+static void ion_dummy_parse_secure_heap(void)
+{
+	struct device_node *np;
+	struct resource heap_res_dt;
+	int index;
+
+	np = of_find_compatible_node(NULL, NULL, "ion,secure_heap");
+	if (!np) {
+		pr_warn("ion_dummy: Failed to find node - ion,secure_heap");
+		return;
+	}
+
+	if (of_address_to_resource(np, 0, &heap_res_dt)) {
+		pr_warn("ion_dummy: Failed to get ion,secure_heap resource");
+		return;
+	}
+
+	if (heap_res_dt.end <= heap_res_dt.start) {
+		pr_warn("ion_dummy: Invalid secure heap size");
+		return;
+	}
+
+	for (index = 0; index < dummy_ion_pdata.nr; index++) {
+		if (dummy_ion_pdata.heaps[index].id ==
+			ION_HEAP_TYPE_SECURE_MEMORY)
+			break;
+	}
+
+	if (index == dummy_ion_pdata.nr) {
+		pr_warn("ion_dummy: No secure memory entry found in the table");
+		return;
+	}
+
+	dummy_ion_pdata.heaps[index].size = resource_size(&heap_res_dt);
+	dummy_ion_pdata.heaps[index].base = heap_res_dt.start;
+}
+
 static int __init ion_dummy_init(void)
 {
 	int i, err;
 
 	idev = ion_device_create(NULL);
+
+	/* Read reserved memory from device tree */
+	ion_dummy_parse_secure_heap();
+
 	heaps = kcalloc(dummy_ion_pdata.nr, sizeof(struct ion_heap *),
 			GFP_KERNEL);
 	if (!heaps)
