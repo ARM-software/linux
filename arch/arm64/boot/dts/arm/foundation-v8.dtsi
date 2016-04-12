@@ -224,5 +224,20 @@
 				interrupts = <42>;
 			};
 		};
+
+		mcc {
+			compatible = "arm,vexpress,config-bus";
+			arm,vexpress,config-bridge = <&v2m_sysreg>;
+
+			shutdown@0 {
+				compatible = "arm,vexpress-shutdown";
+				arm,vexpress-sysreg,func = <8 0>;
+			};
+
+			reboot@0 {
+				compatible = "arm,vexpress-reboot";
+				arm,vexpress-sysreg,func = <9 0>;
+			};
+		};
 	};
 };
