@@ -415,3 +415,13 @@
 		compatible = "arm,mali_fpga_sysctl";
 		reg = <0x0 0x6f020000 0x0 0x000000CC>;
 	};
+
+	site2: tlx@60000000 {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges = <0 0 0x60000000 0x10000000>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0 0>;
+		interrupt-map = <0 0 &gic 0 0 0 168 IRQ_TYPE_LEVEL_HIGH>;
+	};
