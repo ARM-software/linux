@@ -1,5 +1,4 @@
-/* drivers/gpu/t6xx/kbase/src/platform/gpu_control.c
- *
+/*
  * Copyright 2011 by S.LSI. Samsung Electronics Inc.
  * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
  *
@@ -48,20 +47,27 @@ int gpu_control_state_set(struct kbase_device *kbdev, gpu_control_state state, i
 		ret = gpu_clock_on(platform);
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 		if (!kbdev->pm.backend.metrics.timer_active) {
-			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock, flags);
+			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock,
+									flags);
 			kbdev->pm.backend.metrics.timer_active = true;
-			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock, flags);
-			hrtimer_start(&kbdev->pm.backend.metrics.timer, HR_TIMER_DELAY_MSEC(platform->polling_speed), HRTIMER_MODE_REL);
+			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock,
+									flags);
+			hrtimer_start(&kbdev->pm.backend.metrics.timer,
+				HR_TIMER_DELAY_MSEC(platform->polling_speed),
+							HRTIMER_MODE_REL);
 		}
 		gpu_dvfs_handler_control(kbdev, GPU_HANDLER_UPDATE_TIME_IN_STATE, 0);
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
 		break;
 	case GPU_CONTROL_CLOCK_OFF:
 #ifdef CONFIG_MALI_MIDGARD_DVFS
-		if (platform->dvfs_status && kbdev->pm.backend.metrics.timer_active) {
-			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock, flags);
+		if (platform->dvfs_status &&
+				kbdev->pm.backend.metrics.timer_active) {
+			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock,
+									flags);
 			kbdev->pm.backend.metrics.timer_active = false;
-			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock, flags);
+			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock,
+									flags);
 			hrtimer_cancel(&kbdev->pm.backend.metrics.timer);
 		}
 		gpu_pm_qos_command(platform, GPU_CONTROL_PM_QOS_RESET);
@@ -215,9 +221,9 @@ int gpu_control_module_init(struct kbase_device *kbdev)
 	if (!platform)
 		return -ENODEV;
 
-#ifdef CONFIG_PM_RUNTIME
+#ifdef KBASE_PM_RUNTIME
 	platform->exynos_pm_domain = gpu_get_pm_domain(kbdev);
-#endif /* CONFIG_PM_RUNTIME */
+#endif /* KBASE_PM_RUNTIME */
 
 	pkbdev = kbdev;
 
@@ -257,9 +263,9 @@ void gpu_control_module_term(struct kbase_device *kbdev)
 	if (!platform)
 		return;
 
-#ifdef CONFIG_PM_RUNTIME
+#ifdef KBASE_PM_RUNTIME
 	platform->exynos_pm_domain = NULL;
-#endif /* CONFIG_PM_RUNTIME */
+#endif /* KBASE_PM_RUNTIME */
 #ifdef CONFIG_REGULATOR
 	gpu_regulator_disable(platform);
 #endif /* CONFIG_REGULATOR */

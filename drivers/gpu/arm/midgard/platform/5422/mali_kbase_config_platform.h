@@ -1,39 +1,86 @@
 /*
- * Copyright 2011 by S.LSI. Samsung Electronics Inc.
- * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
+ * (C) COPYRIGHT 2014 ARM Limited. All rights reserved.
  *
- * Samsung SoC Mali-T604 DVFS driver
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software FoundatIon.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ *
  */
-#include <mali_kbase_config.h>
 
-#define SOC_NAME 5422
+#ifndef _KBASE_CONFIG_PLATFORM_H_
+#define _KBASE_CONFIG_PLATFORM_H_
 
-#if SOC_NAME == 5422
-#ifdef CONFIG_SOC_EXYNOS5422_REV_0
-#define GPU_FREQ_KHZ_MAX    600000
-#else
-#define GPU_FREQ_KHZ_MAX    600000
-#endif /* CONFIG_SOC_EXYNOS5422_REV_0 */
-#define GPU_FREQ_KHZ_MIN    177000
-#elif SOC_NAME == 5430
-#define GPU_FREQ_KHZ_MAX    600000
-#define GPU_FREQ_KHZ_MIN    160000
-#elif SOC_NAME == 5260
-#define GPU_FREQ_KHZ_MAX    480000
-#define GPU_FREQ_KHZ_MIN    160000
-#else
-#error SOC_NAME should be specified.
-#endif /* SOC_NAME */
+#include "gpu_control.h"
 
-extern int get_cpu_clock_speed(u32 *cpu_clock);
-extern struct kbase_platform_funcs_conf platform_funcs;
-extern struct kbase_pm_callback_conf pm_callbacks;
+/**
+ * Maximum frequency GPU will be clocked at. Given in kHz.
+ * This must be specified as there is no default value.
+ *
+ * Attached value: number in kHz
+ * Default value: NA
+ */
+#define GPU_FREQ_KHZ_MAX G3D_MAX_FREQ
+/**
+ * Minimum frequency GPU will be clocked at. Given in kHz.
+ * This must be specified as there is no default value.
+ *
+ * Attached value: number in kHz
+ * Default value: NA
+ */
+#define GPU_FREQ_KHZ_MIN G3D_MIN_FREQ
 
+/**
+ * CPU_SPEED_FUNC - A pointer to a function that calculates the CPU clock
+ *
+ * CPU clock speed of the platform is in MHz - see kbase_cpu_clk_speed_func
+ * for the function prototype.
+ *
+ * Attached value: A kbase_cpu_clk_speed_func.
+ * Default Value:  NA
+ */
 #define CPU_SPEED_FUNC (&get_cpu_clock_speed)
+
+/**
+ * GPU_SPEED_FUNC - A pointer to a function that calculates the GPU clock
+ *
+ * GPU clock speed of the platform in MHz - see kbase_gpu_clk_speed_func
+ * for the function prototype.
+ *
+ * Attached value: A kbase_gpu_clk_speed_func.
+ * Default Value:  NA
+ */
 #define GPU_SPEED_FUNC (NULL)
-#define PLATFORM_FUNCS (&platform_funcs)
+
+/**
+ * Power management configuration
+ *
+ * Attached value: pointer to @ref kbase_pm_callback_conf
+ * Default value: See @ref kbase_pm_callback_conf
+ */
 #define POWER_MANAGEMENT_CALLBACKS (&pm_callbacks)
+
+/**
+ * Platform specific configuration functions
+ *
+ * Attached value: pointer to @ref kbase_platform_funcs_conf
+ * Default value: See @ref kbase_platform_funcs_conf
+ */
+#define PLATFORM_FUNCS (&platform_funcs)
+
+/**
+ * Secure mode switch
+ *
+ * Attached value: pointer to @ref kbase_secure_ops
+ */
+#define SECURE_CALLBACKS (NULL)
+
+extern int get_cpu_clock_speed(u32* cpu_clock);
+extern struct kbase_pm_callback_conf pm_callbacks;
+extern struct kbase_platform_funcs_conf platform_funcs;
+
+#endif /* _KBASE_CONFIG_PLATFORM_H_ */

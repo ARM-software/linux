@@ -1,10 +1,11 @@
-
 #include "gpu_ipa.h"
 #include "gpu_dvfs_handler.h"
 
 #define CREATE_TRACE_POINTS
 #include "mali_power.h"
 #undef  CREATE_TRACE_POINTS
+
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 
 extern struct kbase_device *pkbdev;
 
@@ -193,6 +194,9 @@ void gpu_ipa_dvfs_get_utilisation_stats(struct mali_debug_utilisation_stats *sta
 	stats->time_busy = platform->time_busy;
 	stats->time_idle = platform->time_idle;
 	stats->time_tick = platform->time_tick;
+	stats->s.util_gl_share = platform->util_gl_share;
+	stats->s.util_cl_share[0] = platform->util_cl_share[0];
+	stats->s.util_cl_share[1] = platform->util_cl_share[1];
 	spin_unlock_irqrestore(&platform->gpu_dvfs_spinlock, flags);
 }
 
@@ -230,7 +234,16 @@ int gpu_ipa_dvfs_max_unlock(void)
 int get_ipa_dvfs_max_freq(void)
 {
 	struct kbase_device *kbdev = pkbdev;
-	struct exynos_context *platform = (struct exynos_context *)kbdev->platform_context;
+	struct exynos_context *platform;
+
+	platform = (struct exynos_context *)kbdev->platform_context;
+
+	if (!platform) {
+		GPU_LOG(DVFS_ERROR, "platform context (0x%p) is not initialized within %s\n", platform, __FUNCTION__);
+		return -ENODEV;
+	}
 
 	return platform->table[platform->table_size - 1].clock;
 }
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
+

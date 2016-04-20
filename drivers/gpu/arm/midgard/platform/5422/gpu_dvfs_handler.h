@@ -1,5 +1,4 @@
-/* drivers/gpu/t6xx/kbase/src/platform/gpu_dvfs_handler.h
- *
+/*
  * Copyright 2011 by S.LSI. Samsung Electronics Inc.
  * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
  *

@@ -1,5 +1,5 @@
 #
-# (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2014 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -12,12 +12,19 @@
 #
 #
 
+menuconfig MALI_MIDGARD_5422
+	bool "5422 settings"
+	depends on MALI_MIDGARD
+	default y if MALI_PLATFORM_THIRDPARTY_NAME = "5422"
+	help
+	  Control 5422 specific options for the ARM Mali Midgard GPU.
+
+config DYNIMIC_ABB
+	bool "Enable dynimic abb"
+	depends on MALI_MIDGARD_5422
+	default n
+	help
+		Select this option to enable dynimic abb.
 
 
-# Add your platform specific Kconfig file here
-#
-# "drivers/gpu/arm/t6xx/kbase/src/platform/xxx/Kconfig"
-#
-# Where xxx is the platform name is the name set in MALI_PLATFORM_THIRDPARTY_NAME
-#
 

@@ -1,5 +1,4 @@
-/* drivers/gpu/t6xx/kbase/src/platform/mali_kbase_platform.c
- *
+/*
  * Copyright 2011 by S.LSI. Samsung Electronics Inc.
  * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
  *
@@ -26,6 +25,19 @@
 #include "gpu_notifier.h"
 #include "gpu_dvfs_governor.h"
 #include "gpu_control.h"
+#include "gpu_ipa.h"
+
+#ifndef CONFIG_OF
+static struct kbase_io_resources io_resources = {
+	.job_irq_number   = JOB_IRQ_NUMBER,
+	.mmu_irq_number   = MMU_IRQ_NUMBER,
+	.gpu_irq_number   = GPU_IRQ_NUMBER,
+	.io_memory_region = {
+		.start = EXYNOS5_PA_G3D,
+		.end   = EXYNOS5_PA_G3D + (4096 * 4) - 1
+	}
+};
+#endif
 
 static int gpu_debug_level;
 
@@ -42,21 +54,23 @@ int gpu_get_debug_level(void)
 /**
  ** Exynos5 hardware specific initialization
  **/
-int kbase_platform_exynos5_init(struct kbase_device *kbdev)
+static int kbase_platform_exynos5_init(struct kbase_device *kbdev)
 {
+	int err;
+
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 	unsigned long flags;
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
 	struct exynos_context *platform;
-	int stat;
 
 	platform = kmalloc(sizeof(struct exynos_context), GFP_KERNEL);
+
 	if (!platform)
 		return -ENOMEM;
 
 	memset(platform, 0, sizeof(struct exynos_context));
 
-	kbdev->platform_context = platform;
+	kbdev->platform_context = (void *) platform;
 
 	platform->cmu_pmu_status = 0;
 	platform->dvfs_wq = NULL;
@@ -67,9 +81,8 @@ int kbase_platform_exynos5_init(struct kbase_device *kbdev)
 	mutex_init(&platform->gpu_dvfs_handler_lock);
 	spin_lock_init(&platform->gpu_dvfs_spinlock);
 
-	/* gpu control module init*/
-	stat = gpu_control_module_init(kbdev);
-	if (stat)
+	err = gpu_control_module_init(kbdev);
+	if (err)
 		goto clock_init_fail;
 
 	/* dvfs gobernor init*/
@@ -82,26 +95,22 @@ int kbase_platform_exynos5_init(struct kbase_device *kbdev)
 	/* dvfs handler init*/
 	gpu_dvfs_handler_init(kbdev);
 
-	stat = gpu_notifier_init(kbdev);
-	if (stat)
+	err = gpu_notifier_init(kbdev);
+	if (err)
 		goto notifier_init_fail;
 
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
-	stat = gpu_create_sysfs_file(kbdev->dev);
-	if (stat)
+	err = gpu_create_sysfs_file(kbdev->dev);
+	if (err)
 		goto sysfs_init_fail;
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
 	return 0;
 
 clock_init_fail:
 notifier_init_fail:
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 sysfs_init_fail:
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 	kfree(platform);
 
-	return stat;
+	return err;
 }
 
 /**
@@ -123,9 +132,7 @@ static void kbase_platform_exynos5_term(struct kbase_device *kbdev)
 	kfree(kbdev->platform_context);
 	kbdev->platform_context = 0;
 
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 	gpu_remove_sysfs_file(kbdev->dev);
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 }
 
 struct kbase_platform_funcs_conf platform_funcs = {
@@ -133,17 +140,112 @@ struct kbase_platform_funcs_conf platform_funcs = {
 	.platform_term_func = &kbase_platform_exynos5_term,
 };
 
+extern struct kbase_pm_callback_conf pm_callbacks;
+extern int get_cpu_clock_speed(u32 *cpu_clock);
+
+struct kbase_platform_config platform_config = {
+#ifndef CONFIG_OF
+	.io_resources = &io_resources
+#endif
+};
+
+struct kbase_platform_config *kbase_get_platform_config(void)
+{
+	return &platform_config;
+}
+
 int kbase_platform_early_init(void)
 {
-	/* Nothing needed at this stage */
+	/* Nothing to do */
 	return 0;
 }
 
-struct kbase_platform_config e5422_platform_config;
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 
-struct kbase_platform_config *kbase_get_platform_config(void) {
-	return &e5422_platform_config;
+#define POWER_COEFF_GPU_ALL_CORE_ON 64  /* all core on param */
+
+/* This is a temporary value. To get STATIC_POWER_COEFF you need to do
+ * a "one off" calculation - i.e. you attach the necessary probes to a board,
+ * get the board into "GPU on but idle", switch to the always_on policy and
+ * measure the power at different frequency points
+ * STATIC_POWER_COEFF = div_u64(power * 100000,(u64)freq * voltage * voltage)
+ */
+#define STATIC_POWER_COEFF 3
+#define DYNAMIC_POWER_COEFF (POWER_COEFF_GPU_ALL_CORE_ON - STATIC_POWER_COEFF)
+
+extern struct kbase_device *pkbdev;
+
+/*  Get the current utilization of the gpu */
+int get_gpu_util(void)
+{
+	struct kbase_device *kbdev = pkbdev;
+	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
+	if (!platform)
+		return -ENODEV;
+
+	return platform->utilization;
 }
 
-extern struct kbase_pm_callback_conf pm_callbacks;
-extern int get_cpu_clock_speed(u32 *cpu_clock);
+/* Get power consumption of GPU assuming utilization */
+int get_gpu_power(int util)
+{
+	unsigned int freq;
+	unsigned int vol;
+	int power = 0;
+	struct kbase_device *kbdev = pkbdev;
+	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
+	if (!platform)
+		return -ENODEV;
+
+	/* Get the frequency and voltage for the level */
+	freq = platform->table[platform->step].clock;
+	vol = platform->table[platform->step].voltage / 10000;
+
+	/* Calculate power */
+	power = (int)div_u64(
+			((u64)STATIC_POWER_COEFF * freq * vol * vol) +
+			((u64)DYNAMIC_POWER_COEFF * util * freq * vol * vol),
+			100000);
+
+	return power;
+}
+
+/* Limit the frequency of the GPU to match the power assuming utilization */
+int set_gpu_power_cap(int gpu_power, int util)
+{
+	int level = 1;
+	unsigned int freq;
+	unsigned int vol;
+	int required_power;
+
+	struct kbase_device *kbdev = pkbdev;
+	struct exynos_context *platform = (struct exynos_context *) kbdev->platform_context;
+	if (!platform)
+		return -ENODEV;
+
+	BUG_ON(platform->table_size == 0);
+
+	while (level < platform->table_size) {
+		vol = platform->table[level].voltage / 10000;
+		freq = platform->table[level].clock;
+		required_power = (int)div_u64(
+				((u64)STATIC_POWER_COEFF * freq * vol * vol) +
+				((u64)DYNAMIC_POWER_COEFF * util * freq * vol * vol),
+				100000);
+
+		if (required_power > gpu_power)
+			break;
+		level++;
+	}
+	level--;
+
+	gpu_ipa_dvfs_max_lock(platform->table[level].clock);
+
+	return platform->table[level].clock;
+}
+
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
+
+
+
+

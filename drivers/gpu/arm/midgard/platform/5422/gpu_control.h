@@ -1,5 +1,4 @@
-/* drivers/gpu/t6xx/kbase/src/platform/gpu_control.h
- *
+/*
  * Copyright 2011 by S.LSI. Samsung Electronics Inc.
  * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
  *
@@ -18,8 +17,6 @@
 #ifndef _GPU_CONTROL_H_
 #define _GPU_CONTROL_H_
 
-#include "mali_kbase_config_platform.h"
-
 typedef enum {
 	GPU_CONTROL_CLOCK_ON = 0,
 	GPU_CONTROL_CLOCK_OFF,
@@ -36,6 +33,24 @@ typedef enum {
 	GPU_CONTROL_PM_QOS_RESET,
 } gpu_pmqos_state;
 
+/* mali_kbase_platform */
+#if SOC_NAME == 5422
+#ifdef CONFIG_SOC_EXYNOS5422_REV_0
+#define G3D_MAX_FREQ    543000
+#else
+#define G3D_MAX_FREQ    533000
+#endif /* CONFIG_SOC_EXYNOS5422_REV_0 */
+#define G3D_MIN_FREQ    177000
+#elif SOC_NAME == 5430
+#define G3D_MAX_FREQ    600000
+#define G3D_MIN_FREQ    160000
+#elif SOC_NAME == 5260
+#define G3D_MAX_FREQ    480000
+#define G3D_MIN_FREQ    160000
+#else
+#error SOC_NAME should be specified.
+#endif /* SOC_NAME */
+
 /* GPU NOTIFIER */
 #if SOC_NAME == 5422
 #define GPU_THROTTLING_90_95    480
@@ -44,7 +59,7 @@ typedef enum {
 #define GPU_THROTTLING_105_110  177
 #define GPU_TRIPPING_110        177
 #define VOLTAGE_OFFSET_MARGIN   37500
-#define RUNTIME_PM_DELAY_TIME   100
+#define RUNTIME_PM_DELAY_TIME   50
 #elif SOC_NAME == 5430
 #define GPU_THROTTLING_90_95    420
 #define GPU_THROTTLING_95_100   350
@@ -53,7 +68,7 @@ typedef enum {
 #define GPU_TRIPPING_110        160
 #define VOLTAGE_OFFSET_MARGIN   37500
 #define RUNTIME_PM_DELAY_TIME   100
-#define GPU_DYNAMIC_CLK_GATING  0
+#define GPU_DYNAMIC_CLK_GATING  1
 #elif SOC_NAME == 5260
 #define GPU_THROTTLING_90_95	266
 #define GPU_THROTTLING_95_100	266
@@ -61,13 +76,10 @@ typedef enum {
 #define GPU_THROTTLING_105_110	160
 #define GPU_TRIPPING_110        160
 #define VOLTAGE_OFFSET_MARGIN	37500
+#define RUNTIME_PM_DELAY_TIME	100
 #else
 #error SOC_NAME should be specified.
 #endif /* SOC_NAME */
-
-#ifdef CONFIG_MALI_MIDGARD_RT_PM
-#define RUNTIME_PM_DELAY_TIME 100
-#endif /* CONFIG_MALI_MIDGARD_RT_PM */
 
 /* GPU DVFS HANDLER */
 #if SOC_NAME == 5422
@@ -135,7 +147,9 @@ typedef enum {
 #error SOC_NAME should be specified.
 #endif /* SOC_NAME */
 
-#define MALI_T6XX_DEFAULT_CLOCK (MALI_DVFS_START_FREQ*MHZ)
+#define MALI_MIDGARD_DEFAULT_CLOCK (MALI_DVFS_START_FREQ*MHZ)
+
+struct exynos_context;
 
 struct exynos_pm_domain *gpu_get_pm_domain(struct kbase_device *kbdev);
 int get_cpu_clock_speed(u32 *cpu_clock);

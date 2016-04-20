@@ -1,5 +1,5 @@
 #
-# (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2012,2014 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -12,28 +12,35 @@
 #
 #
 
-platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
+SOC_NAME ?= 5430
 
-ifeq ($(CONFIG_MALI_MIDGARD),y)
-	obj-y += \
-		mali_kbase_platform.o \
-		gpu_notifier.o \
-		gpu_control_exynos$(platform_name).o \
-		gpu_control.o \
-		gpu_dvfs_handler.o \
-		gpu_dvfs_governor.o \
-		gpu_custom_interface.o
-	obj-$(CONFIG_CPU_THERMAL_IPA) += gpu_ipa.o
-else ifeq ($(CONFIG_MALI_MIDGARD),m)
-	SRC += \
-		$(MALI_PLATFORM_THIRDPARTY_DIR)/mali_kbase_platform.c \
-		$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_notifier.c \
-		$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_control_exynos$(platform_name).c \
-		$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_control.c \
-		$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_dvfs_handler.c \
-		$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_dvfs_governor.c \
-		$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_custom_interface.c
-	ifeq ($(CONFIG_CPU_THERMAL_IPA),y)
-		SRC += $(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_ipa.c
-	endif
+ifeq ($(CONFIG_SOC_EXYNOS5250),y)
+	SOC_NAME=5250
+endif
+ifeq ($(CONFIG_SOC_EXYNOS5412),y)
+	SOC_NAME=5412
+endif
+ifeq ($(CONFIG_SOC_EXYNOS5420),y)
+	SOC_NAME=5420
+endif
+ifeq ($(CONFIG_SOC_EXYNOS5422),y)
+	SOC_NAME=5422
+endif
+ifeq ($(CONFIG_SOC_EXYNOS5430),y)
+	SOC_NAME=5430
+endif
+
+ccflags-y += -DSOC_NAME=$(SOC_NAME)
+
+SRC += \
+	$(MALI_PLATFORM_THIRDPARTY_DIR)/mali_kbase_platform.c \
+	$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_notifier.c \
+	$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_control_exynos$(SOC_NAME).c \
+	$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_control.c \
+	$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_dvfs_handler.c \
+	$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_dvfs_governor.c \
+	$(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_custom_interface.c
+
+ifneq ($(CONFIG_CPU_THERMAL_IPA),)
+	SRC += $(MALI_PLATFORM_THIRDPARTY_DIR)/gpu_ipa.c
 endif

@@ -1,5 +1,4 @@
-/* drivers/gpu/t6xx/kbase/src/platform/gpu_dvfs_handler.c
- *
+/*
  * Copyright 2011 by S.LSI. Samsung Electronics Inc.
  * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
  *
@@ -26,6 +25,8 @@
 #endif /* CONFIG_CPU_THERMAL_IPA */
 
 extern struct kbase_device *pkbdev;
+
+void ipa_mali_dvfs_requested(unsigned int freq);
 
 #ifdef CONFIG_CPU_THERMAL_IPA
 int gpu_dvfs_get_clock(int level)
@@ -66,6 +67,11 @@ static int gpu_get_target_freq(void)
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 	freq = platform->table[platform->step].clock;
+
+#ifdef CONFIG_CPU_THERMAL_IPA
+	ipa_mali_dvfs_requested(freq);
+#endif
+
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 	if ((platform->max_lock > 0) && (freq > platform->max_lock))
 		freq = platform->max_lock;
@@ -134,6 +140,9 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation,
 #endif /* CONFIG_CPU_THERMAL_IPA */
 
 	platform->utilization = utilisation;
+	platform->util_cl_share[0] = util_cl_share[0];
+	platform->util_cl_share[1] = util_cl_share[1];
+	platform->util_gl_share = util_gl_share;
 #ifdef CONFIG_CPU_THERMAL_IPA
 	gpu_ipa_dvfs_calc_norm_utilisation(kbdev);
 #endif /* CONFIG_CPU_THERMAL_IPA */
@@ -209,19 +218,25 @@ static int gpu_dvfs_on_off(struct kbase_device *kbdev, bool enable)
 		gpu_control_state_set(kbdev, GPU_CONTROL_CHANGE_CLK_VOL, platform->cur_clock);
 		gpu_dvfs_handler_init(kbdev);
 		if (!kbdev->pm.backend.metrics.timer_active) {
-			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock, flags);
+			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock,
+									flags);
 			kbdev->pm.backend.metrics.timer_active = true;
-			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock, flags);
-			hrtimer_start(&kbdev->pm.backend.metrics.timer, HR_TIMER_DELAY_MSEC(platform->polling_speed), HRTIMER_MODE_REL);
+			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock,
+									flags);
+			hrtimer_start(&kbdev->pm.backend.metrics.timer,
+				HR_TIMER_DELAY_MSEC(platform->polling_speed),
+							HRTIMER_MODE_REL);
 		}
 	} else if (!enable && platform->dvfs_status) {
 		platform->dvfs_status = false;
 		gpu_dvfs_handler_deinit(kbdev);
 		gpu_control_state_set(kbdev, GPU_CONTROL_CHANGE_CLK_VOL, MALI_DVFS_BL_CONFIG_FREQ);
 		if (kbdev->pm.backend.metrics.timer_active) {
-			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock, flags);
+			spin_lock_irqsave(&kbdev->pm.backend.metrics.lock,
+									flags);
 			kbdev->pm.backend.metrics.timer_active = false;
-			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock, flags);
+			spin_unlock_irqrestore(&kbdev->pm.backend.metrics.lock,
+									flags);
 			hrtimer_cancel(&kbdev->pm.backend.metrics.timer);
 		}
 	} else {

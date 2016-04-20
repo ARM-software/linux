@@ -1,5 +1,4 @@
-/* drivers/gpu/t6xx/kbase/src/platform/gpu_custom_interface.c
- *
+/*
  * Copyright 2011 by S.LSI. Samsung Electronics Inc.
  * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
  *
@@ -27,7 +26,6 @@
 #endif /* CONFIG_CPU_THERMAL_IPA */
 #include "gpu_custom_interface.h"
 
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 static int gpu_get_asv_table(struct kbase_device *kbdev, char *buf, size_t buf_size)
 {
 	int i, cnt = 0;
@@ -872,10 +870,15 @@ static ssize_t show_utilization_stats(struct device *dev, struct device_attribut
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 	gpu_ipa_dvfs_get_utilisation_stats(&stats);
 
-	ret += snprintf(buf+ret, PAGE_SIZE-ret, "util=%d norm_util=%d norm_freq=%d time_busy=%u time_idle=%u time_tick=%d",
-					stats.s.utilisation, stats.s.norm_utilisation,
-					stats.s.freq_for_norm, stats.time_busy, stats.time_idle,
-					stats.time_tick);
+	ret += snprintf(buf+ret, PAGE_SIZE-ret, "util=%d norm_util=%d norm_freq=%d time_busy=%u time_idle=%u time_tick=%d util_gl_share=%d util_cl_0_share=%d util_cl_1_share=%d",
+				stats.s.utilisation, stats.s.norm_utilisation,
+				stats.s.freq_for_norm,
+				stats.time_busy,
+				stats.time_idle,
+				stats.time_tick,
+				stats.s.util_gl_share,
+				stats.s.util_cl_share[0],
+				stats.s.util_cl_share[1]);
 #else
 	ret += snprintf(buf+ret, PAGE_SIZE-ret, "-1");
 #endif
@@ -900,26 +903,32 @@ static ssize_t show_utilization_stats(struct device *dev, struct device_attribut
  * This is used for obtaining information about the mali t6xx operating clock & framebuffer address,
  */
 
-DEVICE_ATTR(clock, S_IRUGO|S_IWUSR, show_clock, set_clock);
-DEVICE_ATTR(fbdev, S_IRUGO, show_fbdev, NULL);
-DEVICE_ATTR(vol, S_IRUGO, show_vol, NULL);
-DEVICE_ATTR(dvfs, S_IRUGO|S_IWUSR, show_dvfs, set_dvfs);
-DEVICE_ATTR(dvfs_max_lock, S_IRUGO|S_IWUSR, show_max_lock_dvfs, set_max_lock_dvfs);
-DEVICE_ATTR(dvfs_min_lock, S_IRUGO|S_IWUSR, show_min_lock_dvfs, set_min_lock_dvfs);
-DEVICE_ATTR(time_in_state, S_IRUGO|S_IWUSR, show_time_in_state, set_time_in_state);
-DEVICE_ATTR(tmu, S_IRUGO|S_IWUSR, show_tmu, set_tmu_control);
-DEVICE_ATTR(utilization, S_IRUGO, show_utilization, NULL);
+static DEVICE_ATTR(clock, S_IRUGO|S_IWUSR, show_clock, set_clock);
+static DEVICE_ATTR(fbdev, S_IRUGO, show_fbdev, NULL);
+static DEVICE_ATTR(vol, S_IRUGO, show_vol, NULL);
+static DEVICE_ATTR(dvfs, S_IRUGO|S_IWUSR, show_dvfs, set_dvfs);
+static DEVICE_ATTR(dvfs_max_lock, S_IRUGO|S_IWUSR,
+		show_max_lock_dvfs, set_max_lock_dvfs);
+static DEVICE_ATTR(dvfs_min_lock, S_IRUGO|S_IWUSR,
+		show_min_lock_dvfs, set_min_lock_dvfs);
+static DEVICE_ATTR(time_in_state, S_IRUGO|S_IWUSR,
+		show_time_in_state, set_time_in_state);
+static DEVICE_ATTR(tmu, S_IRUGO|S_IWUSR, show_tmu, set_tmu_control);
+static DEVICE_ATTR(utilization, S_IRUGO, show_utilization, NULL);
 #ifdef CONFIG_CPU_THERMAL_IPA
-DEVICE_ATTR(norm_utilization, S_IRUGO, show_norm_utilization, NULL);
-DEVICE_ATTR(utilization_stats, S_IRUGO, show_utilization_stats, NULL);
+static DEVICE_ATTR(norm_utilization, S_IRUGO, show_norm_utilization, NULL);
+static DEVICE_ATTR(utilization_stats, S_IRUGO, show_utilization_stats, NULL);
 #endif /* CONFIG_CPU_THERMAL_IPA */
-DEVICE_ATTR(asv_table, S_IRUGO, show_asv_table, NULL);
-DEVICE_ATTR(dvfs_table, S_IRUGO, show_dvfs_table, NULL);
-DEVICE_ATTR(power_state, S_IRUGO, show_power_state, NULL);
-DEVICE_ATTR(dvfs_governor, S_IRUGO|S_IWUSR, show_governor, set_governor);
-DEVICE_ATTR(wakeup_lock, S_IRUGO|S_IWUSR, show_wakeup_lock, set_wakeup_lock);
-DEVICE_ATTR(debug_level, S_IRUGO|S_IWUSR, show_debug_level, set_debug_level);
-DEVICE_ATTR(polling_speed, S_IRUGO|S_IWUSR, show_polling_speed, set_polling_speed);
+static DEVICE_ATTR(asv_table, S_IRUGO, show_asv_table, NULL);
+static DEVICE_ATTR(dvfs_table, S_IRUGO, show_dvfs_table, NULL);
+static DEVICE_ATTR(power_state, S_IRUGO, show_power_state, NULL);
+static DEVICE_ATTR(dvfs_governor, S_IRUGO|S_IWUSR, show_governor, set_governor);
+static DEVICE_ATTR(wakeup_lock, S_IRUGO|S_IWUSR,
+		show_wakeup_lock, set_wakeup_lock);
+static DEVICE_ATTR(debug_level, S_IRUGO|S_IWUSR,
+		show_debug_level, set_debug_level);
+static DEVICE_ATTR(polling_speed, S_IRUGO|S_IWUSR,
+		show_polling_speed, set_polling_speed);
 
 int gpu_create_sysfs_file(struct device *dev)
 {
@@ -1041,4 +1050,4 @@ void gpu_remove_sysfs_file(struct device *dev)
 	device_remove_file(dev, &dev_attr_debug_level);
 	device_remove_file(dev, &dev_attr_polling_speed);
 }
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
+

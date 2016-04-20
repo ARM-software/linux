@@ -1,5 +1,4 @@
-/* drivers/gpu/t6xx/kbase/src/platform/mali_kbase_platform.h
- *
+/* 
  * Copyright 2011 by S.LSI. Samsung Electronics Inc.
  * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
  *
@@ -18,12 +17,27 @@
 #ifndef _GPU_PLATFORM_H_
 #define _GPU_PLATFORM_H_
 
-#include "mali_kbase_config_platform.h"
+#if defined(CONFIG_MALI_EXYNOS_TRACE) && KBASE_TRACE_ENABLE
+#define KBASE_TRACE_ADD_EXYNOS(kbdev, code, ctx, katom, gpu_addr, info_val)     \
+	kbasep_trace_add(kbdev, KBASE_TRACE_CODE(code), ctx, katom, gpu_addr, \
+			0, 0, 0, info_val)
+#else
+#define KBASE_TRACE_ADD_EXYNOS(kbdev, code, subcode, ctx, katom, val)\
+	do {\
+		CSTD_UNUSED(kbdev);\
+		CSTD_NOP(code);\
+		CSTD_UNUSED(subcode);\
+		CSTD_UNUSED(ctx);\
+		CSTD_UNUSED(katom);\
+		CSTD_UNUSED(val);\
+		CSTD_NOP(0);\
+	} while(0)
+#endif
 
 #define GPU_LOG(level, msg, args...) \
 do { \
 	if (level >= gpu_get_debug_level()) { \
-		pr_emerg( msg, ## args); \
+		printk(KERN_INFO msg, ## args); \
 	} \
 } while (0)
 
@@ -94,14 +108,16 @@ struct exynos_context {
 #endif
 	int table_size;
 	int step;
-#ifdef CONFIG_PM_RUNTIME
+#ifdef KBASE_PM_RUNTIME
 	struct exynos_pm_domain *exynos_pm_domain;
-#endif /* CONFIG_PM_RUNTIME */
+#endif /* KBASE_PM_RUNTIME */
 	struct mutex gpu_clock_lock;
 	struct mutex gpu_dvfs_handler_lock;
 	spinlock_t gpu_dvfs_spinlock;
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 	int utilization;
+	int util_gl_share;
+	int util_cl_share[2];
 #ifdef CONFIG_CPU_THERMAL_IPA
 	int norm_utilisation;
 	int freq_for_normalisation;
@@ -137,6 +153,8 @@ struct exynos_context {
 struct mali_utilisation_stats
 {
 	int utilisation;
+	int util_gl_share;
+	int util_cl_share[2];
 	int norm_utilisation;
 	int freq_for_norm;
 };
@@ -152,5 +170,37 @@ struct mali_debug_utilisation_stats
 
 void gpu_set_debug_level(int level);
 int gpu_get_debug_level(void);
+
+int kbase_platform_early_init(void);
+
+#ifdef CONFIG_MALI_MIDGARD_DVFS
+
+/** Get the current utilization of the gpu
+ *
+ * Returns the current utilization of the GPU (0 - 100)
+ */
+int get_gpu_util(void);
+
+/** Get power consumption of GPU based on utilization. Power is calculated on
+ * the basis of Static and Dynamic power coefficients taking into account the
+ * frequency, voltage and utilization of the GPU.
+ *
+ * @param util   Utilization of the GPU (0-100)
+ *
+ * @return Power consumed by the GPU
+ */
+int get_gpu_power(int util);
+
+/** Limit the frequency of the CPU to match the power assuming utilization
+ *
+ * @param gpu_power     Power consumed by the GPU
+ * @param util          Utilization of the GPU (0-100)
+ *
+ * @return              Maximum frequency in MHz which matches the given 
+ *		                utilization and power
+ */
+int set_gpu_power_cap(int gpu_power, int util);
+
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 #endif /* _GPU_PLATFORM_H_ */

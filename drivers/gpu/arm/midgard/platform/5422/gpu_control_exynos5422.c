@@ -1,5 +1,4 @@
-/* drivers/gpu/t6xx/kbase/src/platform/gpu_control_exynos5422.c
- *
+/*
  * Copyright 2011 by S.LSI. Samsung Electronics Inc.
  * San#24, Nongseo-Dong, Giheung-Gu, Yongin, Korea
  *
@@ -28,7 +27,7 @@
 
 extern struct kbase_device *pkbdev;
 
-#ifdef CONFIG_PM_RUNTIME
+#ifdef KBASE_PM_RUNTIME
 struct exynos_pm_domain *gpu_get_pm_domain(struct kbase_device *kbdev)
 {
 	struct platform_device *pdev = NULL;
@@ -58,7 +57,7 @@ int get_cpu_clock_speed(u32 *cpu_clock)
 	u32 freq = 0;
 	cpu_clk = clk_get(NULL, "armclk");
 	if (IS_ERR(cpu_clk))
-		return -1;
+		return PTR_ERR(cpu_clk);
 	freq = clk_get_rate(cpu_clk);
 	*cpu_clock = (freq/MHZ);
 	return 0;
@@ -85,7 +84,7 @@ static int gpu_update_clock(struct exynos_context *platform)
 {
 	if (!platform->clk_g3d_ip) {
 		GPU_LOG(DVFS_ERROR, "clk_g3d_ip is not initialized\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	platform->cur_clock = clk_get_rate(platform->clk_g3d_ip)/MHZ;
@@ -166,12 +165,12 @@ int gpu_set_clock(struct exynos_context *platform, int freq)
 	int ret;
 
 	if (platform->clk_g3d_ip == 0)
-		return -1;
+		return -ENODEV;
 
-#ifdef CONFIG_PM_RUNTIME
+#ifdef KBASE_PM_RUNTIME
 	if (platform->exynos_pm_domain)
 		mutex_lock(&platform->exynos_pm_domain->access_lock);
-#endif /* CONFIG_PM_RUNTIME */
+#endif /* KBASE_PM_RUNTIME */
 
 	if (!gpu_is_power_on()) {
 		ret = -1;
@@ -233,13 +232,14 @@ int gpu_set_clock(struct exynos_context *platform, int freq)
 	} while (tmp & 0x10000);
 
 	gpu_update_clock(platform);
+	KBASE_TRACE_ADD_EXYNOS(pkbdev, LSI_CLOCK_VALUE, NULL, NULL, 0u, g3d_rate/MHZ);
 	GPU_LOG(DVFS_DEBUG, "[G3D] clock set: %ld\n", g3d_rate / MHZ);
 	GPU_LOG(DVFS_DEBUG, "[G3D] clock get: %d\n", platform->cur_clock);
 err:
-#ifdef CONFIG_PM_RUNTIME
+#ifdef KBASE_PM_RUNTIME
 	if (platform->exynos_pm_domain)
 		mutex_unlock(&platform->exynos_pm_domain->access_lock);
-#endif /* CONFIG_PM_RUNTIME */
+#endif /* KBASE_PM_RUNTIME */
 	return ret;
 }
 
@@ -260,50 +260,50 @@ static int gpu_get_clock(struct kbase_device *kbdev)
 	platform->fout_vpll = clk_get(NULL, "fout_vpll");
 	if (IS_ERR(platform->fout_vpll)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [fout_vpll]\n");
-		return -1;
+		return PTR_ERR(platform->fout_vpll);
 	}
 
 	platform->mout_vpll_ctrl = clk_get(kbdev->dev, "mout_vpll_ctrl"); /* same as sclk_vpll */
 	if (IS_ERR(platform->mout_vpll_ctrl)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_vpll_ctrl]\n");
-		return -1;
+		return PTR_ERR(platform->mout_vpll_ctrl);
 	}
 
 	platform->mout_dpll_ctrl = clk_get(kbdev->dev, "mout_dpll_ctrl"); /* same as sclk_dpll */
 	if (IS_ERR(platform->mout_dpll_ctrl)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_dpll_ctrl]\n");
-		return -1;
+		return PTR_ERR(platform->mout_dpll_ctrl);
 	}
 
 	platform->mout_aclk_g3d = clk_get(kbdev->dev, "mout_aclk_g3d"); /* set parents v or d pll */
 	if (IS_ERR(platform->mout_aclk_g3d)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_aclk_g3d]\n");
-		return -1;
+		return PTR_ERR(platform->mout_aclk_g3d);
 	}
 
 	platform->dout_aclk_g3d = clk_get(kbdev->dev, "dout_aclk_g3d"); /* divider usage */
 	if (IS_ERR(platform->dout_aclk_g3d)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [dout_aclk_g3d]\n");
-		return -1;
+		return PTR_ERR(platform->dout_aclk_g3d);
 	}
 
 	platform->mout_aclk_g3d_sw = clk_get(kbdev->dev, "mout_aclk_g3d_sw");
 	if (IS_ERR(platform->mout_aclk_g3d_sw)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_aclk_g3d_sw]\n");
-		return -1;
+		return PTR_ERR(platform->mout_aclk_g3d_sw);
 	}
 
 	platform->mout_aclk_g3d_user = clk_get(kbdev->dev, "mout_aclk_g3d_user");
 	if (IS_ERR(platform->mout_aclk_g3d_user)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [mout_aclk_g3d_user]\n");
-		return -1;
+		return PTR_ERR(platform->mout_aclk_g3d_user);
 	}
 
 	platform->clk_g3d_ip = clk_get(kbdev->dev, "clk_g3d_ip");
 	clk_prepare_enable(platform->clk_g3d_ip);
 	if (IS_ERR(platform->clk_g3d_ip)) {
 		GPU_LOG(DVFS_ERROR, "failed to clk_get [clk_g3d_ip]\n");
-		return -1;
+		return PTR_ERR(platform->clk_g3d_ip);
 	}
 
 	return 0;
@@ -321,7 +321,7 @@ int gpu_clock_init(struct kbase_device *kbdev)
 
 	ret = gpu_get_clock(kbdev);
 	if (ret < 0)
-		return -1;
+		return ret;
 
 	GPU_LOG(DVFS_INFO, "g3d clock initialized\n");
 
@@ -333,7 +333,7 @@ static int gpu_update_voltage(struct exynos_context *platform)
 #ifdef CONFIG_REGULATOR
 	if (!platform->g3d_regulator) {
 		GPU_LOG(DVFS_ERROR, "g3d_regulator is not initialized\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	platform->cur_voltage = regulator_get_voltage(platform->g3d_regulator);
@@ -344,6 +344,7 @@ static int gpu_update_voltage(struct exynos_context *platform)
 int gpu_set_voltage(struct exynos_context *platform, int vol)
 {
 	static int _vol = -1;
+	int err;
 
 	if (_vol == vol)
 		return 0;
@@ -351,18 +352,20 @@ int gpu_set_voltage(struct exynos_context *platform, int vol)
 #ifdef CONFIG_REGULATOR
 	if (!platform->g3d_regulator) {
 		GPU_LOG(DVFS_ERROR, "g3d_regulator is not initialized\n");
-		return -1;
+		return -ENODEV;
 	}
 
-	if (regulator_set_voltage(platform->g3d_regulator, vol, vol) != 0) {
+	err = regulator_set_voltage(platform->g3d_regulator, vol, vol);
+	if (err) {
 		GPU_LOG(DVFS_ERROR, "failed to set voltage, voltage: %d\n", vol);
-		return -1;
+		return err;
 	}
 #endif /* CONFIG_REGULATOR */
 
 	_vol = vol;
 
 	gpu_update_voltage(platform);
+	KBASE_TRACE_ADD_EXYNOS(pkbdev, LSI_VOL_VALUE, NULL, NULL, 0u, vol);
 	GPU_LOG(DVFS_DEBUG, "[G3D] voltage set:%d\n", vol);
 	GPU_LOG(DVFS_DEBUG, "[G3D] voltage get:%d\n", platform->cur_voltage);
 
@@ -372,28 +375,34 @@ int gpu_set_voltage(struct exynos_context *platform, int vol)
 #ifdef CONFIG_REGULATOR
 int gpu_regulator_enable(struct exynos_context *platform)
 {
+	int err;
+
 	if (!platform->g3d_regulator) {
 		GPU_LOG(DVFS_ERROR, "g3d_regulator is not initialized\n");
-		return -1;
+		return -ENODEV;
 	}
 
-	if (regulator_enable(platform->g3d_regulator) != 0) {
+	err = regulator_enable(platform->g3d_regulator);
+	if (err) {
 		GPU_LOG(DVFS_ERROR, "failed to enable g3d regulator\n");
-		return -1;
+		return err;
 	}
 	return 0;
 }
 
 int gpu_regulator_disable(struct exynos_context *platform)
 {
+	int err;
+
 	if (!platform->g3d_regulator) {
 		GPU_LOG(DVFS_ERROR, "g3d_regulator is not initialized\n");
-		return -1;
+		return -ENODEV;
 	}
 
-	if (regulator_disable(platform->g3d_regulator) != 0) {
+	err = regulator_disable(platform->g3d_regulator);
+	if (err) {
 		GPU_LOG(DVFS_ERROR, "failed to disable g3d regulator\n");
-		return -1;
+		return err;
 	}
 	return 0;
 }
@@ -401,27 +410,33 @@ int gpu_regulator_disable(struct exynos_context *platform)
 int gpu_regulator_init(struct exynos_context *platform)
 {
 	int gpu_voltage = 0;
+	int err;
 
 	platform->g3d_regulator = regulator_get(NULL, "vdd_g3d");
 	if (IS_ERR(platform->g3d_regulator)) {
-		GPU_LOG(DVFS_ERROR, "failed to get mali t6xx regulator, 0x%p\n", platform->g3d_regulator);
+		err = PTR_ERR(platform->g3d_regulator);
+		GPU_LOG(DVFS_ERROR, "failed to get g3d regulator, 0x%p\n",
+				platform->g3d_regulator);
 		platform->g3d_regulator = NULL;
-		return -1;
+		return err;
 	}
 
-	if (gpu_regulator_enable(platform) != 0) {
-		GPU_LOG(DVFS_ERROR, "failed to enable mali t6xx regulator\n");
+	err = gpu_regulator_enable(platform);
+	if (err) {
+		GPU_LOG(DVFS_ERROR, "failed to enable g3d regulator\n");
 		platform->g3d_regulator = NULL;
-		return -1;
+		return err;
 	}
 
 	gpu_voltage = get_match_volt(ID_G3D, MALI_DVFS_BL_CONFIG_FREQ*1000);
 	if (gpu_voltage == 0)
 		gpu_voltage = GPU_DEFAULT_VOLTAGE;
 
-	if (gpu_set_voltage(platform, gpu_voltage) != 0) {
-		GPU_LOG(DVFS_ERROR, "failed to set mali t6xx operating voltage [%d]\n", gpu_voltage);
-		return -1;
+	err = gpu_set_voltage(platform, gpu_voltage);
+	if (err) {
+		GPU_LOG(DVFS_ERROR, "failed to set g3d regulator operating voltage [%d]\n",
+				gpu_voltage);
+		return err;
 	}
 
 	GPU_LOG(DVFS_INFO, "g3d regulator initialized\n");
