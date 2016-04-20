@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -42,10 +42,16 @@
 /* Support UK9 IOCTLS */
 #define BASE_LEGACY_UK9_SUPPORT 1
 
-typedef u64 base_mem_handle;
+typedef struct base_mem_handle {
+	struct {
+		u64 handle;
+	} basep;
+} base_mem_handle;
 
 #include "mali_base_mem_priv.h"
 #include "mali_kbase_profiling_gator_api.h"
+#include "mali_midg_coherency.h"
+#include "mali_kbase_gpu_id.h"
 
 /*
  * Dependency stuff, keep it private for now. May want to expose it if
@@ -59,6 +65,10 @@ typedef u64 base_mem_handle;
 #define BASEP_JD_SEM_WORD_NR(x)         ((x) >> BASEP_JD_SEM_PER_WORD_LOG2)
 #define BASEP_JD_SEM_MASK_IN_WORD(x)    (1 << ((x) & (BASEP_JD_SEM_PER_WORD - 1)))
 #define BASEP_JD_SEM_ARRAY_SIZE         BASEP_JD_SEM_WORD_NR(BASE_JD_ATOM_COUNT)
+
+/* Set/reset values for a software event */
+#define BASE_JD_SOFT_EVENT_SET             ((unsigned char)1)
+#define BASE_JD_SOFT_EVENT_RESET           ((unsigned char)0)
 
 #define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 3
 
@@ -184,7 +194,13 @@ enum {
 
 
 /**
- * @brief Memory types supported by @a base_mem_import
+ * enum base_mem_import_type - Memory types supported by @a base_mem_import
+ *
+ * @BASE_MEM_IMPORT_TYPE_INVALID: Invalid type
+ * @BASE_MEM_IMPORT_TYPE_UMP: UMP import. Handle type is ump_secure_id.
+ * @BASE_MEM_IMPORT_TYPE_UMM: UMM import. Handle type is a file descriptor (int)
+ * @BASE_MEM_IMPORT_TYPE_USER_BUFFER: User buffer import. Handle is a
+ * base_mem_import_user_buffer
  *
  * Each type defines what the supported handle type is.
  *
@@ -196,21 +212,52 @@ enum {
  */
 typedef enum base_mem_import_type {
 	BASE_MEM_IMPORT_TYPE_INVALID = 0,
-	/** UMP import. Handle type is ump_secure_id. */
 	BASE_MEM_IMPORT_TYPE_UMP = 1,
-	/** UMM import. Handle type is a file descriptor (int) */
-	BASE_MEM_IMPORT_TYPE_UMM = 2
+	BASE_MEM_IMPORT_TYPE_UMM = 2,
+	BASE_MEM_IMPORT_TYPE_USER_BUFFER = 3
 } base_mem_import_type;
 
 /**
- * @brief Invalid memory handle type.
- * Return value from functions returning @a base_mem_handle on error.
+ * struct base_mem_import_user_buffer - Handle of an imported user buffer
+ *
+ * @ptr:	kbase_pointer to imported user buffer
+ * @length:	length of imported user buffer in bytes
+ *
+ * This structure is used to represent a handle of an imported user buffer.
  */
-#define BASE_MEM_INVALID_HANDLE                (0ull  << 12)
+
+struct base_mem_import_user_buffer {
+	kbase_pointer ptr;
+	u64 length;
+};
+
+/**
+ * @brief Invalid memory handle.
+ *
+ * Return value from functions returning @ref base_mem_handle on error.
+ *
+ * @warning @ref base_mem_handle_new_invalid must be used instead of this macro
+ *          in C++ code or other situations where compound literals cannot be used.
+ */
+#define BASE_MEM_INVALID_HANDLE ((base_mem_handle) { {BASEP_MEM_INVALID_HANDLE} })
+
+/**
+ * @brief Special write-alloc memory handle.
+ *
+ * A special handle is used to represent a region where a special page is mapped
+ * with a write-alloc cache setup, typically used when the write result of the
+ * GPU isn't needed, but the GPU must write anyway.
+ *
+ * @warning @ref base_mem_handle_new_write_alloc must be used instead of this macro
+ *          in C++ code or other situations where compound literals cannot be used.
+ */
+#define BASE_MEM_WRITE_ALLOC_PAGES_HANDLE ((base_mem_handle) { {BASEP_MEM_WRITE_ALLOC_PAGES_HANDLE} })
+
+#define BASEP_MEM_INVALID_HANDLE               (0ull  << 12)
 #define BASE_MEM_MMU_DUMP_HANDLE               (1ull  << 12)
 #define BASE_MEM_TRACE_BUFFER_HANDLE           (2ull  << 12)
 #define BASE_MEM_MAP_TRACKING_HANDLE           (3ull  << 12)
-#define BASE_MEM_WRITE_ALLOC_PAGES_HANDLE      (4ull  << 12)
+#define BASEP_MEM_WRITE_ALLOC_PAGES_HANDLE     (4ull  << 12)
 /* reserved handles ..-64<<PAGE_SHIFT> for future special handles */
 #define BASE_MEM_COOKIE_BASE                   (64ul  << 12)
 #define BASE_MEM_FIRST_FREE_ADDRESS            ((BITS_PER_LONG << 12) + \
@@ -218,6 +265,7 @@ typedef enum base_mem_import_type {
 
 /* Mask to detect 4GB boundary alignment */
 #define BASE_MEM_MASK_4GB  0xfffff000UL
+
 
 /* Bit mask of cookies used for for memory allocation setup */
 #define KBASE_COOKIE_MASK  ~1UL /* bit 0 is reserved */
@@ -457,15 +505,25 @@ typedef u16 base_jd_core_req;
 #define BASE_JD_REQ_SOFT_REPLAY                 (BASE_JD_REQ_SOFT_JOB | 0x4)
 
 /**
+ * SW only requirement: event wait/trigger job.
+ *
+ * - BASE_JD_REQ_SOFT_EVENT_WAIT: this job will block until the event is set.
+ * - BASE_JD_REQ_SOFT_EVENT_SET: this job sets the event, thus unblocks the
+ *   other waiting jobs. It completes immediately.
+ * - BASE_JD_REQ_SOFT_EVENT_RESET: this job resets the event, making it
+ *   possible for other jobs to wait upon. It completes immediately.
+ */
+#define BASE_JD_REQ_SOFT_EVENT_WAIT             (BASE_JD_REQ_SOFT_JOB | 0x5)
+#define BASE_JD_REQ_SOFT_EVENT_SET              (BASE_JD_REQ_SOFT_JOB | 0x6)
+#define BASE_JD_REQ_SOFT_EVENT_RESET            (BASE_JD_REQ_SOFT_JOB | 0x7)
+
+/**
  * HW Requirement: Requires Compute shaders (but not Vertex or Geometry Shaders)
  *
  * This indicates that the Job Chain contains Midgard Jobs of the 'Compute Shaders' type.
  *
  * In contrast to @ref BASE_JD_REQ_CS, this does \b not indicate that the Job
  * Chain contains 'Geometry Shader' or 'Vertex Shader' jobs.
- *
- * @note This is a more flexible variant of the @ref BASE_CONTEXT_HINT_ONLY_COMPUTE flag,
- * allowing specific jobs to be marked as 'Only Compute' instead of the entire context
  */
 #define BASE_JD_REQ_ONLY_COMPUTE    (1U << 10)
 
@@ -754,11 +812,12 @@ static inline void base_jd_fence_wait_setup_v2(struct base_jd_atom_v2 *atom, str
 /**
  * @brief External resource info initialization.
  *
- * Sets up a external resource object to reference
+ * Sets up an external resource object to reference
  * a memory allocation and the type of access requested.
  *
  * @param[in] res     The resource object to initialize
- * @param     handle  The handle to the imported memory object
+ * @param     handle  The handle to the imported memory object, must be
+ *                    obtained by calling @ref base_mem_as_import_handle().
  * @param     access  The type of access requested
  */
 static inline void base_external_resource_init(struct base_external_resource *res, struct base_import_handle handle, base_external_resource_access access)
@@ -1365,8 +1424,7 @@ struct gpu_raw_gpu_props {
 	u64 shader_present;
 	u64 tiler_present;
 	u64 l2_present;
-	u32 coherency_enabled;
-	u32 unused_1; /* keep for backward compatibility */
+	u64 unused_1; /* keep for backward compatibility */
 
 	u32 l2_features;
 	u32 suspend_size; /* API 8.2+ */
@@ -1387,7 +1445,11 @@ struct gpu_raw_gpu_props {
 	u32 thread_max_barrier_size;
 	u32 thread_features;
 
-	u32 coherency_features;
+	/*
+	 * Note: This is the _selected_ coherency mode rather than the
+	 * available modes as exposed in the coherency_features register.
+	 */
+	u32 coherency_mode;
 };
 
 /**
@@ -1441,28 +1503,7 @@ enum base_context_create_flags {
 	/** Base context is a 'System Monitor' context for Hardware counters.
 	 *
 	 * One important side effect of this is that job submission is disabled. */
-	BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED = (1u << 1),
-
-	/** Base context flag indicating a 'hint' that this context uses Compute
-	 * Jobs only.
-	 *
-	 * Specifially, this means that it only sends atoms that <b>do not</b>
-	 * contain the following @ref base_jd_core_req :
-	 * - BASE_JD_REQ_FS
-	 * - BASE_JD_REQ_T
-	 *
-	 * Violation of these requirements will cause the Job-Chains to be rejected.
-	 *
-	 * In addition, it is inadvisable for the atom's Job-Chains to contain Jobs
-	 * of the following @ref gpu_job_type (whilst it may work now, it may not
-	 * work in future) :
-	 * - @ref GPU_JOB_VERTEX
-	 * - @ref GPU_JOB_GEOMETRY
-	 *
-	 * @note An alternative to using this is to specify the BASE_JD_REQ_ONLY_COMPUTE
-	 * requirement in atoms.
-	 */
-	BASE_CONTEXT_HINT_ONLY_COMPUTE = (1u << 2)
+	BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED = (1u << 1)
 };
 
 /**
@@ -1470,15 +1511,13 @@ enum base_context_create_flags {
  */
 #define BASE_CONTEXT_CREATE_ALLOWED_FLAGS \
 	(((u32)BASE_CONTEXT_CCTX_EMBEDDED) | \
-	  ((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED) | \
-	  ((u32)BASE_CONTEXT_HINT_ONLY_COMPUTE))
+	  ((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED))
 
 /**
  * Bitpattern describing the ::base_context_create_flags that can be passed to the kernel
  */
 #define BASE_CONTEXT_CREATE_KERNEL_FLAGS \
-	(((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED) | \
-	  ((u32)BASE_CONTEXT_HINT_ONLY_COMPUTE))
+	((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED)
 
 /**
  * Private flags used on the base context

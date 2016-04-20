@@ -386,7 +386,18 @@ static const struct file_operations kbasep_debug_job_fault_fops = {
 	.release = debug_job_fault_release,
 };
 
-static int kbase_job_fault_event_init(struct kbase_device *kbdev)
+/*
+ *  Initialize debugfs entry for job fault dump
+ */
+void kbase_debug_job_fault_debugfs_init(struct kbase_device *kbdev)
+{
+	debugfs_create_file("job_fault", S_IRUGO,
+			kbdev->mali_debugfs_directory, kbdev,
+			&kbasep_debug_job_fault_fops);
+}
+
+
+int kbase_debug_job_fault_dev_init(struct kbase_device *kbdev)
 {
 
 	INIT_LIST_HEAD(&kbdev->job_fault_event_list);
@@ -396,23 +407,22 @@ static int kbase_job_fault_event_init(struct kbase_device *kbdev)
 
 	kbdev->job_fault_resume_workq = alloc_workqueue(
 			"kbase_job_fault_resume_work_queue", WQ_MEM_RECLAIM, 1);
+	if (!kbdev->job_fault_resume_workq)
+		return -ENOMEM;
+
+	kbdev->job_fault_debug = false;
 
 	return 0;
 }
 
 /*
- *  Initialize debugfs entry for job fault dump
+ * Release the relevant resource per device
  */
-void kbase_debug_job_fault_dev_init(struct kbase_device *kbdev)
+void kbase_debug_job_fault_dev_term(struct kbase_device *kbdev)
 {
-	debugfs_create_file("job_fault", S_IRUGO,
-			kbdev->mali_debugfs_directory, kbdev,
-			&kbasep_debug_job_fault_fops);
-
-	kbase_job_fault_event_init(kbdev);
-	kbdev->job_fault_debug = false;
-
+	destroy_workqueue(kbdev->job_fault_resume_workq);
 }
+
 
 /*
  *  Initialize the relevant data structure per context
@@ -423,12 +433,12 @@ void kbase_debug_job_fault_context_init(struct kbase_context *kctx)
 	/* We need allocate double size register range
 	 * Because this memory will keep the register address and value
 	 */
-	kctx->reg_dump = kmalloc(0x4000 * 2, GFP_KERNEL);
+	kctx->reg_dump = vmalloc(0x4000 * 2);
 	if (kctx->reg_dump == NULL)
 		return;
 
 	if (kbase_debug_job_fault_reg_snapshot_init(kctx, 0x4000) == false) {
-		kfree(kctx->reg_dump);
+		vfree(kctx->reg_dump);
 		kctx->reg_dump = NULL;
 	}
 	INIT_LIST_HEAD(&kctx->job_fault_resume_event_list);
@@ -439,9 +449,22 @@ void kbase_debug_job_fault_context_init(struct kbase_context *kctx)
 /*
  *  release the relevant resource per context
  */
-void kbase_debug_job_fault_context_exit(struct kbase_context *kctx)
+void kbase_debug_job_fault_context_term(struct kbase_context *kctx)
 {
-	kfree(kctx->reg_dump);
+	vfree(kctx->reg_dump);
 }
 
-#endif
+#else /* CONFIG_DEBUG_FS */
+
+int kbase_debug_job_fault_dev_init(struct kbase_device *kbdev)
+{
+	kbdev->job_fault_debug = false;
+
+	return 0;
+}
+
+void kbase_debug_job_fault_dev_term(struct kbase_device *kbdev)
+{
+}
+
+#endif /* CONFIG_DEBUG_FS */

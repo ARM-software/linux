@@ -22,6 +22,7 @@
  */
 
 #include <mali_kbase.h>
+#include <mali_kbase_config_defaults.h>
 #include <mali_midg_regmap.h>
 #include <backend/gpu/mali_kbase_device_internal.h>
 #include <backend/gpu/mali_kbase_pm_internal.h>
@@ -78,6 +79,7 @@ int kbase_instr_hwcnt_enable_internal(struct kbase_device *kbdev,
 	u32 irq_mask;
 	int ret;
 	u64 shader_cores_needed;
+	u32 prfcnt_config;
 
 	KBASE_DEBUG_ASSERT(NULL == kbdev->hwcnt.suspended_kctx);
 
@@ -151,9 +153,11 @@ int kbase_instr_hwcnt_enable_internal(struct kbase_device *kbdev,
 	kbase_pm_request_l2_caches(kbdev);
 
 	/* Configure */
+	prfcnt_config = kctx->as_nr << PRFCNT_CONFIG_AS_SHIFT;
+
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(PRFCNT_CONFIG),
-					(kctx->as_nr << PRFCNT_CONFIG_AS_SHIFT)
-					| PRFCNT_CONFIG_MODE_OFF, kctx);
+			prfcnt_config | PRFCNT_CONFIG_MODE_OFF, kctx);
+
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(PRFCNT_BASE_LO),
 					setup->dump_buffer & 0xFFFFFFFF, kctx);
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(PRFCNT_BASE_HI),
@@ -174,8 +178,7 @@ int kbase_instr_hwcnt_enable_internal(struct kbase_device *kbdev,
 							setup->tiler_bm, kctx);
 
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(PRFCNT_CONFIG),
-				(kctx->as_nr << PRFCNT_CONFIG_AS_SHIFT) |
-				PRFCNT_CONFIG_MODE_MANUAL, kctx);
+			prfcnt_config | PRFCNT_CONFIG_MODE_MANUAL, kctx);
 
 	/* If HW has PRLAM-8186 we can now re-enable the tiler HW counters dump
 	 */

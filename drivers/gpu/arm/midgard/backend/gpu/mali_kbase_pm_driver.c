@@ -840,30 +840,6 @@ void kbase_pm_enable_interrupts(struct kbase_device *kbdev)
 
 KBASE_EXPORT_TEST_API(kbase_pm_enable_interrupts);
 
-void kbase_pm_enable_interrupts_mmu_mask(struct kbase_device *kbdev, u32 mask)
-{
-	unsigned long flags;
-
-	KBASE_DEBUG_ASSERT(NULL != kbdev);
-	/*
-	 * Clear all interrupts,
-	 * and unmask them all.
-	 */
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
-	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_CLEAR), GPU_IRQ_REG_ALL,
-									NULL);
-	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK), GPU_IRQ_REG_ALL,
-									NULL);
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
-
-	kbase_reg_write(kbdev, JOB_CONTROL_REG(JOB_IRQ_CLEAR), 0xFFFFFFFF,
-									NULL);
-	kbase_reg_write(kbdev, JOB_CONTROL_REG(JOB_IRQ_MASK), 0xFFFFFFFF, NULL);
-
-	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_CLEAR), 0xFFFFFFFF, NULL);
-	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_MASK), mask, NULL);
-}
-
 void kbase_pm_disable_interrupts(struct kbase_device *kbdev)
 {
 	unsigned long flags;
@@ -921,6 +897,7 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 
 	if (is_resume && kbdev->pm.backend.callback_power_resume) {
 		kbdev->pm.backend.callback_power_resume(kbdev);
+		return;
 	} else if (kbdev->pm.backend.callback_power_on) {
 		kbdev->pm.backend.callback_power_on(kbdev);
 		/* If your platform properly keeps the GPU state you may use the
@@ -1081,13 +1058,22 @@ static void kbase_pm_hw_issues_detect(struct kbase_device *kbdev)
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10327))
 		kbdev->hw_quirks_sc |= SC_SDC_DISABLE_OQ_DISCARD;
 
+#ifdef CONFIG_MALI_PRFCNT_SET_SECONDARY
 	/* Enable alternative hardware counter selection if configured. */
-	if (DEFAULT_ALTERNATIVE_HWC)
+	if (!GPU_ID_IS_NEW_FORMAT(prod_id))
 		kbdev->hw_quirks_sc |= SC_ALT_COUNTERS;
+#endif
 
 	/* Needed due to MIDBASE-2795. ENABLE_TEXGRD_FLAGS. See PRLAM-10797. */
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10797))
 		kbdev->hw_quirks_sc |= SC_ENABLE_TEXGRD_FLAGS;
+
+	if (!kbase_hw_has_issue(kbdev, GPUCORE_1619)) {
+		if (prod_id < 0x760 || prod_id == 0x6956) /* T60x, T62x, T72x */
+			kbdev->hw_quirks_sc |= SC_LS_ATTR_CHECK_DISABLE;
+		else if (prod_id >= 0x760 && prod_id <= 0x880) /* T76x, T8xx */
+			kbdev->hw_quirks_sc |= SC_LS_ALLOW_ATTR_TYPES;
+	}
 
 	kbdev->hw_quirks_tiler = kbase_reg_read(kbdev,
 			GPU_CONTROL_REG(TILER_CONFIG), NULL);
@@ -1253,10 +1239,10 @@ int kbase_pm_init_hw(struct kbase_device *kbdev, unsigned int flags)
 							RESET_COMPLETED) {
 		/* The interrupt is set in the RAWSTAT; this suggests that the
 		 * interrupts are not getting to the CPU */
-		dev_warn(kbdev->dev, "Reset interrupt didn't reach CPU. Check interrupt assignments.\n");
+		dev_err(kbdev->dev, "Reset interrupt didn't reach CPU. Check interrupt assignments.\n");
 		/* If interrupts aren't working we can't continue. */
 		destroy_hrtimer_on_stack(&rtdata.timer);
-		goto out;
+		return -EINVAL;
 	}
 
 	/* The GPU doesn't seem to be responding to the reset so try a hard

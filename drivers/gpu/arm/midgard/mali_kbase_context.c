@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -89,6 +89,7 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	mutex_init(&kctx->reg_lock);
 
 	INIT_LIST_HEAD(&kctx->waiting_soft_jobs);
+	spin_lock_init(&kctx->waiting_soft_jobs_lock);
 #ifdef CONFIG_KDS
 	INIT_LIST_HEAD(&kctx->waiting_kds_resource);
 #endif
@@ -125,6 +126,10 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	kctx->id = atomic_add_return(1, &(kbdev->ctx_num)) - 1;
 
 	mutex_init(&kctx->vinstr_cli_lock);
+
+	hrtimer_init(&kctx->soft_event_timeout, CLOCK_MONOTONIC,
+		     HRTIMER_MODE_REL);
+	kctx->soft_event_timeout.function = &kbasep_soft_event_timeout_worker;
 
 	return kctx;
 
@@ -261,9 +266,6 @@ int kbase_context_set_create_flags(struct kbase_context *kctx, u32 flags)
 	/* Translate the flags */
 	if ((flags & BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED) == 0)
 		js_kctx_info->ctx.flags &= ~((u32) KBASE_CTX_FLAG_SUBMIT_DISABLED);
-
-	if ((flags & BASE_CONTEXT_HINT_ONLY_COMPUTE) != 0)
-		js_kctx_info->ctx.flags |= (u32) KBASE_CTX_FLAG_HINT_ONLY_COMPUTE;
 
 	/* Latch the initial attributes into the Job Scheduler */
 	kbasep_js_ctx_attr_set_initial_attrs(kctx->kbdev, kctx);

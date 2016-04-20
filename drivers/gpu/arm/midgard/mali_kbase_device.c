@@ -159,6 +159,8 @@ int kbase_device_init(struct kbase_device * const kbdev)
 	 */
 	kbase_hw_set_features_mask(kbdev);
 
+	kbase_gpuprops_set_features(kbdev);
+
 	/* On Linux 4.0+, dma coherency is determined from device tree */
 #if defined(CONFIG_ARM64) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 	set_dma_ops(kbdev->dev, &noncoherent_swiotlb_dma_ops);
@@ -206,7 +208,7 @@ int kbase_device_init(struct kbase_device * const kbdev)
 	for (i = 0; i < FBDUMP_CONTROL_MAX; i++)
 		kbdev->kbase_profiling_controls[i] = 0;
 
-		kbase_debug_assert_register_hook(&kbasep_trace_hook_wrapper, kbdev);
+	kbase_debug_assert_register_hook(&kbasep_trace_hook_wrapper, kbdev);
 
 	atomic_set(&kbdev->ctx_num, 0);
 
@@ -255,12 +257,19 @@ void kbase_device_free(struct kbase_device *kbdev)
 	kfree(kbdev);
 }
 
-void kbase_device_trace_buffer_install(struct kbase_context *kctx, u32 *tb, size_t size)
+int kbase_device_trace_buffer_install(
+		struct kbase_context *kctx, u32 *tb, size_t size)
 {
 	unsigned long flags;
 
 	KBASE_DEBUG_ASSERT(kctx);
 	KBASE_DEBUG_ASSERT(tb);
+
+	/* Interface uses 16-bit value to track last accessed entry. Each entry
+	 * is composed of two 32-bit words.
+	 * This limits the size that can be handled without an overflow. */
+	if (0xFFFF * (2 * sizeof(u32)) < size)
+		return -EINVAL;
 
 	/* set up the header */
 	/* magic number in the first 4 bytes */
@@ -276,6 +285,8 @@ void kbase_device_trace_buffer_install(struct kbase_context *kctx, u32 *tb, size
 	kctx->jctx.tb_wrap_offset = size / 8;
 	kctx->jctx.tb = tb;
 	spin_unlock_irqrestore(&kctx->jctx.tb_lock, flags);
+
+	return 0;
 }
 
 void kbase_device_trace_buffer_uninstall(struct kbase_context *kctx)

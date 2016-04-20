@@ -107,13 +107,14 @@ void kbase_tlstream_stats(u32 *bytes_collected, u32 *bytes_generated);
  *                                     summary
  * @context: name of the context object
  * @nr:      context number
+ * @tgid:    thread Group Id
  *
  * Function emits a timeline message informing about context creation. Context
  * is created with context number (its attribute), that can be used to link
  * kbase context with userspace context.
  * This message is directed to timeline summary stream.
  */
-void kbase_tlstream_tl_summary_new_ctx(void *context, u32 nr);
+void kbase_tlstream_tl_summary_new_ctx(void *context, u32 nr, u32 tgid);
 
 /**
  * kbase_tlstream_tl_summary_new_gpu - create GPU object in timeline summary
@@ -178,12 +179,13 @@ void kbase_tlstream_tl_summary_lifelink_as_gpu(void *as, void *gpu);
  * kbase_tlstream_tl_new_ctx - create context object in timeline
  * @context: name of the context object
  * @nr:      context number
+ * @tgid:    thread Group Id
  *
  * Function emits a timeline message informing about context creation. Context
  * is created with context number (its attribute), that can be used to link
  * kbase context with userspace context.
  */
-void kbase_tlstream_tl_new_ctx(void *context, u32 nr);
+void kbase_tlstream_tl_new_ctx(void *context, u32 nr, u32 tgid);
 
 /**
  * kbase_tlstream_tl_new_atom - create atom object in timeline
@@ -215,14 +217,14 @@ void kbase_tlstream_tl_del_ctx(void *context);
 void kbase_tlstream_tl_del_atom(void *atom);
 
 /**
- * kbase_tlstream_tl_ret_gpu_ctx - retain GPU by context
- * @gpu:     name of the GPU object
+ * kbase_tlstream_tl_ret_ctx_lpu - retain context by LPU
  * @context: name of the context object
+ * @lpu:     name of the Logical Processing Unit object
  *
- * Function emits a timeline message informing that GPU object is being held
- * by context and must not be deleted unless it is released.
+ * Function emits a timeline message informing that context is being held
+ * by LPU and must not be deleted unless it is released.
  */
-void kbase_tlstream_tl_ret_gpu_ctx(void *gpu, void *context);
+void kbase_tlstream_tl_ret_ctx_lpu(void *context, void *lpu);
 
 /**
  * kbase_tlstream_tl_ret_atom_ctx - retain atom by context
@@ -236,23 +238,25 @@ void kbase_tlstream_tl_ret_atom_ctx(void *atom, void *context);
 
 /**
  * kbase_tlstream_tl_ret_atom_lpu - retain atom by LPU
- * @atom: name of the atom object
- * @lpu:  name of the Logical Processing Unit object
+ * @atom:              name of the atom object
+ * @lpu:               name of the Logical Processing Unit object
+ * @attrib_match_list: list containing match operator attributes
  *
  * Function emits a timeline message informing that atom object is being held
  * by LPU and must not be deleted unless it is released.
  */
-void kbase_tlstream_tl_ret_atom_lpu(void *atom, void *lpu);
+void kbase_tlstream_tl_ret_atom_lpu(
+		void *atom, void *lpu, const char *attrib_match_list);
 
 /**
- * kbase_tlstream_tl_nret_gpu_ctx - release GPU by context
- * @gpu:     name of the GPU object
+ * kbase_tlstream_tl_nret_ctx_lpu - release context by LPU
  * @context: name of the context object
+ * @lpu:     name of the Logical Processing Unit object
  *
- * Function emits a timeline message informing that GPU object is being released
- * by context.
+ * Function emits a timeline message informing that context is being released
+ * by LPU object.
  */
-void kbase_tlstream_tl_nret_gpu_ctx(void *gpu, void *context);
+void kbase_tlstream_tl_nret_ctx_lpu(void *context, void *lpu);
 
 /**
  * kbase_tlstream_tl_nret_atom_ctx - release atom by context
@@ -315,6 +319,16 @@ void kbase_tlstream_tl_ret_atom_as(void *atom, void *as);
 void kbase_tlstream_tl_nret_atom_as(void *atom, void *as);
 
 /**
+ * kbase_tlstream_tl_dep_atom_atom - parent atom depends on child atom
+ * @atom1: name of the child atom object
+ * @atom2: name of the parent atom object that depends on child atom
+ *
+ * Function emits a timeline message informing that parent atom waits for
+ * child atom object to be completed before start its execution.
+ */
+void kbase_tlstream_tl_dep_atom_atom(void *atom1, void *atom2);
+
+/**
  * kbase_tlstream_tl_attrib_atom_config - atom job slot attributes
  * @atom:     name of the atom object
  * @jd:       job descriptor address
@@ -363,18 +377,18 @@ void kbase_tlstream_aux_job_softstop(u32 js_id);
 /**
  * kbase_tlstream_aux_pagefault - timeline message: MMU page fault event
  *                                resulting in new pages being mapped
- * @mmu_as:     MMU address space number
- * @page_count: number of currently used pages
+ * @ctx_nr:            kernel context number
+ * @page_count_change: number of pages to be added
  */
-void kbase_tlstream_aux_pagefault(u32 mmu_as, u32 page_count);
+void kbase_tlstream_aux_pagefault(u32 ctx_nr, u64 page_count_change);
 
 /**
  * kbase_tlstream_aux_pagesalloc - timeline message: total number of allocated
  *                                 pages is changed
- * @page_count_change: number of pages to be added or subtracted (according to
- *                     the sign)
+ * @ctx_nr:     kernel context number
+ * @page_count: number of pages used by the context
  */
-void kbase_tlstream_aux_pagesalloc(s64 page_count_change);
+void kbase_tlstream_aux_pagesalloc(u32 ctx_nr, u64 page_count);
 
 #endif /* _KBASE_TLSTREAM_H */
 

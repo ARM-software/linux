@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -75,6 +75,7 @@ enum kbase_memory_type {
 	KBASE_MEM_TYPE_NATIVE,
 	KBASE_MEM_TYPE_IMPORTED_UMP,
 	KBASE_MEM_TYPE_IMPORTED_UMM,
+	KBASE_MEM_TYPE_IMPORTED_USER_BUF,
 	KBASE_MEM_TYPE_ALIAS,
 	KBASE_MEM_TYPE_TB,
 	KBASE_MEM_TYPE_RAW
@@ -136,6 +137,15 @@ struct kbase_mem_phy_alloc {
 		} alias;
 		/* Used by type = (KBASE_MEM_TYPE_NATIVE, KBASE_MEM_TYPE_TB) */
 		struct kbase_context *kctx;
+		struct {
+			unsigned long address;
+			unsigned long size;
+			unsigned long nr_pages;
+			struct page **pages;
+			unsigned int current_mapping_usage_count;
+			struct task_struct *owner;
+			dma_addr_t *dma_addrs;
+		} user_buf;
 	} imported;
 };
 
@@ -308,12 +318,22 @@ static inline size_t kbase_reg_current_backed_size(struct kbase_va_region *reg)
 static inline struct kbase_mem_phy_alloc *kbase_alloc_create(size_t nr_pages, enum kbase_memory_type type)
 {
 	struct kbase_mem_phy_alloc *alloc;
-	const size_t alloc_size =
-			sizeof(*alloc) + sizeof(*alloc->pages) * nr_pages;
+	size_t alloc_size = sizeof(*alloc) + sizeof(*alloc->pages) * nr_pages;
+	size_t per_page_size = sizeof(*alloc->pages);
 
-	/* Prevent nr_pages*sizeof + sizeof(*alloc) from wrapping around. */
+	/* Imported pages may have page private data already in use */
+	if (type == KBASE_MEM_TYPE_IMPORTED_USER_BUF) {
+		alloc_size += nr_pages *
+				sizeof(*alloc->imported.user_buf.dma_addrs);
+		per_page_size += sizeof(*alloc->imported.user_buf.dma_addrs);
+	}
+
+	/*
+	 * Prevent nr_pages*per_page_size + sizeof(*alloc) from
+	 * wrapping around.
+	 */
 	if (nr_pages > ((((size_t) -1) - sizeof(*alloc))
-			/ sizeof(*alloc->pages)))
+			/ per_page_size))
 		return ERR_PTR(-ENOMEM);
 
 	/* Allocate based on the size to reduce internal fragmentation of vmem */
@@ -335,6 +355,10 @@ static inline struct kbase_mem_phy_alloc *kbase_alloc_create(size_t nr_pages, en
 	alloc->pages = (void *)(alloc + 1);
 	INIT_LIST_HEAD(&alloc->mappings);
 	alloc->type = type;
+
+	if (type == KBASE_MEM_TYPE_IMPORTED_USER_BUF)
+		alloc->imported.user_buf.dma_addrs =
+				(void *) (alloc->pages + nr_pages);
 
 	return alloc;
 }
@@ -748,7 +772,7 @@ static inline void kbase_set_dma_addr(struct page *p, dma_addr_t dma_addr)
 	SetPagePrivate(p);
 	if (sizeof(dma_addr_t) > sizeof(p->private)) {
 		/* on 32-bit ARM with LPAE dma_addr_t becomes larger, but the
-		 * private filed stays the same. So we have to be clever and
+		 * private field stays the same. So we have to be clever and
 		 * use the fact that we only store DMA addresses of whole pages,
 		 * so the low bits should be zero */
 		KBASE_DEBUG_ASSERT(!(dma_addr & (PAGE_SIZE - 1)));

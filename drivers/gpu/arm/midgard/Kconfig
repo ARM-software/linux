@@ -57,19 +57,11 @@ config MALI_MIPE_ENABLED
 endchoice
 
 config MALI_MIDGARD_DVFS
-	bool "Enable DVFS"
-	depends on MALI_MIDGARD
+	bool "Enable legacy DVFS"
+	depends on MALI_MIDGARD && !MALI_DEVFREQ && !MALI_PLATFORM_DEVICETREE
 	default n
 	help
-	  Choose this option to enable DVFS in the Mali Midgard DDK.
-
-config MALI_MIDGARD_RT_PM
-	bool "Enable Runtime power management"
-	depends on MALI_MIDGARD
-	depends on PM_RUNTIME
-	default n
-	help
-	  Choose this option to enable runtime power management in the Mali Midgard DDK.
+	  Choose this option to enable legacy DVFS in the Mali Midgard DDK.
 
 config MALI_MIDGARD_ENABLE_TRACE
 	bool "Enable kbase tracing"
@@ -78,13 +70,6 @@ config MALI_MIDGARD_ENABLE_TRACE
 	help
 	  Enables tracing in kbase.  Trace log available through
 	  the "mali_trace" debugfs file, when the CONFIG_DEBUG_FS is enabled
-
-config MALI_MIDGARD_DEBUG_SYS
-	bool "Enable sysfs for the Mali Midgard DDK "
-	depends on MALI_MIDGARD && SYSFS
-	default n
-	help
-	  Enables sysfs for the Mali Midgard DDK. Set/Monitor the Mali Midgard DDK
 
 config MALI_DEVFREQ
 	bool "devfreq support for Mali"
@@ -107,9 +92,22 @@ menuconfig MALI_EXPERT
 	  Enabling this option and modifying the default settings may produce a driver with performance or
 	  other limitations.
 
+config MALI_PRFCNT_SET_SECONDARY
+	bool "Use secondary set of performance counters"
+	depends on MALI_MIDGARD && MALI_EXPERT
+	default n
+	help
+	  Select this option to use secondary set of performance counters. Kernel
+	  features that depend on an access to the primary set of counters may
+	  become unavailable. Enabling this option will prevent power management
+	  from working optimally and may cause instrumentation tools to return
+	  bogus results.
+
+	  If unsure, say N.
+
 config MALI_DEBUG_SHADER_SPLIT_FS
 	bool "Allow mapping of shader cores via sysfs"
-	depends on MALI_MIDGARD && MALI_MIDGARD_DEBUG_SYS && MALI_EXPERT
+	depends on MALI_MIDGARD && MALI_EXPERT
 	default n
 	help
 	  Select this option to provide a sysfs entry for runtime configuration of shader
@@ -128,9 +126,23 @@ config MALI_PLATFORM_FAKE
 choice
 	prompt "Platform configuration"
 	depends on MALI_MIDGARD && MALI_EXPERT
-	default MALI_PLATFORM_VEXPRESS
+	default MALI_PLATFORM_DEVICETREE
 	help
 	  Select the SOC platform that contains a Mali Midgard GPU
+
+config MALI_PLATFORM_DEVICETREE
+	bool "Device Tree platform"
+	depends on OF
+	help
+	  Select this option to use Device Tree with the Mali driver.
+
+	  When using this option the Mali driver will get the details of the
+	  GPU hardware from the Device Tree. This means that the same driver
+	  binary can run on multiple platforms as long as all the GPU hardware
+	  details are described in the device tree.
+
+	  Device Tree is the recommended method for the Mali driver platform
+	  integration.
 
 config MALI_PLATFORM_VEXPRESS
 	depends on ARCH_VEXPRESS && (ARCH_VEXPRESS_CA9X4 || ARCH_VEXPRESS_CA15X4)

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -891,10 +891,10 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 
 	/* find the region where the virtual address is contained */
 	reg = kbase_region_tracker_find_region_enclosing_address(kctx,
-			sset->mem_handle);
+			sset->mem_handle.basep.handle);
 	if (!reg) {
 		dev_warn(kctx->kbdev->dev, "Can't find region at VA 0x%016llX",
-				sset->mem_handle);
+				sset->mem_handle.basep.handle);
 		err = -EINVAL;
 		goto out_unlock;
 	}
@@ -908,7 +908,7 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 	map = kbasep_find_enclosing_cpu_mapping_of_region(reg, start, size);
 	if (!map) {
 		dev_warn(kctx->kbdev->dev, "Can't find CPU mapping 0x%016lX for VA 0x%016llX",
-				start, sset->mem_handle);
+				start, sset->mem_handle.basep.handle);
 		err = -EINVAL;
 		goto out_unlock;
 	}
@@ -1124,6 +1124,8 @@ int kbase_alloc_phy_pages_helper(
 	struct kbase_mem_phy_alloc *alloc,
 	size_t nr_pages_requested)
 {
+	int new_page_count __maybe_unused;
+
 	KBASE_DEBUG_ASSERT(alloc);
 	KBASE_DEBUG_ASSERT(alloc->type == KBASE_MEM_TYPE_NATIVE);
 	KBASE_DEBUG_ASSERT(alloc->imported.kctx);
@@ -1131,7 +1133,8 @@ int kbase_alloc_phy_pages_helper(
 	if (nr_pages_requested == 0)
 		goto done; /*nothing to do*/
 
-	kbase_atomic_add_pages(nr_pages_requested, &alloc->imported.kctx->used_pages);
+	new_page_count = kbase_atomic_add_pages(
+			nr_pages_requested, &alloc->imported.kctx->used_pages);
 	kbase_atomic_add_pages(nr_pages_requested, &alloc->imported.kctx->kbdev->memdev.used_pages);
 
 	/* Increase mm counters before we allocate pages so that this
@@ -1143,7 +1146,9 @@ int kbase_alloc_phy_pages_helper(
 		goto no_alloc;
 
 #if defined(CONFIG_MALI_MIPE_ENABLED)
-	kbase_tlstream_aux_pagesalloc((s64)nr_pages_requested);
+	kbase_tlstream_aux_pagesalloc(
+			(u32)alloc->imported.kctx->id,
+			(u64)new_page_count);
 #endif
 
 	alloc->nents += nr_pages_requested;
@@ -1164,6 +1169,7 @@ int kbase_free_phy_pages_helper(
 {
 	bool syncback;
 	phys_addr_t *start_free;
+	int new_page_count __maybe_unused;
 
 	KBASE_DEBUG_ASSERT(alloc);
 	KBASE_DEBUG_ASSERT(alloc->type == KBASE_MEM_TYPE_NATIVE);
@@ -1185,11 +1191,14 @@ int kbase_free_phy_pages_helper(
 
 	alloc->nents -= nr_pages_to_free;
 	kbase_process_page_usage_dec(alloc->imported.kctx, nr_pages_to_free);
-	kbase_atomic_sub_pages(nr_pages_to_free, &alloc->imported.kctx->used_pages);
+	new_page_count = kbase_atomic_sub_pages(
+			nr_pages_to_free, &alloc->imported.kctx->used_pages);
 	kbase_atomic_sub_pages(nr_pages_to_free, &alloc->imported.kctx->kbdev->memdev.used_pages);
 
 #if defined(CONFIG_MALI_MIPE_ENABLED)
-	kbase_tlstream_aux_pagesalloc(-(s64)nr_pages_to_free);
+	kbase_tlstream_aux_pagesalloc(
+			(u32)alloc->imported.kctx->id,
+			(u64)new_page_count);
 #endif
 
 	return 0;
@@ -1236,6 +1245,9 @@ void kbase_mem_kref_free(struct kref *kref)
 		dma_buf_put(alloc->imported.umm.dma_buf);
 		break;
 #endif
+	case KBASE_MEM_TYPE_IMPORTED_USER_BUF:
+		kfree(alloc->imported.user_buf.pages);
+		break;
 	case KBASE_MEM_TYPE_TB:{
 		void *tb;
 

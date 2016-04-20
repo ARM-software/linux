@@ -31,6 +31,10 @@
 #include <mali_kbase_hwcnt_reader.h>
 #include <mali_kbase_mem_linux.h>
 
+#ifdef CONFIG_MALI_MIPE_ENABLED
+#include <mali_kbase_tlstream.h>
+#endif
+
 /*****************************************************************************/
 
 /* Hwcnt reader API version */
@@ -115,6 +119,7 @@ struct kbase_vinstr_context {
  * @dump_size:     size of one dump buffer in bytes
  * @bitmap:        bitmap request for JM, TILER, SHADER and MMU counters
  * @legacy_buffer: userspace hwcnt dump buffer (legacy interface)
+ * @kernel_buffer: kernel hwcnt dump buffer (kernel client interface)
  * @accum_buffer:  temporary accumulation buffer for preserving counters
  * @dump_time:     next time this clients shall request hwcnt dump
  * @dump_interval: interval between periodic hwcnt dumps
@@ -134,6 +139,7 @@ struct kbase_vinstr_client {
 	size_t                             dump_size;
 	u32                                bitmap[4];
 	void __user                        *legacy_buffer;
+	void                               *kernel_buffer;
 	void                               *accum_buffer;
 	u64                                dump_time;
 	u32                                dump_interval;
@@ -225,11 +231,11 @@ static void hwcnt_bitmap_union(u32 dst[4], u32 src[4])
 	dst[MMU_L2_HWCNT_BM] |= src[MMU_L2_HWCNT_BM];
 }
 
-static size_t kbasep_vinstr_dump_size(struct kbase_vinstr_context *vinstr_ctx)
+size_t kbase_vinstr_dump_size(struct kbase_device *kbdev)
 {
-	struct kbase_device *kbdev = vinstr_ctx->kctx->kbdev;
 	size_t dump_size;
 
+#ifndef CONFIG_MALI_NO_MALI
 	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_V4)) {
 		u32 nr_cg;
 
@@ -237,7 +243,9 @@ static size_t kbasep_vinstr_dump_size(struct kbase_vinstr_context *vinstr_ctx)
 		dump_size = nr_cg * NR_CNT_BLOCKS_PER_GROUP *
 				NR_CNT_PER_BLOCK *
 				NR_BYTES_PER_CNT;
-	} else {
+	} else
+#endif /* CONFIG_MALI_NO_MALI */
+	{
 		/* assume v5 for now */
 		base_gpu_props *props = &kbdev->gpu_props.props;
 		u32 nr_l2 = props->l2_props.num_l2_slices;
@@ -251,6 +259,13 @@ static size_t kbasep_vinstr_dump_size(struct kbase_vinstr_context *vinstr_ctx)
 	}
 	return dump_size;
 }
+KBASE_EXPORT_TEST_API(kbase_vinstr_dump_size);
+
+static size_t kbasep_vinstr_dump_size_ctx(
+		struct kbase_vinstr_context *vinstr_ctx)
+{
+	return kbase_vinstr_dump_size(vinstr_ctx->kctx->kbdev);
+}
 
 static int kbasep_vinstr_map_kernel_dump_buffer(
 		struct kbase_vinstr_context *vinstr_ctx)
@@ -261,7 +276,7 @@ static int kbasep_vinstr_map_kernel_dump_buffer(
 	u16 va_align = 0;
 
 	flags = BASE_MEM_PROT_CPU_RD | BASE_MEM_PROT_GPU_WR;
-	vinstr_ctx->dump_size = kbasep_vinstr_dump_size(vinstr_ctx);
+	vinstr_ctx->dump_size = kbasep_vinstr_dump_size_ctx(vinstr_ctx);
 	nr_pages = PFN_UP(vinstr_ctx->dump_size);
 
 	reg = kbase_mem_alloc(kctx, nr_pages, nr_pages, 0, &flags,
@@ -298,6 +313,8 @@ static void kbasep_vinstr_unmap_kernel_dump_buffer(
  */
 static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 {
+	struct kbase_device *kbdev = vinstr_ctx->kbdev;
+	struct kbasep_kctx_list_element *element;
 	int err;
 
 	vinstr_ctx->kctx = kbase_create_context(vinstr_ctx->kbdev, true);
@@ -313,10 +330,42 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 		return err;
 	}
 
+	/* Add kernel context to list of contexts associated with device. */
+	element = kzalloc(sizeof(*element), GFP_KERNEL);
+	if (element) {
+		element->kctx = vinstr_ctx->kctx;
+		mutex_lock(&kbdev->kctx_list_lock);
+		list_add(&element->link, &kbdev->kctx_list);
+
+#ifdef CONFIG_MALI_MIPE_ENABLED
+		/* Inform timeline client about new context.
+		 * Do this while holding the lock to avoid tracepoint
+		 * being created in both body and summary stream. */
+		kbase_tlstream_tl_new_ctx(
+				vinstr_ctx->kctx,
+				(u32)(vinstr_ctx->kctx->id),
+				(u32)(vinstr_ctx->kctx->tgid));
+#endif
+		mutex_unlock(&kbdev->kctx_list_lock);
+	} else {
+		/* Don't treat this as a fail - just warn about it. */
+		dev_warn(kbdev->dev,
+				"couldn't add kctx to kctx_list\n");
+	}
+
 	err = enable_hwcnt(vinstr_ctx);
 	if (err) {
 		kbasep_vinstr_unmap_kernel_dump_buffer(vinstr_ctx);
 		kbase_destroy_context(vinstr_ctx->kctx);
+		if (element) {
+			mutex_lock(&kbdev->kctx_list_lock);
+			list_del(&element->link);
+			kfree(element);
+			mutex_unlock(&kbdev->kctx_list_lock);
+		}
+#ifdef CONFIG_MALI_MIPE_ENABLED
+		kbase_tlstream_tl_del_ctx(vinstr_ctx->kctx);
+#endif
 		vinstr_ctx->kctx = NULL;
 		return err;
 	}
@@ -329,6 +378,15 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 		disable_hwcnt(vinstr_ctx);
 		kbasep_vinstr_unmap_kernel_dump_buffer(vinstr_ctx);
 		kbase_destroy_context(vinstr_ctx->kctx);
+		if (element) {
+			mutex_lock(&kbdev->kctx_list_lock);
+			list_del(&element->link);
+			kfree(element);
+			mutex_unlock(&kbdev->kctx_list_lock);
+		}
+#ifdef CONFIG_MALI_MIPE_ENABLED
+		kbase_tlstream_tl_del_ctx(vinstr_ctx->kctx);
+#endif
 		vinstr_ctx->kctx = NULL;
 		return -EFAULT;
 	}
@@ -342,32 +400,57 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
  */
 static void kbasep_vinstr_destroy_kctx(struct kbase_vinstr_context *vinstr_ctx)
 {
+	struct kbase_device             *kbdev = vinstr_ctx->kbdev;
+	struct kbasep_kctx_list_element *element;
+	struct kbasep_kctx_list_element *tmp;
+	bool                            found = false;
+
 	/* Release hw counters dumping resources. */
 	vinstr_ctx->thread = NULL;
 	disable_hwcnt(vinstr_ctx);
 	kbasep_vinstr_unmap_kernel_dump_buffer(vinstr_ctx);
 	kbase_destroy_context(vinstr_ctx->kctx);
+
+	/* Remove kernel context from the device's contexts list. */
+	mutex_lock(&kbdev->kctx_list_lock);
+	list_for_each_entry_safe(element, tmp, &kbdev->kctx_list, link) {
+		if (element->kctx == vinstr_ctx->kctx) {
+			list_del(&element->link);
+			kfree(element);
+			found = true;
+		}
+	}
+	mutex_unlock(&kbdev->kctx_list_lock);
+
+	if (!found)
+		dev_warn(kbdev->dev, "kctx not in kctx_list\n");
+
+#ifdef CONFIG_MALI_MIPE_ENABLED
+	/* Inform timeline client about context destruction. */
+	kbase_tlstream_tl_del_ctx(vinstr_ctx->kctx);
+#endif
+
 	vinstr_ctx->kctx = NULL;
 }
 
 /**
  * kbasep_vinstr_attach_client - Attach a client to the vinstr core
- * @vinstr_ctx:   vinstr context
- * @buffer_count: requested number of dump buffers
- * @bitmap:       bitmaps describing which counters should be enabled
- * @argp:         pointer where notification descriptor shall be stored
+ * @vinstr_ctx:    vinstr context
+ * @buffer_count:  requested number of dump buffers
+ * @bitmap:        bitmaps describing which counters should be enabled
+ * @argp:          pointer where notification descriptor shall be stored
+ * @kernel_buffer: pointer to kernel side buffer
  *
  * Return: vinstr opaque client handle or NULL on failure
  */
 static struct kbase_vinstr_client *kbasep_vinstr_attach_client(
 		struct kbase_vinstr_context *vinstr_ctx, u32 buffer_count,
-		u32 bitmap[4], void *argp)
+		u32 bitmap[4], void *argp, void *kernel_buffer)
 {
 	struct task_struct         *thread = NULL;
 	struct kbase_vinstr_client *cli;
 
 	KBASE_DEBUG_ASSERT(vinstr_ctx);
-	KBASE_DEBUG_ASSERT(argp);
 	KBASE_DEBUG_ASSERT(buffer_count >= 0);
 	KBASE_DEBUG_ASSERT(buffer_count <= MAX_BUFFER_COUNT);
 	KBASE_DEBUG_ASSERT(!(buffer_count & (buffer_count - 1)));
@@ -405,7 +488,7 @@ static struct kbase_vinstr_client *kbasep_vinstr_attach_client(
 	/* The GPU resets the counter block every time there is a request
 	 * to dump it. We need a per client kernel buffer for accumulating
 	 * the counters. */
-	cli->dump_size    = kbasep_vinstr_dump_size(vinstr_ctx);
+	cli->dump_size    = kbasep_vinstr_dump_size_ctx(vinstr_ctx);
 	cli->accum_buffer = kzalloc(cli->dump_size, GFP_KERNEL);
 	if (!cli->accum_buffer)
 		goto error;
@@ -437,6 +520,8 @@ static struct kbase_vinstr_client *kbasep_vinstr_attach_client(
 				O_RDONLY | O_CLOEXEC);
 		if (0 > *fd)
 			goto error;
+	} else if (kernel_buffer) {
+		cli->kernel_buffer = kernel_buffer;
 	} else {
 		cli->legacy_buffer = (void __user *)argp;
 	}
@@ -475,11 +560,7 @@ error:
 	return NULL;
 }
 
-/**
- * kbasep_vinstr_detach_client - Detach a client from the vinstr core
- * @cli: Pointer to vinstr client
- */
-static void kbasep_vinstr_detach_client(struct kbase_vinstr_client *cli)
+void kbase_vinstr_detach_client(struct kbase_vinstr_client *cli)
 {
 	struct kbase_vinstr_context *vinstr_ctx;
 	struct kbase_vinstr_client  *iter, *tmp;
@@ -540,6 +621,7 @@ static void kbasep_vinstr_detach_client(struct kbase_vinstr_client *cli)
 	if (thread)
 		kthread_stop(thread);
 }
+KBASE_EXPORT_TEST_API(kbase_vinstr_detach_client);
 
 /* Accumulate counters in the dump buffer */
 static void accum_dump_buffer(void *dst, void *src, size_t dump_size)
@@ -702,9 +784,12 @@ static void patch_dump_buffer_hdr_v5(
 static void accum_clients(struct kbase_vinstr_context *vinstr_ctx)
 {
 	struct kbase_vinstr_client *iter;
-	int v4;
+	int v4 = 0;
 
+#ifndef CONFIG_MALI_NO_MALI
 	v4 = kbase_hw_has_feature(vinstr_ctx->kbdev, BASE_HW_FEATURE_V4);
+#endif
+
 	list_for_each_entry(iter, &vinstr_ctx->idle_clients, list) {
 		/* Don't bother accumulating clients whose hwcnt requests
 		 * have not yet been honoured. */
@@ -791,6 +876,11 @@ static int kbasep_vinstr_collect_and_accumulate(
 {
 	int rcode;
 
+#ifdef CONFIG_MALI_NO_MALI
+	/* The dummy model needs the CPU mapping. */
+	gpu_model_set_dummy_prfcnt_base_cpu(vinstr_ctx->cpu_va);
+#endif
+
 	/* Request HW counters dump.
 	 * Disable preemption to make dump timestamp more accurate. */
 	preempt_disable();
@@ -866,6 +956,23 @@ static int kbasep_vinstr_fill_dump_buffer_legacy(
 }
 
 /**
+ * kbasep_vinstr_fill_dump_buffer_kernel - copy accumulated counters to buffer
+ *                                         allocated in kernel space
+ * @cli: requesting client
+ *
+ * Return: zero on success
+ *
+ * This is part of the kernel client interface.
+ */
+static int kbasep_vinstr_fill_dump_buffer_kernel(
+		struct kbase_vinstr_client *cli)
+{
+	memcpy(cli->kernel_buffer, cli->accum_buffer, cli->dump_size);
+
+	return 0;
+}
+
+/**
  * kbasep_vinstr_reprogram - reprogram hwcnt set collected by inst
  * @vinstr_ctx: vinstr context
  */
@@ -910,6 +1017,8 @@ static int kbasep_vinstr_update_client(
 	if (cli->buffer_count)
 		rcode = kbasep_vinstr_fill_dump_buffer(
 				cli, timestamp, event_id);
+	else if (cli->kernel_buffer)
+		rcode = kbasep_vinstr_fill_dump_buffer_kernel(cli);
 	else
 		rcode = kbasep_vinstr_fill_dump_buffer_legacy(cli);
 
@@ -1299,14 +1408,18 @@ static long kbasep_vinstr_hwcnt_reader_ioctl_disable_event(
 static long kbasep_vinstr_hwcnt_reader_ioctl_get_hwver(
 		struct kbase_vinstr_client *cli, u32 __user *hwver)
 {
+#ifndef CONFIG_MALI_NO_MALI
 	struct kbase_vinstr_context *vinstr_ctx = cli->vinstr_ctx;
-	u32                         ver;
+#endif
 
+	u32                         ver = 5;
+
+#ifndef CONFIG_MALI_NO_MALI
 	KBASE_DEBUG_ASSERT(vinstr_ctx);
+	if (kbase_hw_has_feature(vinstr_ctx->kbdev, BASE_HW_FEATURE_V4))
+		ver = 4;
+#endif
 
-	ver = 4;
-	if (!kbase_hw_has_feature(vinstr_ctx->kbdev, BASE_HW_FEATURE_V4))
-		ver = 5;
 	return put_user(ver, hwver);
 }
 
@@ -1451,7 +1564,7 @@ static int kbasep_vinstr_hwcnt_reader_release(struct inode *inode,
 	cli = filp->private_data;
 	KBASE_DEBUG_ASSERT(cli);
 
-	kbasep_vinstr_detach_client(cli);
+	kbase_vinstr_detach_client(cli);
 	return 0;
 }
 
@@ -1525,7 +1638,8 @@ int kbase_vinstr_hwcnt_reader_setup(struct kbase_vinstr_context *vinstr_ctx,
 			vinstr_ctx,
 			setup->buffer_count,
 			bitmap,
-			&setup->fd);
+			&setup->fd,
+			NULL);
 
 	if (!cli)
 		return -ENOMEM;
@@ -1557,7 +1671,8 @@ int kbase_vinstr_legacy_hwc_setup(
 				vinstr_ctx,
 				0,
 				bitmap,
-				(void *)(long)setup->dump_buffer);
+				(void *)(long)setup->dump_buffer,
+				NULL);
 
 		if (!(*cli))
 			return -ENOMEM;
@@ -1565,12 +1680,36 @@ int kbase_vinstr_legacy_hwc_setup(
 		if (!*cli)
 			return -EINVAL;
 
-		kbasep_vinstr_detach_client(*cli);
+		kbase_vinstr_detach_client(*cli);
 		*cli = NULL;
 	}
 
 	return 0;
 }
+
+struct kbase_vinstr_client *kbase_vinstr_hwcnt_kernel_setup(
+		struct kbase_vinstr_context *vinstr_ctx,
+		struct kbase_uk_hwcnt_reader_setup *setup,
+		void *kernel_buffer)
+{
+	u32 bitmap[4];
+
+	if (!vinstr_ctx || !setup || !kernel_buffer)
+		return NULL;
+
+	bitmap[SHADER_HWCNT_BM] = setup->shader_bm;
+	bitmap[TILER_HWCNT_BM]  = setup->tiler_bm;
+	bitmap[MMU_L2_HWCNT_BM] = setup->mmu_l2_bm;
+	bitmap[JM_HWCNT_BM]     = setup->jm_bm;
+
+	return kbasep_vinstr_attach_client(
+			vinstr_ctx,
+			0,
+			bitmap,
+			NULL,
+			kernel_buffer);
+}
+KBASE_EXPORT_TEST_API(kbase_vinstr_hwcnt_kernel_setup);
 
 int kbase_vinstr_hwc_dump(struct kbase_vinstr_client *cli,
 		enum base_hwcnt_reader_event event_id)
@@ -1615,6 +1754,7 @@ exit:
 
 	return rcode;
 }
+KBASE_EXPORT_TEST_API(kbase_vinstr_hwc_dump);
 
 int kbase_vinstr_hwc_clear(struct kbase_vinstr_client *cli)
 {
@@ -1658,6 +1798,11 @@ void kbase_vinstr_hwc_suspend(struct kbase_vinstr_context *vinstr_ctx)
 	KBASE_DEBUG_ASSERT(vinstr_ctx);
 
 	mutex_lock(&vinstr_ctx->lock);
+	if (!vinstr_ctx->nclients || vinstr_ctx->suspended) {
+		mutex_unlock(&vinstr_ctx->lock);
+		return;
+	}
+
 	kbasep_vinstr_collect_and_accumulate(vinstr_ctx, &unused);
 	vinstr_ctx->suspended = true;
 	vinstr_ctx->suspended_clients = vinstr_ctx->waiting_clients;
@@ -1670,6 +1815,11 @@ void kbase_vinstr_hwc_resume(struct kbase_vinstr_context *vinstr_ctx)
 	KBASE_DEBUG_ASSERT(vinstr_ctx);
 
 	mutex_lock(&vinstr_ctx->lock);
+	if (!vinstr_ctx->nclients || !vinstr_ctx->suspended) {
+		mutex_unlock(&vinstr_ctx->lock);
+		return;
+	}
+
 	vinstr_ctx->suspended = false;
 	vinstr_ctx->waiting_clients = vinstr_ctx->suspended_clients;
 	vinstr_ctx->reprogram = true;
