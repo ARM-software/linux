@@ -239,7 +239,9 @@ int set_gpu_power_cap(int gpu_power, int util)
 	}
 	level--;
 
+#ifdef CONFIG_CPU_THERMAL_IPA
 	gpu_ipa_dvfs_max_lock(platform->table[level].clock);
+#endif /* CONFIG_CPU_THERMAL_IPA */
 
 	return platform->table[level].clock;
 }
