@@ -3799,7 +3799,7 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
 	err = dev_pm_opp_of_add_table(kbdev->dev);
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0))
-	err = of_init_opp_table(kbdev->dev);
+	err = dev_pm_opp_of_add_table(kbdev->dev);
 #endif /* LINUX_VERSION_CODE */
 	if (err)
 		dev_dbg(kbdev->dev, "OPP table not found\n");
