@@ -2489,7 +2489,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 
 	ret = ttm_eu_reserve_buffers(&ticket, &sw_context->validate_nodes, true);
 	if (unlikely(ret != 0))
-		goto out_err;
+		goto out_err_nores;
 
 	ret = vmw_validate_buffers(dev_priv, sw_context);
 	if (unlikely(ret != 0))
@@ -2533,6 +2533,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	vmw_resource_relocations_free(&sw_context->res_relocations);
 
 	vmw_fifo_commit(dev_priv, command_size);
+	mutex_unlock(&dev_priv->binding_mutex);
 
 	vmw_query_bo_switch_commit(dev_priv, sw_context);
 	ret = vmw_execbuf_fence_commands(file_priv, dev_priv,
@@ -2548,7 +2549,6 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 		DRM_ERROR("Fence submission error. Syncing.\n");
 
 	vmw_resource_list_unreserve(&sw_context->resource_list, false);
-	mutex_unlock(&dev_priv->binding_mutex);
 
 	ttm_eu_fence_buffer_objects(&ticket, &sw_context->validate_nodes,
 				    (void *) fence);
@@ -2778,13 +2778,11 @@ int vmw_execbuf_ioctl(struct drm_device *dev, void *data,
 				  NULL, arg->command_size, arg->throttle_us,
 				  (void __user *)(unsigned long)arg->fence_rep,
 				  NULL);
-
+	ttm_read_unlock(&dev_priv->reservation_sem);
 	if (unlikely(ret != 0))
-		goto out_unlock;
+		return ret;
 
 	vmw_kms_cursor_post_execbuf(dev_priv);
 
-out_unlock:
-	ttm_read_unlock(&dev_priv->reservation_sem);
-	return ret;
+	return 0;
 }
