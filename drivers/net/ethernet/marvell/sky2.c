@@ -3909,6 +3909,18 @@ static struct rtnl_link_stats64 *sky2_get_stats(struct net_device *dev,
 	unsigned int start;
 	u64 _bytes, _packets;
 
+	/* Try and check if device if off. If it is, abort gathering stats as
+	 * any attempt to read hardware registers will generate a bus fault.
+	 * This test is hacky and racy as there's nothing stopping the device
+	 * being powered off immediately after the test.
+	 */
+	if (hw->pdev->pm_cap) {
+		u16 pmcsr;
+		int ret = pci_read_config_word(hw->pdev, hw->pdev->pm_cap + PCI_PM_CTRL, &pmcsr);
+		if (ret || (pmcsr & PCI_PM_CTRL_STATE_MASK) > PCI_D2)
+			return stats; /* Can't read power state or it's state D3 (off) */
+	}
+
 	do {
 		start = u64_stats_fetch_begin_irq(&sky2->rx_stats.syncp);
 		_bytes = sky2->rx_stats.bytes;
