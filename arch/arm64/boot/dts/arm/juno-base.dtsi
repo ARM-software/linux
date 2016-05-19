@@ -259,11 +259,11 @@
 		#size-cells = <2>;
 		ranges;
 
-		gpu_reserved: secure_heap@880000000 {
-			#address-cells = <2>;
-			#size-cells = <2>;
+		gpu_reserved: secure_heap@c0000000 {
 			compatible = "ion,secure_heap";
-			reg = <0x8 0x80000000 0x0 0x10000000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			reg = <0x0 0xc0000000 0x0 0x10000000>;
 		};
 	};
 
