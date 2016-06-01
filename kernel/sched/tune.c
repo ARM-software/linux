@@ -719,7 +719,7 @@ schedtune_add_cluster_nrg(
 			 * Assume we have EM data only at the CPU and
 			 * the upper CLUSTER level
 			 */
-			BUG_ON(!cpumask_equal(
+			BUG_ON(sd2->parent && !cpumask_equal(
 				sched_group_cpus(sg),
 				sched_group_cpus(sd2->parent->groups)
 				));
