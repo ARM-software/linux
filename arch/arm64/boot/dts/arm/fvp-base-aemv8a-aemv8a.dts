@@ -1,0 +1,227 @@
+/*
+ * ARM Ltd. Fixed Virtual Platform (FVP) Base model with dual cluster
+ * Architecture Envelope Model (AEM) v8-A CPUs
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	model = "FVP_Base_AEMv8A-AEMv8A";
+	compatible = "arm,fvp-base,aemv8a-aemv8a", "arm,fvp-base", "arm,vexpress";
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	chosen { };
+
+	aliases {
+		serial0 = &bp_serial0;
+		serial1 = &bp_serial1;
+		serial2 = &bp_serial2;
+		serial3 = &bp_serial3;
+	};
+
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "smc";
+	};
+
+	cpus {
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		cpu-map {
+			cluster0 {
+				core0 {
+					cpu = <&CPU0_0>;
+				};
+				core1 {
+					cpu = <&CPU0_1>;
+				};
+				core2 {
+					cpu = <&CPU0_2>;
+				};
+				core3 {
+					cpu = <&CPU0_3>;
+				};
+			};
+
+			cluster1 {
+				core0 {
+					cpu = <&CPU1_0>;
+				};
+				core1 {
+					cpu = <&CPU1_1>;
+				};
+				core2 {
+					cpu = <&CPU1_2>;
+				};
+				core3 {
+					cpu = <&CPU1_3>;
+				};
+			};
+		};
+
+		idle-states {
+			entry-method = "arm,psci";
+
+			CPU_SLEEP_0: cpu-sleep-0 {
+				compatible = "arm,idle-state";
+				arm,psci-suspend-param = <0x0010000>;
+				local-timer-stop;
+				entry-latency-us = <300>;
+				exit-latency-us = <1200>;
+				min-residency-us = <2000>;
+			};
+
+			CLUSTER_SLEEP_0: cluster-sleep-0 {
+				compatible = "arm,idle-state";
+				arm,psci-suspend-param = <0x1010000>;
+				local-timer-stop;
+				entry-latency-us = <300>;
+				exit-latency-us = <1200>;
+				min-residency-us = <2500>;
+			};
+		};
+
+		CPU0_0: cpu@0 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x0>;
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&CLUSTER0_L2>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+		};
+
+		CPU0_1: cpu@1 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x1>;
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&CLUSTER0_L2>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+		};
+
+		CPU0_2: cpu@2 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x2>;
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&CLUSTER0_L2>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+		};
+
+		CPU0_3: cpu@3 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x3>;
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&CLUSTER0_L2>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+		};
+
+		CPU1_0: cpu@100 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x100>;
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&CLUSTER1_L2>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+		};
+
+		CPU1_1: cpu@101 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x101>;
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&CLUSTER1_L2>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+		};
+
+		CPU1_2: cpu@102 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x102>;
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&CLUSTER1_L2>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+		};
+
+		CPU1_3: cpu@103 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x103>;
+			device_type = "cpu";
+			enable-method = "psci";
+			next-level-cache = <&CLUSTER1_L2>;
+			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+		};
+
+		CLUSTER0_L2: l2-cache0 {
+			compatible = "cache";
+		};
+
+		CLUSTER1_L2: l2-cache1 {
+			compatible = "cache";
+		};
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+		clock-frequency = <100000000>;
+	};
+
+	pmu {
+		compatible = "arm,armv8-pmuv3";
+		interrupts = <GIC_SPI 60 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 61 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 63 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 64 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 65 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 66 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 67 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-affinity = <&CPU0_0>,
+				     <&CPU0_1>,
+				     <&CPU0_2>,
+				     <&CPU0_3>,
+				     <&CPU1_0>,
+				     <&CPU1_1>,
+				     <&CPU1_2>,
+				     <&CPU1_3>;
+	};
+
+	gic: interrupt-controller@2f000000 {
+		compatible = "arm,gic-v3";
+		#interrupt-cells = <3>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		interrupt-controller;
+		reg =	<0x0 0x2f000000 0x0 0x10000>,
+			<0x0 0x2f100000 0x0 0x100000>,
+			<0x0 0x2c000000 0x0 0x2000>,
+			<0x0 0x2c010000 0x0 0x2000>,
+			<0x0 0x2c02f000 0x0 0x2000>;
+		interrupts = <GIC_PPI 9 IRQ_TYPE_LEVEL_HIGH>;
+
+		its: its@2f020000 {
+			compatible = "arm,gic-v3-its";
+			msi-controller;
+			#msi-cells = <1>;
+			reg = <0x0 0x2f020000 0x0 0x20000>;
+		};
+	};
+
+	#include "fvp-base.dtsi"
+};
+
+&hdlcd {
+	status = "disabled";
+};
+
