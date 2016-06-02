@@ -31,6 +31,11 @@ static struct ion_heap **heaps;
 static void *carveout_ptr;
 static void *chunk_ptr;
 
+struct platform_device dummy_device_ion = {
+	.name           = "ion-dummy",
+	.id             = -1,
+};
+
 static struct ion_platform_heap dummy_heaps[] = {
 		{
 			.id	= ION_HEAP_TYPE_SYSTEM,
@@ -56,6 +61,12 @@ static struct ion_platform_heap dummy_heaps[] = {
 			.align	= SZ_16K,
 			.priv	= (void *)(SZ_16K),
 		},
+		{
+			.id     = ION_HEAP_TYPE_DMA,
+			.type   = ION_HEAP_TYPE_DMA,
+			.name   = "ion_dma_heap",
+			.priv   = &dummy_device_ion.dev,
+		}
 };
 
 static struct ion_platform_data dummy_ion_pdata = {
@@ -110,7 +121,9 @@ static int __init ion_dummy_init(void)
 		}
 		ion_device_add_heap(idev, heaps[i]);
 	}
-	return 0;
+
+	return platform_device_register(&dummy_device_ion);
+
 err:
 	for (i = 0; i < dummy_ion_pdata.nr; i++) {
 		if (heaps[i])
