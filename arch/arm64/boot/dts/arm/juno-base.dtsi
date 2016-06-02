@@ -262,6 +262,15 @@
 		interrupt-names = "JOB", "MMU", "GPU";
 		clocks = <&scpi_dvfs 2>;
 		clock-names = "clk_mali";
+		power_model {
+			compatible = "arm,mali-simple-power-model";
+			voltage = <800>;
+			frequency = <500>;
+			static-power = <500>;
+			dynamic-power = <1500>;
+			ts = <20000 2000 (-20) 2>;
+			thermal-zone = "gpu";
+		};
 	};
 
 	soc_i2s: i2s@7ff90000 {
