@@ -111,6 +111,22 @@
 		interrupts = <0 85 4>;
 		clocks = <&oscclk5>;
 		clock-names = "pxlclk";
+
+		port {
+			hdlcd0_output: endpoint@0 {
+				remote-endpoint = <&sii9022_0_input>;
+			};
+		};
+	};
+
+	hdmi0: connector@0 {
+		compatible = "hdmi-connector";
+		type = "a";
+		port {
+			hdmi0_connector_output: endpoint {
+				remote-endpoint = <&sii9022_0_output>;
+			};
+		};
 	};
 
 	memory-controller@2b0a0000 {
@@ -615,5 +631,19 @@
 				<0 0 42 &gic 0 42 4>;
 
 		/include/ "vexpress-v2m-rs1.dtsi"
+	};
+};
+
+&v2m_clcd {
+	status = "disabled";
+};
+
+&v2m_dvi_port {
+	sii9022_0_input: endpoint@0 {
+		remote-endpoint = <&hdlcd0_output>;
+	};
+
+	sii9022_0_output: endpoint@1 {
+		remote-endpoint = <&hdmi0_connector_output>;
 	};
 };

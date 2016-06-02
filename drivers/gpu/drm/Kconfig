@@ -87,6 +87,8 @@ config DRM_TDFX
 	  Choose this option if you have a 3dfx Banshee or Voodoo3 (or later),
 	  graphics card.  If M is selected, the module will be called tdfx.
 
+source "drivers/gpu/drm/arm/Kconfig"
+
 config DRM_R128
 	tristate "ATI Rage 128"
 	depends on DRM && PCI
@@ -164,6 +166,15 @@ config DRM_SAVAGE
 	help
 	  Choose this option if you have a Savage3D/4/SuperSavage/Pro/Twister
 	  chipset. If M is selected the module will be called savage.
+
+config DRM_VIRT_ENCODER
+	tristate "Virtual OF-based encoder"
+	depends on DRM && OF
+	help
+	  Choose this option to get a virtual encoder and its associated
+	  connector that will use the device tree to read the display
+	  timings information. If M is selected the module will be called
+	  drm_vencoder.
 
 source "drivers/gpu/drm/exynos/Kconfig"
 

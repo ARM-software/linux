@@ -11,6 +11,9 @@ config DRM_I2C_CH7006
 	  This driver is currently only useful if you're also using
 	  the nouveau driver.
 
+config DRM_I2C_DUMMY
+	tristate "Dummy stub driver"
+
 config DRM_I2C_SIL164
 	tristate "Silicon Image sil164 TMDS transmitter"
 	default m if DRM_NOUVEAU

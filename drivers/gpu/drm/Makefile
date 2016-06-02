@@ -32,8 +32,12 @@ obj-$(CONFIG_DRM_KMS_HELPER) += drm_kms_helper.o
 
 CFLAGS_drm_trace_points.o := -I$(src)
 
+drm_vencoder-y := drm_virtual_encoder.o
+obj-$(CONFIG_DRM_VIRT_ENCODER) += drm_vencoder.o
+
 obj-$(CONFIG_DRM)	+= drm.o
 obj-$(CONFIG_DRM_MIPI_DSI) += drm_mipi_dsi.o
+obj-$(CONFIG_DRM_ARM)	+= arm/
 obj-$(CONFIG_DRM_TTM)	+= ttm/
 obj-$(CONFIG_DRM_TDFX)	+= tdfx/
 obj-$(CONFIG_DRM_R128)	+= r128/
