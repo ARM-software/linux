@@ -1,6 +1,8 @@
 #
 # Makefile for the linux kernel.
 #
+obj-$(CONFIG_ARM_SCPI_PROTOCOL)	+= arm_scpi.o
+obj-$(CONFIG_ARM_SCPI_PROTOCOL_TEST)	+= arm_scpi_test.o
 obj-$(CONFIG_DMI)		+= dmi_scan.o
 obj-$(CONFIG_DMI_SYSFS)		+= dmi-sysfs.o
 obj-$(CONFIG_EDD)		+= edd.o
