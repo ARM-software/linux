@@ -172,9 +172,17 @@ extern bool single_task_running(void);
 extern unsigned long nr_iowait(void);
 extern unsigned long nr_iowait_cpu(int cpu);
 extern void get_iowait_load(unsigned long *nr_waiters, unsigned long *load);
+#ifdef CONFIG_CPU_QUIET
+extern u64 nr_running_integral(unsigned int cpu);
+#endif
 
 extern void calc_global_load(unsigned long ticks);
+
+#if defined(CONFIG_SMP) && defined(CONFIG_NO_HZ_COMMON)
 extern void update_cpu_load_nohz(void);
+#else
+static inline void update_cpu_load_nohz(void) { }
+#endif
 
 extern unsigned long get_parent_ip(unsigned long addr);
 
@@ -856,6 +864,14 @@ enum cpu_idle_type {
 #define SCHED_CAPACITY_SHIFT	10
 #define SCHED_CAPACITY_SCALE	(1L << SCHED_CAPACITY_SHIFT)
 
+struct sched_capacity_reqs {
+	unsigned long cfs;
+	unsigned long rt;
+	unsigned long dl;
+
+	unsigned long total;
+};
+
 /*
  * sched-domains (multiprocessor balancing) declarations:
  */
@@ -874,6 +890,7 @@ enum cpu_idle_type {
 #define SD_PREFER_SIBLING	0x1000	/* Prefer to place tasks in a sibling domain */
 #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
 #define SD_NUMA			0x4000	/* cross-node balancing */
+#define SD_SHARE_CAP_STATES	0x8000  /* Domain members share capacity state */
 
 #ifdef CONFIG_SCHED_SMT
 static inline int cpu_smt_flags(void)
@@ -905,6 +922,24 @@ struct sched_domain_attr {
 }
 
 extern int sched_domain_level_max;
+
+struct capacity_state {
+	unsigned long cap;	/* compute capacity */
+	unsigned long power;	/* power consumption at this compute capacity */
+};
+
+struct idle_state {
+	unsigned long power;	 /* power consumption in this idle state */
+};
+
+struct sched_group_energy {
+	unsigned int nr_idle_states;	/* number of idle states */
+	struct idle_state *idle_states;	/* ptr to idle state array */
+	unsigned int nr_cap_states;	/* number of capacity states */
+	struct capacity_state *cap_states; /* ptr to capacity state array */
+};
+
+unsigned long capacity_curr_of(int cpu);
 
 struct sched_group;
 
@@ -1004,6 +1039,8 @@ bool cpus_share_cache(int this_cpu, int that_cpu);
 
 typedef const struct cpumask *(*sched_domain_mask_f)(int cpu);
 typedef int (*sched_domain_flags_f)(void);
+typedef
+const struct sched_group_energy * const(*sched_domain_energy_f)(int cpu);
 
 #define SDTL_OVERLAP	0x01
 
@@ -1016,6 +1053,7 @@ struct sd_data {
 struct sched_domain_topology_level {
 	sched_domain_mask_f mask;
 	sched_domain_flags_f sd_flags;
+	sched_domain_energy_f energy;
 	int		    flags;
 	int		    numa_level;
 	struct sd_data      data;
@@ -1072,16 +1110,24 @@ struct load_weight {
 	u32 inv_weight;
 };
 
+/*
+ * The load_avg/util_avg accumulates an infinite geometric series.
+ * 1) load_avg factors frequency scaling into the amount of time that a
+ * sched_entity is runnable on a rq into its weight. For cfs_rq, it is the
+ * aggregated such weights of all runnable and blocked sched_entities.
+ * 2) util_avg factors frequency and cpu scaling into the amount of time
+ * that a sched_entity is running on a CPU, in the range [0..SCHED_LOAD_SCALE].
+ * For cfs_rq, it is the aggregated such times of all runnable and
+ * blocked sched_entities.
+ * The 64 bit load_sum can:
+ * 1) for cfs_rq, afford 4353082796 (=2^64/47742/88761) entities with
+ * the highest weight (=88761) always runnable, we should not overflow
+ * 2) for entity, support any load.weight always runnable
+ */
 struct sched_avg {
-	/*
-	 * These sums represent an infinite geometric series and so are bound
-	 * above by 1024/(1-y).  Thus we only need a u32 to store them for all
-	 * choices of y < 1-2^(-32)*1024.
-	 */
-	u32 runnable_avg_sum, runnable_avg_period;
-	u64 last_runnable_update;
-	s64 decay_count;
-	unsigned long load_avg_contrib;
+	u64 last_update_time, load_sum;
+	u32 util_sum, period_contrib;
+	unsigned long load_avg, util_avg;
 };
 
 #ifdef CONFIG_SCHEDSTATS
@@ -1147,7 +1193,7 @@ struct sched_entity {
 #endif
 
 #ifdef CONFIG_SMP
-	/* Per-entity load-tracking */
+	/* Per entity load average tracking */
 	struct sched_avg	avg;
 #endif
 };
@@ -1243,9 +1289,9 @@ struct task_struct {
 #ifdef CONFIG_SMP
 	struct llist_node wake_entry;
 	int on_cpu;
-	struct task_struct *last_wakee;
-	unsigned long wakee_flips;
+	unsigned int wakee_flips;
 	unsigned long wakee_flip_decay_ts;
+	struct task_struct *last_wakee;
 
 	int wake_cpu;
 #endif
@@ -2087,13 +2133,6 @@ void calc_load_exit_idle(void);
 static inline void calc_load_enter_idle(void) { }
 static inline void calc_load_exit_idle(void) { }
 #endif /* CONFIG_NO_HZ_COMMON */
-
-#ifndef CONFIG_CPUMASK_OFFSTACK
-static inline int set_cpus_allowed(struct task_struct *p, cpumask_t new_mask)
-{
-	return set_cpus_allowed_ptr(p, &new_mask);
-}
-#endif
 
 /*
  * Do not use outside of architecture code which knows its limitations.
@@ -3020,13 +3059,13 @@ static inline void mm_update_next_owner(struct mm_struct *mm)
 static inline unsigned long task_rlimit(const struct task_struct *tsk,
 		unsigned int limit)
 {
-	return ACCESS_ONCE(tsk->signal->rlim[limit].rlim_cur);
+	return READ_ONCE(tsk->signal->rlim[limit].rlim_cur);
 }
 
 static inline unsigned long task_rlimit_max(const struct task_struct *tsk,
 		unsigned int limit)
 {
-	return ACCESS_ONCE(tsk->signal->rlim[limit].rlim_max);
+	return READ_ONCE(tsk->signal->rlim[limit].rlim_max);
 }
 
 static inline unsigned long rlimit(unsigned int limit)
