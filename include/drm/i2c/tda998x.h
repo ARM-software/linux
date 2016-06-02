@@ -20,6 +20,7 @@ struct tda998x_encoder_params {
 	u8 audio_frame[6];
 
 	enum {
+		AFMT_NO_AUDIO = 0,
 		AFMT_SPDIF,
 		AFMT_I2S
 	} audio_format;

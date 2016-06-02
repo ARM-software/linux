@@ -17,6 +17,15 @@ Optional properties:
   - video-ports: 24 bits value which defines how the video controller
 	output is wired to the TDA998x input - default: <0x230145>
 
+  - audio-ports: one or two values corresponding to entries in
+       the audio-port-names property.
+
+  - audio-port-names: must contain "i2s", "spdif" entries
+       matching entries in the audio-ports property.
+
+  - #sound-dai-cells: must be set to <1> for use with the simple-card.
+       The DAI 0 is the I2S input and the DAI 1 is the S/PDIF input.
+
 Example:
 
 	tda998x: hdmi-encoder {
@@ -26,4 +35,9 @@ Example:
 		interrupts = <27 2>;		/* falling edge */
 		pinctrl-0 = <&pmx_camera>;
 		pinctrl-names = "default";
+
+		audio-ports = <0x03>, <0x04>;
+		audio-port-names = "i2s", "spdif";
+		#sound-dai-cells = <1>;
+         };
 	};
