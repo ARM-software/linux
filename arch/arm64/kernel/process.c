@@ -434,13 +434,25 @@ unsigned long arch_align_stack(unsigned long sp)
 	return sp & ~0xf;
 }
 
-static unsigned long randomize_base(unsigned long base)
-{
-	unsigned long range_end = base + (STACK_RND_MASK << PAGE_SHIFT) + 1;
-	return randomize_range(base, range_end, 0) ? : base;
-}
-
 unsigned long arch_randomize_brk(struct mm_struct *mm)
 {
-	return randomize_base(mm->brk);
+	unsigned long base = mm->brk;
+	unsigned long range_end = base + (STACK_RND_MASK << PAGE_SHIFT) + 1;
+	unsigned long max_stack, range_limit;
+
+	/*
+	 * Determine how much room we need to leave available for the stack.
+	 * We limit this to a reasonable value, because extremely large or
+	 * unlimited stacks are always going to bump up against brk at some
+	 * point and we don't want to fail to randomise brk in those cases.
+	 */
+	max_stack = rlimit(RLIMIT_STACK);
+	if (max_stack > SZ_128M)
+		max_stack = SZ_128M;
+
+	range_limit = mm->start_stack - max_stack - 1;
+	if (range_end > range_limit)
+		range_end = range_limit;
+
+	return randomize_range(base, range_end, 0) ? : base;
 }
