@@ -738,14 +738,16 @@ static void __init arch_timer_mem_init(struct device_node *np)
 	u32 cnttidr;
 
 	arch_timers_present |= ARCH_MEM_TIMER;
-	cntctlbase = of_iomap(np, 0);
-	if (!cntctlbase) {
-		pr_err("arch_timer: Can't find CNTCTLBase\n");
-		return;
-	}
+	if (of_property_read_u32(np, "arm,cnttidr", &cnttidr)) {
+		cntctlbase = of_iomap(np, 0);
+		if (!cntctlbase) {
+			pr_err("arch_timer: Can't find CNTCTLBase\n");
+			return;
+		}
 
-	cnttidr = readl_relaxed(cntctlbase + CNTTIDR);
-	iounmap(cntctlbase);
+		cnttidr = readl_relaxed(cntctlbase + CNTTIDR);
+		iounmap(cntctlbase);
+	}
 
 	/*
 	 * Try to find a virtual capable frame. Otherwise fall back to a
