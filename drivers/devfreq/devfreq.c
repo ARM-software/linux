@@ -769,6 +769,11 @@ err_out:
 }
 EXPORT_SYMBOL(devfreq_remove_governor);
 
+int devfreq_update_stats(struct devfreq *df)
+{
+	return df->profile->get_dev_status(df->dev.parent, &df->last_status);
+}
+
 static ssize_t governor_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {

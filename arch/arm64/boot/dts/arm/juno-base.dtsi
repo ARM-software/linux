@@ -44,6 +44,28 @@
 			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(6) | IRQ_TYPE_LEVEL_LOW)>;
 	};
 
+	pcie_ctlr: pcie-controller@40000000 {
+		compatible = "arm,juno-r1-pcie", "plda,xpressrich3-axi", "pci-host-ecam-generic";
+		device_type = "pci";
+		reg = <0 0x40000000 0 0x10000000>;	/* ECAM config space */
+		bus-range = <0 255>;
+		linux,pci-domain = <0>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		dma-coherent;
+		ranges = <0x01000000 0x00 0x5f800000 0x00 0x5f800000 0x0 0x00800000>,
+			 <0x02000000 0x00 0x50000000 0x00 0x50000000 0x0 0x08000000>,
+			 <0x42000000 0x40 0x00000000 0x40 0x00000000 0x1 0x00000000>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0 0 0 7>;
+		interrupt-map = <0 0 0 1 &gic 0 0 0 136 4>,
+				<0 0 0 2 &gic 0 0 0 137 4>,
+				<0 0 0 3 &gic 0 0 0 138 4>,
+				<0 0 0 4 &gic 0 0 0 139 4>;
+		msi-parent = <&v2m_0>;
+		status = "disabled";
+	};
+
 	/include/ "juno-clocks.dtsi"
 
 	dma@7ff00000 {
@@ -56,6 +78,7 @@
 			     <GIC_SPI 89 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 90 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 91 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 92 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 108 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 109 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 110 IRQ_TYPE_LEVEL_HIGH>,
@@ -123,6 +146,13 @@
 		      <0x00000008 0x80000000 0x1 0x80000000>;
 	};
 
+	gpu@0x2d000000 {
+		compatible = "arm,malit6xx", "arm,mali";
+		reg = <0x0 0x2d000000 0x0 0x4000>;
+		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
+		interrupt-names = "JOB", "MMU", "GPU";
+	};
+
 	smb {
 		compatible = "simple-bus";
 		#address-cells = <2>;
@@ -151,4 +181,11 @@
 				<0 0 12 &gic 0 0 0 169 IRQ_TYPE_LEVEL_HIGH>;
 
 		/include/ "juno-motherboard.dtsi"
+	};
+
+	firmware {
+		optee {
+			compatible = "linaro,optee-tz";
+			method = "smc";
+		};
 	};
