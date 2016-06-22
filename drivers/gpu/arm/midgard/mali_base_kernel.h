@@ -170,8 +170,13 @@ enum {
 /* IN */
 	BASE_MEM_COHERENT_SYSTEM_REQUIRED = (1U << 15), /**< Page coherence
 					     Outer shareable, required. */
-	BASE_MEM_SECURE = (1U << 16)           /**< Secure memory */
-
+	BASE_MEM_SECURE = (1U << 16),          /**< Secure memory */
+	BASE_MEM_DONT_NEED = (1U << 17),       /**< Not needed physical
+						    memory */
+	BASE_MEM_IMPORT_SHARED = (1U << 18),   /**< Must use shared CPU/GPU zone
+						    (SAME_VA zone) but doesn't
+						    require the addresses to
+						    be the same */
 };
 
 /**
@@ -179,7 +184,7 @@ enum {
  *
  * Must be kept in sync with the ::base_mem_alloc_flags flags
  */
-#define BASE_MEM_FLAGS_NR_BITS 17
+#define BASE_MEM_FLAGS_NR_BITS 19
 
 /**
   * A mask for all output bits, excluding IN/OUT bits.
@@ -192,6 +197,13 @@ enum {
 #define BASE_MEM_FLAGS_INPUT_MASK \
 	(((1 << BASE_MEM_FLAGS_NR_BITS) - 1) & ~BASE_MEM_FLAGS_OUTPUT_MASK)
 
+/**
+ * A mask for all the flags which are modifiable via the base_mem_set_flags
+ * interface.
+ */
+#define BASE_MEM_FLAGS_MODIFIABLE \
+	(BASE_MEM_DONT_NEED | BASE_MEM_COHERENT_SYSTEM | \
+	 BASE_MEM_COHERENT_LOCAL)
 
 /**
  * enum base_mem_import_type - Memory types supported by @a base_mem_import
@@ -383,6 +395,28 @@ struct base_mem_aliasing_info {
 };
 
 /**
+ * struct base_jit_alloc_info - Structure which describes a JIT allocation
+ *                              request.
+ * @gpu_alloc_addr:             The GPU virtual address to write the JIT
+ *                              allocated GPU virtual address to.
+ * @va_pages:                   The minimum number of virtual pages required.
+ * @commit_pages:               The minimum number of physical pages which
+ *                              should back the allocation.
+ * @extent:                     Granularity of physical pages to grow the
+ *                              allocation by during a fault.
+ * @id:                         Unique ID provided by the caller, this is used
+ *                              to pair allocation and free requests.
+ *                              Zero is not a valid value.
+ */
+struct base_jit_alloc_info {
+	u64 gpu_alloc_addr;
+	u64 va_pages;
+	u64 commit_pages;
+	u64 extent;
+	u8 id;
+};
+
+/**
  * @brief Job dependency type.
  *
  * A flags field will be inserted into the atom structure to specify whether a dependency is a data or
@@ -435,6 +469,16 @@ typedef u16 base_jd_core_req;
 #define BASE_JD_REQ_FS_AFBC  (1U << 13)
 
 /**
+ * SW-only requirement: coalesce completion events.
+ * If this bit is set then completion of this atom will not cause an event to
+ * be sent to userspace, whether successful or not; completion events will be
+ * deferred until an atom completes which does not have this bit set.
+ *
+ * This bit may not be used in combination with BASE_JD_REQ_EXTERNAL_RESOURCES.
+ */
+#define BASE_JD_REQ_EVENT_COALESCE (1U << 5)
+
+/**
  * SW Only requirement: the job chain requires a coherent core group. We don't
  * mind which coherent core group is used.
  */
@@ -453,6 +497,8 @@ typedef u16 base_jd_core_req;
  * but should instead be part of a NULL jobs inserted into the dependency tree.
  * The first pre_dep object must be configured for the external resouces to use,
  * the second pre_dep object can be used to create other dependencies.
+ *
+ * This bit may not be used in combination with BASE_JD_REQ_EVENT_COALESCE.
  */
 #define BASE_JD_REQ_EXTERNAL_RESOURCES   (1U << 8)
 
@@ -503,7 +549,6 @@ typedef u16 base_jd_core_req;
  * - Priority is inherited from the replay job.
  */
 #define BASE_JD_REQ_SOFT_REPLAY                 (BASE_JD_REQ_SOFT_JOB | 0x4)
-
 /**
  * SW only requirement: event wait/trigger job.
  *
@@ -516,6 +561,54 @@ typedef u16 base_jd_core_req;
 #define BASE_JD_REQ_SOFT_EVENT_WAIT             (BASE_JD_REQ_SOFT_JOB | 0x5)
 #define BASE_JD_REQ_SOFT_EVENT_SET              (BASE_JD_REQ_SOFT_JOB | 0x6)
 #define BASE_JD_REQ_SOFT_EVENT_RESET            (BASE_JD_REQ_SOFT_JOB | 0x7)
+
+#define BASE_JD_REQ_SOFT_DEBUG_COPY             (BASE_JD_REQ_SOFT_JOB | 0x8)
+
+/**
+ * SW only requirement: Just In Time allocation
+ *
+ * This job requests a JIT allocation based on the request in the
+ * @base_jit_alloc_info structure which is passed via the jc element of
+ * the atom.
+ *
+ * It should be noted that the id entry in @base_jit_alloc_info must not
+ * be reused until it has been released via @BASE_JD_REQ_SOFT_JIT_FREE.
+ *
+ * Should this soft job fail it is expected that a @BASE_JD_REQ_SOFT_JIT_FREE
+ * soft job to free the JIT allocation is still made.
+ *
+ * The job will complete immediately.
+ */
+#define BASE_JD_REQ_SOFT_JIT_ALLOC              (BASE_JD_REQ_SOFT_JOB | 0x9)
+/**
+ * SW only requirement: Just In Time free
+ *
+ * This job requests a JIT allocation created by @BASE_JD_REQ_SOFT_JIT_ALLOC
+ * to be freed. The ID of the JIT allocation is passed via the jc element of
+ * the atom.
+ *
+ * The job will complete immediately.
+ */
+#define BASE_JD_REQ_SOFT_JIT_FREE               (BASE_JD_REQ_SOFT_JOB | 0xa)
+
+/**
+ * SW only requirement: Map external resource
+ *
+ * This job requests external resource(s) are mapped once the dependencies
+ * of the job have been satisfied. The list of external resources are
+ * passed via the jc element of the atom which is a pointer to a
+ * @base_external_resource_list.
+ */
+#define BASE_JD_REQ_SOFT_EXT_RES_MAP            (BASE_JD_REQ_SOFT_JOB | 0xb)
+/**
+ * SW only requirement: Unmap external resource
+ *
+ * This job requests external resource(s) are unmapped once the dependencies
+ * of the job has been satisfied. The list of external resources are
+ * passed via the jc element of the atom which is a pointer to a
+ * @base_external_resource_list.
+ */
+#define BASE_JD_REQ_SOFT_EXT_RES_UNMAP          (BASE_JD_REQ_SOFT_JOB | 0xc)
 
 /**
  * HW Requirement: Requires Compute shaders (but not Vertex or Geometry Shaders)
@@ -553,26 +646,21 @@ typedef u16 base_jd_core_req;
 #define BASEP_JD_REQ_EVENT_NEVER (1U << 14)
 
 /**
-* These requirement bits are currently unused in base_jd_core_req (currently a u16)
-*/
+ * These requirement bits are currently unused in base_jd_core_req (currently a u16)
+ */
 
-#define BASEP_JD_REQ_RESERVED_BIT5 (1U << 5)
-#define BASEP_JD_REQ_RESERVED_BIT15 (1U << 15)
-
-/**
-* Mask of all the currently unused requirement bits in base_jd_core_req.
-*/
-
-#define BASEP_JD_REQ_RESERVED (BASEP_JD_REQ_RESERVED_BIT5 | \
-				BASEP_JD_REQ_RESERVED_BIT15)
+#define BASEP_JD_REQ_RESERVED (1U << 15)
 
 /**
  * Mask of all bits in base_jd_core_req that control the type of the atom.
  *
  * This allows dependency only atoms to have flags set
  */
-#define BASEP_JD_REQ_ATOM_TYPE (~(BASEP_JD_REQ_RESERVED | BASE_JD_REQ_EVENT_ONLY_ON_FAILURE |\
-				BASE_JD_REQ_EXTERNAL_RESOURCES | BASEP_JD_REQ_EVENT_NEVER))
+#define BASEP_JD_REQ_ATOM_TYPE (~(BASEP_JD_REQ_RESERVED |\
+				BASE_JD_REQ_EVENT_ONLY_ON_FAILURE |\
+				BASE_JD_REQ_EXTERNAL_RESOURCES |\
+				BASEP_JD_REQ_EVENT_NEVER |\
+				BASE_JD_REQ_EVENT_COALESCE))
 
 /**
  * @brief States to model state machine processed by kbasep_js_job_check_ref_cores(), which
@@ -713,6 +801,31 @@ typedef enum base_external_resource_access {
 typedef struct base_external_resource {
 	u64 ext_resource;
 } base_external_resource;
+
+
+/**
+ * The maximum number of external resources which can be mapped/unmapped
+ * in a single request.
+ */
+#define BASE_EXT_RES_COUNT_MAX 10
+
+/**
+ * struct base_external_resource_list - Structure which describes a list of
+ *                                      external resources.
+ * @count:                              The number of resources.
+ * @ext_res:                            Array of external resources which is
+ *                                      sized at allocation time.
+ */
+struct base_external_resource_list {
+	u64 count;
+	struct base_external_resource ext_res[1];
+};
+
+struct base_jd_debug_copy_buffer {
+	u64 address;
+	u64 size;
+	struct base_external_resource extres;
+};
 
 /**
  * @brief Setter for a dependency structure

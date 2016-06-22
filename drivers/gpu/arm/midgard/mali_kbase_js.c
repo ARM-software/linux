@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -25,9 +25,7 @@
 #if defined(CONFIG_MALI_GATOR_SUPPORT)
 #include <mali_kbase_gator.h>
 #endif
-#if defined(CONFIG_MALI_MIPE_ENABLED)
 #include <mali_kbase_tlstream.h>
-#endif
 #include <mali_kbase_hw.h>
 
 #include <mali_kbase_defs.h>
@@ -78,13 +76,6 @@ static int kbase_js_get_slot(struct kbase_device *kbdev,
 
 static void kbase_js_foreach_ctx_job(struct kbase_context *kctx,
 		kbasep_js_policy_ctx_job_cb callback);
-
-static bool kbase_js_evict_atom(struct kbase_context *kctx,
-				struct kbase_jd_atom *katom_evict,
-				struct kbase_jd_atom *start_katom,
-				struct kbase_jd_atom *head_katom,
-				struct list_head *evict_list,
-				struct jsctx_queue *rb, int idx);
 
 /* Helper for trace subcodes */
 #if KBASE_TRACE_ENABLE
@@ -256,7 +247,7 @@ bool kbasep_js_runpool_retain_ctx_nolock(struct kbase_device *kbdev,
 	JSCTX_GET(JSCTX_RD_OFFSET, var, JSCTX_RB_MASK_STORE)
 
 #define JSCTX_GET_IDX_DIFF(lower, upper) \
-	((upper + JSCTX_RB_SIZE_STORE - lower) & JSCTX_RB_MASK_STORE)
+	((upper >= lower) ? (upper - lower) : (upper+JSCTX_RB_SIZE_STORE-lower))
 
 #define JSCTX_SET_WR_IDX(var, value) \
 	JSCTX_SET(var, JSCTX_WR_OFFSET, value, JSCTX_RB_MASK_STORE)
@@ -333,65 +324,6 @@ jsctx_rb_is_full(struct jsctx_queue *queue)
 	return JSCTX_GET_IDX_DIFF(rn_idx, wr_idx) >= JSCTX_RB_SIZE;
 }
 
-/**
- * jsctx_rb_compact_prio(): - Compact a ring buffer
- * @kctx: Pointer to kbase context with ring buffer.
- * @js:   Job slot id to compact.
- * @prio: Priority id to compact.
- */
-static inline void
-jsctx_rb_compact_prio(struct kbase_context *kctx, int js, int prio)
-{
-	struct jsctx_queue *rb = &kctx->jsctx_queue[prio][js];
-	unsigned int var = atomic_read(&rb->indicies);
-
-	u16 running_idx = JSCTX_GET_RN_IDX(var);
-	u16 read_idx = JSCTX_GET_RD_IDX(var);
-	u16 wr_idx = JSCTX_GET_WR_IDX(var);
-
-	const u16 count = JSCTX_GET_IDX_DIFF(running_idx, wr_idx);
-	const u16 readable_count = JSCTX_GET_IDX_DIFF(read_idx, wr_idx);
-
-	u16 offset = 0;
-	u16 i;
-
-	lockdep_assert_held(&kctx->kbdev->js_data.runpool_irq.lock);
-	lockdep_assert_held(&kctx->jctx.lock);
-
-	for (i = 0; i < count; i++) {
-		u16 idx = (wr_idx - 1 - i) & JSCTX_RB_MASK_STORE;
-
-		if (rb->entries[idx & JSCTX_RB_MASK].atom_id !=
-			       KBASEP_ATOM_ID_INVALID) {
-			rb->entries[(idx + offset) & JSCTX_RB_MASK].atom_id
-				= rb->entries[idx & JSCTX_RB_MASK].atom_id;
-		} else {
-			offset += 1;
-			running_idx++;
-			if (i < readable_count)
-				read_idx++;
-		}
-
-	}
-
-	JSCTX_SET_RN_IDX(var, running_idx);
-	JSCTX_SET_RD_IDX(var, read_idx);
-	atomic_set(&rb->indicies, var);
-}
-
-/**
- * jsctx_rb_compact(): - Compact all priority ring buffers
- * @kctx: Pointer to kbase context with ring buffer.
- * @js:   Job slot id to compact.
- */
-static inline void
-jsctx_rb_compact(struct kbase_context *kctx, int js)
-{
-	int prio;
-
-	for (prio = 0; prio < KBASE_JS_ATOM_SCHED_PRIO_COUNT; prio++)
-		jsctx_rb_compact_prio(kctx, js, prio);
-}
 
 /**
  * jsctx_queue_foreach_prio(): - Execute callback for each entry in the queue.
@@ -450,7 +382,6 @@ jsctx_queue_foreach_prio(struct kbase_context *kctx, int js, int prio,
 		list_del(pos);
 		callback(kctx->kbdev, entry);
 	}
-
 }
 
 /**
@@ -718,82 +649,6 @@ jsctx_rb_remove(struct kbase_context *kctx, struct kbase_jd_atom *katom)
 
 		JSCTX_SET_RN_IDX(var, rn_idx+1);
 	} while (atomic_cmpxchg(&rb->indicies, oldvar, var) != oldvar);
-}
-
-/**
- * jsctx_queue_evict(): - Evict atom, and dependents, from queue
- * @kctx:        Pointer to kbase context with ring buffer.
- * @start_katom: Pointer to the first katom to evict.
- * @head_katom:  Pointer to head katom.
- * @evict_list:  Pointer to head of list where evicted atoms are added.
- *
- * Iterate over the ring buffer starting at @start_katom and evict @start_atom
- * and dependent atoms in ring buffer.
- *
- * @evict_list and @head_katom is passed on to kbase_js_evict_atom() which will
- * examine the atom dependencies.
- *
- * jsctx_queue_evict() is only called by kbase_js_evict_deps().
- */
-static void
-jsctx_queue_evict(struct kbase_context *kctx,
-		struct kbase_jd_atom *start_katom,
-		struct kbase_jd_atom *head_katom,
-		struct list_head *evict_list)
-{
-	int prio = start_katom->sched_priority;
-	int js = start_katom->slot_nr;
-	struct jsctx_queue *queue = &kctx->jsctx_queue[prio][js];
-	bool atom_in_rb = false;
-	struct list_head *pos, *q;
-	unsigned int var = atomic_read(&queue->indicies);
-	u16 i = JSCTX_GET_RN_IDX(var);
-	u16 write_idx = JSCTX_GET_WR_IDX(var);
-
-	lockdep_assert_held(&kctx->kbdev->js_data.runpool_irq.lock);
-	lockdep_assert_held(&kctx->jctx.lock);
-
-	for (; i != write_idx; i = (i+1) & JSCTX_RB_MASK_STORE) {
-		if (!atom_in_rb) {
-			if (queue->entries[i & JSCTX_RB_MASK].atom_id ==
-					kbase_jd_atom_id(kctx, start_katom)) {
-				atom_in_rb = true;
-			}
-		}
-		if (atom_in_rb) {
-			u8 katom_evict;
-
-			katom_evict = queue->entries[i & JSCTX_RB_MASK].atom_id;
-			if (katom_evict != KBASEP_ATOM_ID_INVALID) {
-				if (!kbase_js_evict_atom(kctx,
-						&kctx->jctx.atoms[katom_evict],
-						start_katom, head_katom,
-						evict_list, queue, i)) {
-					return;
-				}
-			}
-		}
-	}
-	list_for_each_safe(pos, q, &queue->queue_head) {
-		struct kbase_jd_atom *entry;
-
-		entry = list_entry(pos, struct kbase_jd_atom, queue);
-		if (!atom_in_rb) {
-			if (kbase_jd_atom_id(kctx, entry) ==
-					kbase_jd_atom_id(kctx, start_katom)) {
-				atom_in_rb = true;
-			}
-		}
-		if (atom_in_rb) {
-			if (!kbase_js_evict_atom(kctx,
-						entry,
-						start_katom, head_katom,
-						evict_list, queue, -1)) {
-				return;
-			}
-			list_del(pos);
-		}
-	}
 }
 
 
@@ -1449,7 +1304,8 @@ static bool kbase_js_ctx_pullable(struct kbase_context *kctx, int js,
 		return false; /* next atom blocked */
 	if (katom->atom_flags & KBASE_KATOM_FLAG_X_DEP_BLOCKED) {
 		if (katom->x_pre_dep->gpu_rb_state ==
-					KBASE_ATOM_GPU_RB_NOT_IN_SLOT_RB)
+					KBASE_ATOM_GPU_RB_NOT_IN_SLOT_RB ||
+					katom->x_pre_dep->will_fail_event_code)
 			return false;
 		if ((katom->atom_flags & KBASE_KATOM_FLAG_FAIL_BLOCKER) &&
 				kbase_backend_nr_atoms_on_slot(kctx->kbdev, js))
@@ -1995,9 +1851,7 @@ static kbasep_js_release_result kbasep_js_runpool_release_ctx_internal(
 #if defined(CONFIG_MALI_GATOR_SUPPORT)
 		kbase_trace_mali_mmu_as_released(kctx->as_nr);
 #endif
-#if defined(CONFIG_MALI_MIPE_ENABLED)
 		kbase_tlstream_tl_nret_as_ctx(&kbdev->as[kctx->as_nr], kctx);
-#endif
 
 		kbase_backend_release_ctx_irq(kbdev, kctx);
 
@@ -2342,9 +2196,7 @@ static bool kbasep_js_schedule_ctx(struct kbase_device *kbdev,
 #if defined(CONFIG_MALI_GATOR_SUPPORT)
 	kbase_trace_mali_mmu_as_in_use(kctx->as_nr);
 #endif
-#if defined(CONFIG_MALI_MIPE_ENABLED)
 	kbase_tlstream_tl_ret_as_ctx(&kbdev->as[kctx->as_nr], kctx);
-#endif
 
 	/* Cause any future waiter-on-termination to wait until the context is
 	 * descheduled */
@@ -2661,6 +2513,49 @@ bool kbase_js_dep_resolved_submit(struct kbase_context *kctx,
 	return enqueue_required;
 }
 
+/**
+ * kbase_js_evict_deps - Evict dependencies of a failed atom.
+ * @kctx:       Context pointer
+ * @katom:      Pointer to the atom that has failed.
+ * @js:         The job slot the katom was run on.
+ * @prio:       Priority of the katom.
+ *
+ * Remove all post dependencies of an atom from the context ringbuffers.
+ *
+ * The original atom's event_code will be propogated to all dependent atoms.
+ *
+ * Context: Caller must hold the HW access lock
+ */
+static void kbase_js_evict_deps(struct kbase_context *kctx,
+				struct kbase_jd_atom *katom, int js, int prio)
+{
+	struct kbase_jd_atom *x_dep = katom->x_post_dep;
+	struct kbase_jd_atom *next_katom = jsctx_rb_peek_prio(kctx, js, prio);
+
+	lockdep_assert_held(&kctx->kbdev->js_data.runpool_irq.lock);
+
+	if (next_katom &&
+			(next_katom->atom_flags & KBASE_KATOM_FLAG_FAIL_PREV)) {
+		KBASE_DEBUG_ASSERT(next_katom->status !=
+				KBASE_JD_ATOM_STATE_HW_COMPLETED);
+
+		next_katom->will_fail_event_code = katom->event_code;
+
+	}
+
+	/* Has cross slot depenency. */
+	if (x_dep && (x_dep->atom_flags & (KBASE_KATOM_FLAG_JSCTX_IN_LL |
+					KBASE_KATOM_FLAG_JSCTX_RB_SUBMITTED))) {
+		/* Remove dependency.*/
+		x_dep->atom_flags &= ~KBASE_KATOM_FLAG_X_DEP_BLOCKED;
+
+		/* Fail if it had a data dependency. */
+		if (x_dep->atom_flags & KBASE_KATOM_FLAG_FAIL_BLOCKER) {
+			x_dep->will_fail_event_code = katom->event_code;
+		}
+	}
+}
+
 struct kbase_jd_atom *kbase_js_pull(struct kbase_context *kctx, int js)
 {
 	struct kbase_jd_atom *katom;
@@ -2698,7 +2593,8 @@ struct kbase_jd_atom *kbase_js_pull(struct kbase_context *kctx, int js)
 
 	if (katom->atom_flags & KBASE_KATOM_FLAG_X_DEP_BLOCKED) {
 		if (katom->x_pre_dep->gpu_rb_state ==
-					KBASE_ATOM_GPU_RB_NOT_IN_SLOT_RB)
+					KBASE_ATOM_GPU_RB_NOT_IN_SLOT_RB ||
+					katom->x_pre_dep->will_fail_event_code)
 			return NULL;
 		if ((katom->atom_flags & KBASE_KATOM_FLAG_FAIL_BLOCKER) &&
 				kbase_backend_nr_atoms_on_slot(kctx->kbdev, js))
@@ -2741,6 +2637,8 @@ static void js_return_worker(struct work_struct *data)
 	u64 affinity = katom->affinity;
 	enum kbase_atom_coreref_state coreref_state = katom->coreref_state;
 
+	kbase_tlstream_aux_job_softstop_ex(katom);
+
 	kbase_backend_complete_wq(kbdev, katom);
 
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8316))
@@ -2767,6 +2665,7 @@ static void js_return_worker(struct work_struct *data)
 			WARN_ON(!kctx->ctx_runnable_ref);
 			kctx->ctx_runnable_ref = false;
 			atomic_dec(&kbdev->js_data.nr_contexts_runnable);
+			timer_sync = true;
 		}
 
 		if (kctx->as_nr != KBASEP_AS_NR_INVALID &&
@@ -2832,117 +2731,6 @@ void kbase_js_unpull(struct kbase_context *kctx, struct kbase_jd_atom *katom)
 	queue_work(kctx->jctx.job_done_wq, &katom->work);
 }
 
-static bool kbase_js_evict_atom(struct kbase_context *kctx,
-				struct kbase_jd_atom *katom_evict,
-				struct kbase_jd_atom *start_katom,
-				struct kbase_jd_atom *head_katom,
-				struct list_head *evict_list,
-				struct jsctx_queue *rb, int idx)
-{
-	struct kbase_jd_atom *x_dep = katom_evict->x_post_dep;
-
-	if (!(katom_evict->atom_flags & KBASE_KATOM_FLAG_FAIL_PREV) &&
-						katom_evict != start_katom)
-		return false;
-
-	if (katom_evict->gpu_rb_state != KBASE_ATOM_GPU_RB_NOT_IN_SLOT_RB) {
-		WARN_ON(katom_evict->event_code != head_katom->event_code);
-
-		return false;
-	}
-
-	if (katom_evict->status == KBASE_JD_ATOM_STATE_HW_COMPLETED &&
-						katom_evict != head_katom)
-		return false;
-
-	/* Evict cross dependency if present */
-	if (x_dep && (x_dep->atom_flags & (KBASE_KATOM_FLAG_JSCTX_IN_LL |
-				KBASE_KATOM_FLAG_JSCTX_RB_SUBMITTED))
-			&& (x_dep->atom_flags & KBASE_KATOM_FLAG_FAIL_BLOCKER))
-		list_add_tail(&x_dep->dep_item[0], evict_list);
-
-	/* If cross dependency is present and does not have a data dependency
-	 * then unblock */
-	if (x_dep && (x_dep->atom_flags & (KBASE_KATOM_FLAG_JSCTX_IN_LL |
-					KBASE_KATOM_FLAG_JSCTX_RB_SUBMITTED))
-			&& !(x_dep->atom_flags & KBASE_KATOM_FLAG_FAIL_BLOCKER))
-		x_dep->atom_flags &= ~KBASE_KATOM_FLAG_X_DEP_BLOCKED;
-
-	if (katom_evict != head_katom) {
-		if (idx >= 0) {
-			rb->entries[idx & JSCTX_RB_MASK].atom_id =
-					KBASEP_ATOM_ID_INVALID;
-		}
-
-		katom_evict->event_code = head_katom->event_code;
-		katom_evict->atom_flags &=
-					~(KBASE_KATOM_FLAG_JSCTX_IN_LL
-					| KBASE_KATOM_FLAG_JSCTX_RB_SUBMITTED);
-
-		if (katom_evict->atom_flags & KBASE_KATOM_FLAG_HOLDING_CTX_REF)
-			kbase_jd_done(katom_evict, katom_evict->slot_nr, NULL,
-									0);
-		else
-			kbase_jd_evict(kctx->kbdev, katom_evict);
-	}
-
-	return true;
-}
-
-/**
- * kbase_js_evict_deps - Evict dependencies
- * @kctx:       Context pointer
- * @head_katom: Pointer to the atom to evict
- *
- * Remove all post dependencies of an atom from the context ringbuffers.
- *
- * The original atom's event_code will be propogated to all dependent atoms.
- *
- * Context: Caller must hold both jctx and HW access locks
- */
-static void kbase_js_evict_deps(struct kbase_context *kctx,
-				struct kbase_jd_atom *head_katom)
-{
-	struct list_head evict_list;
-
-	lockdep_assert_held(&kctx->jctx.sched_info.ctx.jsctx_mutex);
-	lockdep_assert_held(&kctx->kbdev->js_data.runpool_irq.lock);
-
-	INIT_LIST_HEAD(&evict_list);
-
-	list_add_tail(&head_katom->dep_item[0], &evict_list);
-
-	while (!list_empty(&evict_list)) {
-		struct kbase_jd_atom *start_katom;
-
-		start_katom = list_entry(evict_list.prev, struct kbase_jd_atom,
-								dep_item[0]);
-		list_del(evict_list.prev);
-
-		jsctx_queue_evict(kctx, start_katom, head_katom, &evict_list);
-	}
-}
-
-/**
- * kbase_js_compact - Compact JSCTX ringbuffers
- * @kctx:  Context pointer
- *
- * Compact the JSCTX ringbuffers, removing any NULL entries
- *
- * Context: Caller must hold both jctx and HW access locks
- */
-static void kbase_js_compact(struct kbase_context *kctx)
-{
-	struct kbase_device *kbdev = kctx->kbdev;
-	int js;
-
-	lockdep_assert_held(&kctx->jctx.sched_info.ctx.jsctx_mutex);
-	lockdep_assert_held(&kbdev->js_data.runpool_irq.lock);
-
-	for (js = 0; js < kbdev->gpu_props.num_job_slots; js++)
-		jsctx_rb_compact(kctx, js);
-}
-
 bool kbase_js_complete_atom_wq(struct kbase_context *kctx,
 						struct kbase_jd_atom *katom)
 {
@@ -2966,9 +2754,6 @@ bool kbase_js_complete_atom_wq(struct kbase_context *kctx,
 	spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
 
 	if (katom->atom_flags & KBASE_KATOM_FLAG_JSCTX_RB_SUBMITTED) {
-		if (katom->event_code != BASE_JD_EVENT_DONE)
-			kbase_js_evict_deps(kctx, katom);
-
 		jsctx_rb_remove(kctx, katom);
 
 		context_idle = !atomic_dec_return(&kctx->atoms_pulled);
@@ -2979,10 +2764,8 @@ bool kbase_js_complete_atom_wq(struct kbase_context *kctx,
 			WARN_ON(!kctx->ctx_runnable_ref);
 			kctx->ctx_runnable_ref = false;
 			atomic_dec(&kbdev->js_data.nr_contexts_runnable);
+			timer_sync = true;
 		}
-
-		if (katom->event_code != BASE_JD_EVENT_DONE)
-			kbase_js_compact(kctx);
 	}
 	WARN_ON(katom->atom_flags & KBASE_KATOM_FLAG_JSCTX_IN_LL);
 
@@ -3048,13 +2831,21 @@ void kbase_js_complete_atom(struct kbase_jd_atom *katom, ktime_t *end_timestamp)
 
 	lockdep_assert_held(&kctx->kbdev->js_data.runpool_irq.lock);
 
+	if (katom->will_fail_event_code)
+		katom->event_code = katom->will_fail_event_code;
+
 	katom->status = KBASE_JD_ATOM_STATE_HW_COMPLETED;
+
+	if (katom->event_code != BASE_JD_EVENT_DONE) {
+		kbase_js_evict_deps(kctx, katom, katom->slot_nr,
+				katom->sched_priority);
+	}
 
 #if defined(CONFIG_MALI_GATOR_SUPPORT)
 	kbase_trace_mali_job_slots_event(GATOR_MAKE_EVENT(GATOR_JOB_SLOT_STOP,
 				katom->slot_nr), NULL, 0);
 #endif
-#if defined(CONFIG_MALI_MIPE_ENABLED)
+
 	kbase_tlstream_tl_nret_atom_lpu(
 			katom,
 			&kbdev->gpu_props.props.raw_props.js_features[
@@ -3064,7 +2855,7 @@ void kbase_js_complete_atom(struct kbase_jd_atom *katom, ktime_t *end_timestamp)
 			kctx,
 			&kbdev->gpu_props.props.raw_props.js_features[
 				katom->slot_nr]);
-#endif
+
 	/* Calculate the job's time used */
 	if (end_timestamp != NULL) {
 		/* Only calculating it for jobs that really run on the HW (e.g.

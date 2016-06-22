@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -405,7 +405,7 @@ struct kbasep_js_kctx_info {
 	 *
 	 * You may not access any of these members from IRQ context.
 	 */
-	struct {
+	struct kbase_jsctx {
 		struct mutex jsctx_mutex;		    /**< Job Scheduler Context lock */
 
 		/** Number of jobs <b>ready to run</b> - does \em not include the jobs waiting in
