@@ -1,0 +1,19 @@
+/*
+ * ARM Ltd. Juno Platform
+ *
+ * Copyright (c) 2015 ARM Ltd.
+ *
+ * This file is licensed under a dual GPLv2 or BSD license.
+ */
+
+#include "juno-r1.dtsi"
+
+/ {
+	gpu: gpu@0x6e000000 {
+		compatible = "arm,mali-midgard";
+		reg = <0x0 0x6e000000 0x0 0x4000>;
+		interrupts = <0 168 4>, <0 168 4>, <0 168 4>;
+		interrupt-names = "JOB", "MMU", "GPU";
+		system-coherency = <1>;
+	};
+};

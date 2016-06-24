@@ -254,25 +254,6 @@
 		      <0x00000008 0x80000000 0x1 0x80000000>;
 	};
 
-	gpu: gpu@0x2d000000 {
-		compatible = "arm,malit6xx", "arm,mali";
-		#cooling-cells = <2>; /* min followed by max */
-		reg = <0x0 0x2d000000 0x0 0x4000>;
-		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
-		interrupt-names = "JOB", "MMU", "GPU";
-		clocks = <&scpi_dvfs 2>;
-		clock-names = "clk_mali";
-		power_model {
-			compatible = "arm,mali-simple-power-model";
-			voltage = <800>;
-			frequency = <500>;
-			static-power = <500>;
-			dynamic-power = <1500>;
-			ts = <20000 2000 (-20) 2>;
-			thermal-zone = "gpu";
-		};
-	};
-
 	soc_i2s: i2s@7ff90000 {
 		compatible = "snps,designware-i2s";
 		reg = <0x0 0x7ff90000 0x0 0x1000>;
