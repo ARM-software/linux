@@ -16,4 +16,9 @@
 		interrupt-names = "JOB", "MMU", "GPU";
 		system-coherency = <0>;
 	};
+
+	fpga_sysctl@0x6f020000 {
+		compatible = "arm,mali_fpga_sysctl";
+		reg = <0x0 0x6f020000 0x0 0x000000CC>;
+	};
 };

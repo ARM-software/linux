@@ -18,4 +18,9 @@
 		snoop_disable_smc = <0x8200ff05>;
 		system-coherency = <1>;
 	};
+
+	fpga_sysctl@0x6f020000 {
+		compatible = "arm,mali_fpga_sysctl";
+		reg = <0x0 0x6f020000 0x0 0x000000CC>;
+	};
 };
