@@ -85,8 +85,6 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 	struct resource *res;
 	u32 version;
 	int ret;
-	struct device_node *node;
-	int preferred_bpp;
 
 	hdlcd = devm_kzalloc(dev->dev, sizeof(*hdlcd), GFP_KERNEL);
 	if (!hdlcd)
@@ -176,15 +174,7 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 	
 	init_completion(&hdlcd->frame_completion);
 
-	/* Try to pick the colour depth that Android user-side is hard-coded for */
-	preferred_bpp = 16;
-	node = of_find_compatible_node(NULL,NULL,"arm,mali");
-	if (node) {
-		of_node_put(node);
-		preferred_bpp = 32; /* If Mali present, assume 32bpp */
-	}
-
-	hdlcd->fbdev = hdlcd_drm_fbdev_init(dev, preferred_bpp,
+	hdlcd->fbdev = hdlcd_drm_fbdev_init(dev, 32,
 					dev->mode_config.num_crtc,
 					dev->mode_config.num_connector);
 
