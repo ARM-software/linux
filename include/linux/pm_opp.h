@@ -17,6 +17,8 @@
 #include <linux/err.h>
 #include <linux/notifier.h>
 
+#define LSK_OPPV2_BACKPORT 1
+
 struct dev_pm_opp;
 struct device;
 
