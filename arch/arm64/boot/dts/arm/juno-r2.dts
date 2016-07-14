@@ -15,7 +15,7 @@
 		arm,smc,secure_disable = <0xff07>;
 	};
 
-	gpu: gpu@0x2d000000 {
+	gpu: gpu@2d000000 {
 		compatible = "arm,mali-midgard";
 		#cooling-cells = <2>; /* min followed by max */
 		reg = <0x0 0x2d000000 0x0 0x4000>;
@@ -24,6 +24,14 @@
 		clocks = <&scpi_dvfs 2>;
 		clock-names = "clk_mali";
 		secure-mode-switcher = <&gpu_secure_switch>;
+		operating-points = <
+			/* KHz uV */
+			450000 820000
+			487500 825000
+			525000 850000
+			562500 875000
+			600000 900000
+		>;
 		power_model {
 			compatible = "arm,mali-simple-power-model";
 			voltage = <800>;
