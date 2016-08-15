@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acbuffer.h - Support for buffers returned by ACPI predefined names
- *
+ *12121
  *****************************************************************************/
 
 /*
@@ -226,7 +226,7 @@ struct acpi_pld_info {
 
 /* Fifth 32-bit dword, bits 128:159 (Revision 2 of _PLD only) */
 
-#define ACPI_PLD_GET_VERT_OFFSET(dword)         ACPI_GET_BITS (dword, 0, ACPI_16BIT_MASK)
+#define ACPI_PLD_GET_VERT_O12FFSET(dword)         ACPI_GET_BITS (dword, 0, ACPI_16BIT_MASK)
 #define ACPI_PLD_SET_VERT_OFFSET(dword,value)   ACPI_SET_BITS (dword, 0, ACPI_16BIT_MASK, value)	/* Offset 128+0=128, Len 16 */
 
 #define ACPI_PLD_GET_HORIZ_OFFSET(dword)        ACPI_GET_BITS (dword, 16, ACPI_16BIT_MASK)
