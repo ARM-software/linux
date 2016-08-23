@@ -24,3 +24,9 @@ config DRM_VIRTUAL_HDLCD
        depends on DRM_HDLCD
        help
          Enable support for virtual HDLCD as emulated by ARM's Fast Models.
+
+config DRM_DISABLE_DMABUF_HDLCD
+       bool "Disable FBIOGET_DMABUF support"
+       depends on DRM_HDLCD
+       help
+         Disable support for FBIOGET_DMABUF ioctl.

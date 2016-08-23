@@ -576,6 +576,7 @@ struct fb_dmabuf_export {
 
 #define FBIOGET_DMABUF       _IOR('F', 0x21, struct fb_dmabuf_export)
 
+#ifndef CONFIG_DRM_DISABLE_DMABUF_HDLCD
 static int hdlcd_get_dmabuf_ioctl(struct fb_info *info, unsigned int cmd,
 				  unsigned long arg)
 {
@@ -620,12 +621,17 @@ err_export:
 	drm_gem_object_unreference(&obj->base);
 	return -EFAULT;
 }
+#endif /* CONFIG_DRM_DISABLE_DMABUF_HDLCD */
 
 static int hdlcd_fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 {
 	switch (cmd) {
 	case FBIOGET_DMABUF:
+#ifndef CONFIG_DRM_DISABLE_DMABUF_HDLCD
 		return hdlcd_get_dmabuf_ioctl(info, cmd, arg);
+#else
+		return -ENOIOCTLCMD;
+#endif /* CONFIG_DRM_DISABLE_DMABUF_HDLCD */
 	case FBIO_WAITFORVSYNC:
 		return 0; /* Nothing to do as we wait when page flipping anyway */
 	default:
