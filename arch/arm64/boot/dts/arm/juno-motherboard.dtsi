@@ -126,4 +126,10 @@
 					clock-names = "apb_pclk";
 				};
 			};
+
+			mve@6,00030000 {
+				compatible = "arm,mali-mve";
+				reg = <6 0x30000 0x10000>;
+				interrupts = <11>;
+			};
 		};
