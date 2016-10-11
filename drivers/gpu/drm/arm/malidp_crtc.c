@@ -68,6 +68,16 @@ static void malidp_crtc_enable(struct drm_crtc *crtc)
 	clk_set_rate(hwdev->pxlclk, crtc->state->adjusted_mode.crtc_clock * 1000);
 
 	hwdev->modeset(hwdev, &vm);
+	/*
+	 * We should always disable the memory write when leaving config mode,
+	 * otherwise the hardware will start writing right away - possibly with
+	 * a stale config, and definitely before we've had a chance to configure
+	 * the planes.
+	 * If the memory write needs to be enabled, that will get taken care
+	 * of later during the atomic commit
+	 */
+	if (hwdev->disable_memwrite)
+		hwdev->disable_memwrite(hwdev);
 	hwdev->leave_config_mode(hwdev);
 	drm_crtc_vblank_on(crtc);
 }

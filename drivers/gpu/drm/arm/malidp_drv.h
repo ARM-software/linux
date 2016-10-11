@@ -22,6 +22,8 @@ struct malidp_drm {
 	struct drm_fbdev_cma *fbdev;
 	struct list_head event_list;
 	struct drm_crtc crtc;
+	struct drm_encoder mw_encoder;
+	struct drm_connector mw_connector;
 	wait_queue_head_t wq;
 	atomic_t config_valid;
 };
@@ -50,6 +52,9 @@ struct malidp_plane_state {
 int malidp_de_planes_init(struct drm_device *drm);
 void malidp_de_planes_destroy(struct drm_device *drm);
 int malidp_crtc_init(struct drm_device *drm);
+int malidp_mw_connector_init(struct drm_device *drm);
+void malidp_mw_atomic_commit(struct drm_device *drm,
+			     struct drm_atomic_state *old_state);
 
 /* often used combination of rotational bits */
 #define MALIDP_ROTATED_MASK	(DRM_ROTATE_90 | DRM_ROTATE_270)
