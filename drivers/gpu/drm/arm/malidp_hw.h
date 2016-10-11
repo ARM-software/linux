@@ -147,6 +147,24 @@ struct malidp_hw_device {
 	 */
 	int (*rotmem_required)(struct malidp_hw_device *hwdev, u16 w, u16 h, u32 fmt);
 
+	/**
+	 * Enable writing to memory the content of the next frame
+	 * @param hwdev - malidp_hw_device structure containing the HW description
+	 * @param addrs - array of addresses for each plane
+	 * @param pitches - array of pitches for each plane
+	 * @param num_planes - number of planes to be written
+	 * @param w - width of the output frame
+	 * @param h - height of the output frame
+	 * @param fmt_id - internal format ID of output buffer
+	 */
+	int (*enable_memwrite)(struct malidp_hw_device *hwdev, dma_addr_t *addrs,
+			       s32 *pitches, int num_planes, u16 w, u16 h, u32 fmt_id);
+
+	/*
+	 * Disable the writing to memory of the next frame's content.
+	 */
+	void (*disable_memwrite)(struct malidp_hw_device *hwdev);
+
 	u8 features;
 
 	u8 min_line_size;
