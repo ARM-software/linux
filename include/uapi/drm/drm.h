@@ -678,6 +678,16 @@ struct drm_get_cap {
  */
 #define DRM_CLIENT_CAP_ATOMIC	3
 
+/**
+ * DRM_CLIENT_CAP_WRITEBACK_CONNECTORS
+ *
+ * If set to 1, the DRM core will expose writeback connectors to userspace.
+ * Writeback connectors act differently to normal connectors (e.g. there will
+ * be no screen output if only writeback connectors are enabled), so we hide
+ * them from non-aware clients.
+ */
+#define DRM_CLIENT_CAP_WRITEBACK_CONNECTORS 4
+
 /** DRM_IOCTL_SET_CLIENT_CAP ioctl argument type */
 struct drm_set_client_cap {
 	__u64 capability;

@@ -86,6 +86,7 @@ static struct drm_conn_prop_enum_list drm_connector_enum_list[] = {
 	{ DRM_MODE_CONNECTOR_VIRTUAL, "Virtual" },
 	{ DRM_MODE_CONNECTOR_DSI, "DSI" },
 	{ DRM_MODE_CONNECTOR_DPI, "DPI" },
+	{ DRM_MODE_CONNECTOR_WRITEBACK, "Writeback" },
 };
 
 void drm_connector_ida_init(void)
@@ -235,7 +236,8 @@ int drm_connector_init(struct drm_device *dev,
 	list_add_tail(&connector->head, &config->connector_list);
 	config->num_connector++;
 
-	if (connector_type != DRM_MODE_CONNECTOR_VIRTUAL)
+	if ((connector_type != DRM_MODE_CONNECTOR_VIRTUAL) &&
+	    (connector_type != DRM_MODE_CONNECTOR_WRITEBACK))
 		drm_object_attach_property(&connector->base,
 					      config->edid_property,
 					      0);

@@ -422,6 +422,14 @@ static int drm_mode_create_standard_properties(struct drm_device *dev)
 	return 0;
 }
 
+static bool
+drm_connector_expose_to_userspace(const struct drm_connector *conn,
+				  const struct drm_file *file_priv)
+{
+	return (file_priv->writeback_connectors) ||
+	       (conn->connector_type != DRM_MODE_CONNECTOR_WRITEBACK);
+}
+
 /**
  * drm_mode_getresources - get graphics configuration
  * @dev: drm device for the ioctl
@@ -491,7 +499,8 @@ int drm_mode_getresources(struct drm_device *dev, void *data,
 		crtc_count++;
 
 	drm_for_each_connector(connector, dev)
-		connector_count++;
+		if (drm_connector_expose_to_userspace(connector, file_priv))
+			connector_count++;
 
 	drm_for_each_encoder(encoder, dev)
 		encoder_count++;
@@ -535,6 +544,9 @@ int drm_mode_getresources(struct drm_device *dev, void *data,
 		copied = 0;
 		connector_id = (uint32_t __user *)(unsigned long)card_res->connector_id_ptr;
 		drm_for_each_connector(connector, dev) {
+			if (!drm_connector_expose_to_userspace(connector, file_priv))
+				continue;
+
 			if (put_user(connector->base.id,
 				     connector_id + copied)) {
 				ret = -EFAULT;

@@ -388,6 +388,8 @@ struct drm_file {
 	unsigned universal_planes:1;
 	/* true if client understands atomic properties */
 	unsigned atomic:1;
+	/* true if client understands writeback connectors */
+	unsigned writeback_connectors:1;
 	/*
 	 * This client is the creator of @master.
 	 * Protected by struct drm_device::master_mutex.
