@@ -615,6 +615,14 @@ struct drm_connector {
 	 */
 	struct drm_property_blob *tile_blob_ptr;
 
+	/**
+	 * @pixel_formats_blob_ptr
+	 *
+	 * DRM blob property data for the pixel formats list on writeback
+	 * connectors
+	 */
+	struct drm_property_blob *pixel_formats_blob_ptr;
+
 /* should we poll this connector for connects and disconnects */
 /* hot plug detectable */
 #define DRM_CONNECTOR_POLL_HPD (1 << 0)
@@ -757,12 +765,16 @@ int drm_mode_create_tv_properties(struct drm_device *dev,
 int drm_mode_create_scaling_mode_property(struct drm_device *dev);
 int drm_mode_create_aspect_ratio_property(struct drm_device *dev);
 int drm_mode_create_suggested_offset_properties(struct drm_device *dev);
+int drm_mode_create_writeback_connector_properties(struct drm_device *dev);
 
 int drm_mode_connector_set_path_property(struct drm_connector *connector,
 					 const char *path);
 int drm_mode_connector_set_tile_property(struct drm_connector *connector);
 int drm_mode_connector_update_edid_property(struct drm_connector *connector,
 					    const struct edid *edid);
+int drm_mode_connector_set_writeback_formats(struct drm_connector *connector,
+					     u32 *formats,
+					     unsigned int n_formats);
 
 /**
  * drm_for_each_connector - iterate over all connectors

@@ -249,9 +249,14 @@ int drm_connector_init(struct drm_device *dev,
 		drm_object_attach_property(&connector->base, config->prop_crtc_id, 0);
 	}
 
-	if (connector_type == DRM_MODE_CONNECTOR_WRITEBACK)
+	if (connector_type == DRM_MODE_CONNECTOR_WRITEBACK) {
 		drm_object_attach_property(&connector->base,
 					   config->prop_fb_id, 0);
+		drm_object_attach_property(&connector->base,
+					   config->pixel_formats_property, 0);
+		drm_object_attach_property(&connector->base,
+					   config->pixel_formats_size_property, 0);
+	}
 
 	connector->debugfs_entry = NULL;
 out_put_type_id:
@@ -851,6 +856,45 @@ int drm_mode_create_suggested_offset_properties(struct drm_device *dev)
 EXPORT_SYMBOL(drm_mode_create_suggested_offset_properties);
 
 /**
+ * drm_mode_create_writeback_connector_properties - create writeback connector properties
+ * @dev: DRM device
+ *
+ * Create the properties specific to writeback connectors. These will be attached
+ * to writeback connectors by drm_connector_init. Drivers can set these
+ * properties using drm_mode_connector_set_writeback_formats().
+ *
+ *  "PIXEL_FORMATS":
+ *	Immutable blob property to store the supported pixel formats table. The
+ *	data is an array of u32 DRM_FORMAT_* fourcc values.
+ *	Userspace can use this blob to find out what pixel formats are supported
+ *	by the connector's writeback engine.
+ *
+ *  "PIXEL_FORMATS_SIZE":
+ *      Immutable unsigned range property storing the number of entries in the
+ *      PIXEL_FORMATS array.
+ */
+int drm_mode_create_writeback_connector_properties(struct drm_device *dev)
+{
+	if (dev->mode_config.pixel_formats_property &&
+	    dev->mode_config.pixel_formats_size_property)
+		return 0;
+
+	dev->mode_config.pixel_formats_property =
+		drm_property_create(dev, DRM_MODE_PROP_BLOB | DRM_MODE_PROP_IMMUTABLE,
+			"PIXEL_FORMATS", 0);
+
+	dev->mode_config.pixel_formats_size_property =
+		drm_property_create_range(dev, DRM_MODE_PROP_IMMUTABLE,
+			"PIXEL_FORMATS_SIZE", 0, UINT_MAX);
+
+	if (dev->mode_config.pixel_formats_property == NULL ||
+	    dev->mode_config.pixel_formats_size_property == NULL)
+		return -ENOMEM;
+	return 0;
+}
+EXPORT_SYMBOL(drm_mode_create_writeback_connector_properties);
+
+/**
  * drm_mode_connector_set_path_property - set tile property on connector
  * @connector: connector to set property on.
  * @path: path to use for property; must not be NULL.
@@ -956,6 +1000,33 @@ int drm_mode_connector_update_edid_property(struct drm_connector *connector,
 	return ret;
 }
 EXPORT_SYMBOL(drm_mode_connector_update_edid_property);
+
+int drm_mode_connector_set_writeback_formats(struct drm_connector *connector,
+					     u32 *formats,
+					     unsigned int n_formats)
+{
+	struct drm_device *dev = connector->dev;
+	size_t size = n_formats * sizeof(*formats);
+	int ret;
+
+	if (connector->connector_type != DRM_MODE_CONNECTOR_WRITEBACK)
+		return -EINVAL;
+
+	ret = drm_property_replace_global_blob(dev,
+					       &connector->pixel_formats_blob_ptr,
+					       size,
+					       formats,
+					       &connector->base,
+					       dev->mode_config.pixel_formats_property);
+
+	if (!ret)
+		drm_object_property_set_value(&connector->base,
+					      dev->mode_config.pixel_formats_size_property,
+					      n_formats);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_mode_connector_set_writeback_formats);
 
 int drm_mode_connector_set_obj_prop(struct drm_mode_object *obj,
 				    struct drm_property *property,

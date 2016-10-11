@@ -1302,6 +1302,18 @@ struct drm_mode_config {
 	 */
 	struct drm_property *suggested_y_property;
 
+	/**
+	 * @pixel_formats_property: Property for writeback connectors, storing
+	 * an array of the supported pixel formats for the writeback engine
+	 * (read-only).
+	 */
+	struct drm_property *pixel_formats_property;
+	/**
+	 * @pixel_formats_size_property: Property for writeback connectors,
+	 * stating the size of the pixel formats array (read-only).
+	 */
+	struct drm_property *pixel_formats_size_property;
+
 	/* dumb ioctl parameters */
 	uint32_t preferred_depth, prefer_shadow;
 
