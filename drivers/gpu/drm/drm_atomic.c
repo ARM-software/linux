@@ -1205,6 +1205,37 @@ drm_atomic_set_crtc_for_connector(struct drm_connector_state *conn_state,
 EXPORT_SYMBOL(drm_atomic_set_crtc_for_connector);
 
 /**
+ * drm_atomic_set_fb_for_connector - set framebuffer for (writeback) connector
+ * @connector_state: atomic state object for the connector
+ * @fb: fb to use for the connector
+ *
+ * This is used to set the framebuffer for a writeback connector, which outputs
+ * to a buffer instead of an actual physical connector.
+ * Changing the assigned framebuffer requires us to grab a reference to the new
+ * fb and drop the reference to the old fb, if there is one. This function
+ * takes care of all these details besides updating the pointer in the
+ * state object itself.
+ */
+void
+drm_atomic_set_fb_for_connector(struct drm_connector_state *conn_state,
+				struct drm_framebuffer *fb)
+{
+	if (conn_state->fb)
+		drm_framebuffer_unreference(conn_state->fb);
+	if (fb)
+		drm_framebuffer_reference(fb);
+	conn_state->fb = fb;
+
+	if (fb)
+		DRM_DEBUG_ATOMIC("Set [FB:%d] for connector state %p\n",
+				 fb->base.id, conn_state);
+	else
+		DRM_DEBUG_ATOMIC("Set [NOFB] for connector state %p\n",
+				 conn_state);
+}
+EXPORT_SYMBOL(drm_atomic_set_fb_for_connector);
+
+/**
  * drm_atomic_add_affected_connectors - add connectors for crtc
  * @state: atomic state
  * @crtc: DRM crtc

@@ -198,6 +198,7 @@ int drm_display_info_set_bus_formats(struct drm_display_info *info,
  * @connector: backpointer to the connector
  * @best_encoder: can be used by helpers and drivers to select the encoder
  * @state: backpointer to global drm_atomic_state
+ * @fb: Writeback framebuffer, for DRM_MODE_CONNECTOR_WRITEBACK
  */
 struct drm_connector_state {
 	struct drm_connector *connector;
@@ -213,6 +214,8 @@ struct drm_connector_state {
 	struct drm_encoder *best_encoder;
 
 	struct drm_atomic_state *state;
+
+	struct drm_framebuffer *fb;  /* do not write directly, use drm_atomic_set_fb_for_connector() */
 };
 
 /**

@@ -24,6 +24,7 @@
 #include <drm/drmP.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_auth.h>
+#include <drm/drm_connector.h>
 #include <drm/drm_framebuffer.h>
 
 #include "drm_crtc_internal.h"
@@ -808,6 +809,8 @@ EXPORT_SYMBOL(drm_framebuffer_cleanup);
  * it is removed and the CRTC/plane disabled.
  * The legacy references are dropped and the ->fb pointers set to NULL
  * accordingly.
+ * It also checks for (writeback) connectors which are using @fb, and removes
+ * it if found.
  *
  * Returns:
  * true if the framebuffer was successfully removed from use
@@ -900,7 +903,7 @@ retry:
 		plane_state->src_h = 0;
 	}
 
-	/* All of the connectors in state need disabling */
+	/* All of the connectors currently in state need disabling */
 	for_each_connector_in_state(state, connector, conn_state, i) {
 		ret = drm_atomic_set_crtc_for_connector(conn_state,
 							NULL);
@@ -908,10 +911,23 @@ retry:
 			goto fail;
 	}
 
-	if (WARN_ON(!plane_mask)) {
-		DRM_ERROR("Couldn't find any usage of [FB:%d]\n", fb->base.id);
-		ret = -ENOENT;
+	/* Now find any writeback connectors that need handling */
+	ret = drm_modeset_lock(&state->dev->mode_config.connection_mutex,
+			       state->acquire_ctx);
+	if (ret)
 		goto fail;
+
+	drm_for_each_connector(connector, dev) {
+		conn_state = drm_atomic_get_connector_state(state, connector);
+		if (IS_ERR(conn_state)) {
+			ret = PTR_ERR(conn_state);
+			goto fail;
+		}
+
+		if (conn_state->fb != fb)
+			continue;
+
+		drm_atomic_set_fb_for_connector(conn_state, NULL);
 	}
 
 	ret = drm_atomic_commit(state);
