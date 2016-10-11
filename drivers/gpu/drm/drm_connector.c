@@ -249,6 +249,10 @@ int drm_connector_init(struct drm_device *dev,
 		drm_object_attach_property(&connector->base, config->prop_crtc_id, 0);
 	}
 
+	if (connector_type == DRM_MODE_CONNECTOR_WRITEBACK)
+		drm_object_attach_property(&connector->base,
+					   config->prop_fb_id, 0);
+
 	connector->debugfs_entry = NULL;
 out_put_type_id:
 	if (ret)
