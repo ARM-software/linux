@@ -31,6 +31,7 @@
 #include <mali_kbase_gator.h>
 #endif
 #include <mali_kbase_tlstream.h>
+#include <mali_kbase_instr_defs.h>
 #include <mali_kbase_debug.h>
 
 #define beenthere(kctx, f, a...)  dev_dbg(kctx->kbdev->dev, "%s:" f, __func__, ##a)
@@ -39,8 +40,31 @@
 #include <mali_kbase_hw.h>
 #include <mali_kbase_mmu_hw.h>
 #include <mali_kbase_hwaccess_jm.h>
+#include <mali_kbase_time.h>
+#include <mali_kbase_mem.h>
 
 #define KBASE_MMU_PAGE_ENTRIES 512
+
+/**
+ * kbase_mmu_flush_invalidate() - Flush and invalidate the GPU caches.
+ * @kctx: The KBase context.
+ * @vpfn: The virtual page frame number to start the flush on.
+ * @nr: The number of pages to flush.
+ * @sync: Set if the operation should be synchronous or not.
+ *
+ * Issue a cache flush + invalidate to the GPU caches and invalidate the TLBs.
+ *
+ * If sync is not set then transactions still in flight when the flush is issued
+ * may use the old page tables and the data they write will not be written out
+ * to memory, this function returns after the flush has been issued but
+ * before all accesses which might effect the flushed region have completed.
+ *
+ * If sync is set then accesses in the flushed region will be drained
+ * before data is flush and invalidated through L1, L2 and into memory,
+ * after which point this function will return.
+ */
+static void kbase_mmu_flush_invalidate(struct kbase_context *kctx,
+		u64 vpfn, size_t nr, bool sync);
 
 /**
  * kbase_mmu_sync_pgd - sync page directory to memory
@@ -116,6 +140,16 @@ void page_fault_worker(struct work_struct *data)
 
 	KBASE_DEBUG_ASSERT(kctx->kbdev == kbdev);
 
+	if (unlikely(faulting_as->protected_mode))
+	{
+		kbase_mmu_report_fault_and_kill(kctx, faulting_as,
+				"Protected mode fault");
+		kbase_mmu_hw_clear_fault(kbdev, faulting_as, kctx,
+				KBASE_MMU_FAULT_TYPE_PAGE);
+
+		goto fault_done;
+	}
+
 	fault_status = faulting_as->fault_status;
 	switch (fault_status & AS_FAULTSTATUS_EXCEPTION_CODE_MASK) {
 
@@ -130,7 +164,7 @@ void page_fault_worker(struct work_struct *data)
 
 	case AS_FAULTSTATUS_EXCEPTION_CODE_TRANSTAB_BUS_FAULT:
 		kbase_mmu_report_fault_and_kill(kctx, faulting_as,
-				"Tranlation table bus fault");
+				"Translation table bus fault");
 		goto fault_done;
 
 	case AS_FAULTSTATUS_EXCEPTION_CODE_ACCESS_FLAG:
@@ -196,6 +230,8 @@ void page_fault_worker(struct work_struct *data)
 				region->start_pfn +
 				kbase_reg_current_backed_size(region));
 
+		mutex_lock(&kbdev->mmu_hw_mutex);
+
 		kbase_mmu_hw_clear_fault(kbdev, faulting_as, kctx,
 				KBASE_MMU_FAULT_TYPE_PAGE);
 		/* [1] in case another page fault occurred while we were
@@ -208,6 +244,9 @@ void page_fault_worker(struct work_struct *data)
 		 */
 		kbase_mmu_hw_do_operation(kbdev, faulting_as, NULL, 0, 0,
 				AS_COMMAND_UNLOCK, 1);
+
+		mutex_unlock(&kbdev->mmu_hw_mutex);
+
 		kbase_mmu_hw_enable_fault(kbdev, faulting_as, kctx,
 				KBASE_MMU_FAULT_TYPE_PAGE);
 		kbase_gpu_vm_unlock(kctx);
@@ -226,12 +265,17 @@ void page_fault_worker(struct work_struct *data)
 				kbase_reg_current_backed_size(region);
 
 	if (0 == new_pages) {
+		mutex_lock(&kbdev->mmu_hw_mutex);
+
 		/* Duplicate of a fault we've already handled, nothing to do */
 		kbase_mmu_hw_clear_fault(kbdev, faulting_as, kctx,
 				KBASE_MMU_FAULT_TYPE_PAGE);
 		/* See comment [1] about UNLOCK usage */
 		kbase_mmu_hw_do_operation(kbdev, faulting_as, NULL, 0, 0,
 				AS_COMMAND_UNLOCK, 1);
+
+		mutex_unlock(&kbdev->mmu_hw_mutex);
+
 		kbase_mmu_hw_enable_fault(kbdev, faulting_as, kctx,
 				KBASE_MMU_FAULT_TYPE_PAGE);
 		kbase_gpu_vm_unlock(kctx);
@@ -254,13 +298,26 @@ void page_fault_worker(struct work_struct *data)
 
 
 	if (grown) {
+		u64 pfn_offset;
 		u32 op;
 
 		/* alloc success */
 		KBASE_DEBUG_ASSERT(kbase_reg_current_backed_size(region) <= region->nr_pages);
 
 		/* set up the new pages */
-		err = kbase_mmu_insert_pages(kctx, region->start_pfn + kbase_reg_current_backed_size(region) - new_pages, &kbase_get_gpu_phy_pages(region)[kbase_reg_current_backed_size(region) - new_pages], new_pages, region->flags);
+		pfn_offset = kbase_reg_current_backed_size(region) - new_pages;
+		/*
+		 * Note:
+		 * Issuing an MMU operation will unlock the MMU and cause the
+		 * translation to be replayed. If the page insertion fails then
+		 * rather then trying to continue the context should be killed
+		 * so the no_flush version of insert_pages is used which allows
+		 * us to unlock the MMU as we see fit.
+		 */
+		err = kbase_mmu_insert_pages_no_flush(kctx,
+				region->start_pfn + pfn_offset,
+				&kbase_get_gpu_phy_pages(region)[pfn_offset],
+				new_pages, region->flags);
 		if (err) {
 			kbase_free_phy_pages_helper(region->gpu_alloc, new_pages);
 			if (region->gpu_alloc != region->cpu_alloc)
@@ -278,7 +335,7 @@ void page_fault_worker(struct work_struct *data)
 		kbase_tlstream_aux_pagefault(kctx->id, (u64)new_pages);
 
 		/* AS transaction begin */
-		mutex_lock(&faulting_as->transaction_mutex);
+		mutex_lock(&kbdev->mmu_hw_mutex);
 
 		/* flush L2 and unlock the VA (resumes the MMU) */
 		if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_6367))
@@ -302,7 +359,7 @@ void page_fault_worker(struct work_struct *data)
 					  new_pages,
 					  op, 1);
 
-		mutex_unlock(&faulting_as->transaction_mutex);
+		mutex_unlock(&kbdev->mmu_hw_mutex);
 		/* AS transaction end */
 
 		/* reenable this in the mask */
@@ -370,14 +427,17 @@ sub_pages:
 
 KBASE_EXPORT_TEST_API(kbase_mmu_alloc_pgd);
 
-/* Given PGD PFN for level N, return PGD PFN for level N+1 */
-static phys_addr_t mmu_get_next_pgd(struct kbase_context *kctx, phys_addr_t pgd, u64 vpfn, int level)
+/* Given PGD PFN for level N, return PGD PFN for level N+1, allocating the
+ * new table from the pool if needed and possible
+ */
+static int mmu_get_next_pgd(struct kbase_context *kctx,
+		phys_addr_t *pgd, u64 vpfn, int level)
 {
 	u64 *page;
 	phys_addr_t target_pgd;
 	struct page *p;
 
-	KBASE_DEBUG_ASSERT(pgd);
+	KBASE_DEBUG_ASSERT(*pgd);
 	KBASE_DEBUG_ASSERT(NULL != kctx);
 
 	lockdep_assert_held(&kctx->mmu_lock);
@@ -389,11 +449,11 @@ static phys_addr_t mmu_get_next_pgd(struct kbase_context *kctx, phys_addr_t pgd,
 	vpfn >>= (3 - level) * 9;
 	vpfn &= 0x1FF;
 
-	p = pfn_to_page(PFN_DOWN(pgd));
+	p = pfn_to_page(PFN_DOWN(*pgd));
 	page = kmap(p);
 	if (NULL == page) {
 		dev_warn(kctx->kbdev->dev, "mmu_get_next_pgd: kmap failure\n");
-		return 0;
+		return -EINVAL;
 	}
 
 	target_pgd = kctx->kbdev->mmu_mode->pte_to_phy_addr(page[vpfn]);
@@ -401,9 +461,9 @@ static phys_addr_t mmu_get_next_pgd(struct kbase_context *kctx, phys_addr_t pgd,
 	if (!target_pgd) {
 		target_pgd = kbase_mmu_alloc_pgd(kctx);
 		if (!target_pgd) {
-			dev_warn(kctx->kbdev->dev, "mmu_get_next_pgd: kbase_mmu_alloc_pgd failure\n");
+			dev_dbg(kctx->kbdev->dev, "mmu_get_next_pgd: kbase_mmu_alloc_pgd failure\n");
 			kunmap(p);
-			return 0;
+			return -ENOMEM;
 		}
 
 		kctx->kbdev->mmu_mode->entry_set_pte(&page[vpfn], target_pgd);
@@ -413,10 +473,13 @@ static phys_addr_t mmu_get_next_pgd(struct kbase_context *kctx, phys_addr_t pgd,
 	}
 
 	kunmap(p);
-	return target_pgd;
+	*pgd = target_pgd;
+
+	return 0;
 }
 
-static phys_addr_t mmu_get_bottom_pgd(struct kbase_context *kctx, u64 vpfn)
+static int mmu_get_bottom_pgd(struct kbase_context *kctx,
+		u64 vpfn, phys_addr_t *out_pgd)
 {
 	phys_addr_t pgd;
 	int l;
@@ -425,15 +488,17 @@ static phys_addr_t mmu_get_bottom_pgd(struct kbase_context *kctx, u64 vpfn)
 
 	pgd = kctx->pgd;
 	for (l = MIDGARD_MMU_TOPLEVEL; l < MIDGARD_MMU_BOTTOMLEVEL; l++) {
-		pgd = mmu_get_next_pgd(kctx, pgd, vpfn, l);
+		int err = mmu_get_next_pgd(kctx, &pgd, vpfn, l);
 		/* Handle failure condition */
-		if (!pgd) {
-			dev_warn(kctx->kbdev->dev, "mmu_get_bottom_pgd: mmu_get_next_pgd failure\n");
-			return 0;
+		if (err) {
+			dev_dbg(kctx->kbdev->dev, "mmu_get_bottom_pgd: mmu_get_next_pgd failure\n");
+			return err;
 		}
 	}
 
-	return pgd;
+	*out_pgd = pgd;
+
+	return 0;
 }
 
 static phys_addr_t mmu_insert_pages_recover_get_next_pgd(struct kbase_context *kctx, phys_addr_t pgd, u64 vpfn, int level)
@@ -542,6 +607,7 @@ int kbase_mmu_insert_single_page(struct kbase_context *kctx, u64 vpfn,
 	bool recover_required = false;
 	u64 recover_vpfn = vpfn;
 	size_t recover_count = 0;
+	size_t remain = nr;
 	int err;
 
 	KBASE_DEBUG_ASSERT(NULL != kctx);
@@ -549,16 +615,20 @@ int kbase_mmu_insert_single_page(struct kbase_context *kctx, u64 vpfn,
 	/* 64-bit address range is the max */
 	KBASE_DEBUG_ASSERT(vpfn <= (U64_MAX / PAGE_SIZE));
 
+	/* Early out if there is nothing to do */
+	if (nr == 0)
+		return 0;
+
 	mutex_lock(&kctx->mmu_lock);
 
-	while (nr) {
+	while (remain) {
 		unsigned int i;
 		unsigned int index = vpfn & 0x1FF;
 		unsigned int count = KBASE_MMU_PAGE_ENTRIES - index;
 		struct page *p;
 
-		if (count > nr)
-			count = nr;
+		if (count > remain)
+			count = remain;
 
 		/*
 		 * Repeatedly calling mmu_get_bottom_pte() is clearly
@@ -567,8 +637,19 @@ int kbase_mmu_insert_single_page(struct kbase_context *kctx, u64 vpfn,
 		 * On the other hand, it's only a gain when we map more than
 		 * 256 pages at once (on average). Do we really care?
 		 */
-		pgd = mmu_get_bottom_pgd(kctx, vpfn);
-		if (!pgd) {
+		do {
+			err = mmu_get_bottom_pgd(kctx, vpfn, &pgd);
+			if (err != -ENOMEM)
+				break;
+			/* Fill the memory pool with enough pages for
+			 * the page walk to succeed
+			 */
+			mutex_unlock(&kctx->mmu_lock);
+			err = kbase_mem_pool_grow(&kctx->mem_pool,
+					MIDGARD_MMU_BOTTOMLEVEL);
+			mutex_lock(&kctx->mmu_lock);
+		} while (!err);
+		if (err) {
 			dev_warn(kctx->kbdev->dev, "kbase_mmu_insert_pages: mmu_get_bottom_pgd failure\n");
 			if (recover_required) {
 				/* Invalidate the pages we have partially
@@ -577,7 +658,6 @@ int kbase_mmu_insert_single_page(struct kbase_context *kctx, u64 vpfn,
 								  recover_vpfn,
 								  recover_count);
 			}
-			err = -EINVAL;
 			goto fail_unlock;
 		}
 
@@ -605,7 +685,7 @@ int kbase_mmu_insert_single_page(struct kbase_context *kctx, u64 vpfn,
 		}
 
 		vpfn += count;
-		nr -= count;
+		remain -= count;
 
 		kbase_mmu_sync_pgd(kctx->kbdev,
 				kbase_dma_addr(p) + (index * sizeof(u64)),
@@ -619,17 +699,16 @@ int kbase_mmu_insert_single_page(struct kbase_context *kctx, u64 vpfn,
 		recover_count += count;
 	}
 	mutex_unlock(&kctx->mmu_lock);
+	kbase_mmu_flush_invalidate(kctx, vpfn, nr, false);
 	return 0;
 
 fail_unlock:
 	mutex_unlock(&kctx->mmu_lock);
+	kbase_mmu_flush_invalidate(kctx, vpfn, nr, false);
 	return err;
 }
 
-/*
- * Map 'nr' pages pointed to by 'phys' at GPU PFN 'vpfn'
- */
-int kbase_mmu_insert_pages(struct kbase_context *kctx, u64 vpfn,
+int kbase_mmu_insert_pages_no_flush(struct kbase_context *kctx, u64 vpfn,
 				  phys_addr_t *phys, size_t nr,
 				  unsigned long flags)
 {
@@ -640,6 +719,7 @@ int kbase_mmu_insert_pages(struct kbase_context *kctx, u64 vpfn,
 	bool recover_required = false;
 	u64 recover_vpfn = vpfn;
 	size_t recover_count = 0;
+	size_t remain = nr;
 	int err;
 
 	KBASE_DEBUG_ASSERT(NULL != kctx);
@@ -647,16 +727,20 @@ int kbase_mmu_insert_pages(struct kbase_context *kctx, u64 vpfn,
 	/* 64-bit address range is the max */
 	KBASE_DEBUG_ASSERT(vpfn <= (U64_MAX / PAGE_SIZE));
 
+	/* Early out if there is nothing to do */
+	if (nr == 0)
+		return 0;
+
 	mutex_lock(&kctx->mmu_lock);
 
-	while (nr) {
+	while (remain) {
 		unsigned int i;
 		unsigned int index = vpfn & 0x1FF;
 		unsigned int count = KBASE_MMU_PAGE_ENTRIES - index;
 		struct page *p;
 
-		if (count > nr)
-			count = nr;
+		if (count > remain)
+			count = remain;
 
 		/*
 		 * Repeatedly calling mmu_get_bottom_pte() is clearly
@@ -665,8 +749,19 @@ int kbase_mmu_insert_pages(struct kbase_context *kctx, u64 vpfn,
 		 * On the other hand, it's only a gain when we map more than
 		 * 256 pages at once (on average). Do we really care?
 		 */
-		pgd = mmu_get_bottom_pgd(kctx, vpfn);
-		if (!pgd) {
+		do {
+			err = mmu_get_bottom_pgd(kctx, vpfn, &pgd);
+			if (err != -ENOMEM)
+				break;
+			/* Fill the memory pool with enough pages for
+			 * the page walk to succeed
+			 */
+			mutex_unlock(&kctx->mmu_lock);
+			err = kbase_mem_pool_grow(&kctx->mem_pool,
+					MIDGARD_MMU_BOTTOMLEVEL);
+			mutex_lock(&kctx->mmu_lock);
+		} while (!err);
+		if (err) {
 			dev_warn(kctx->kbdev->dev, "kbase_mmu_insert_pages: mmu_get_bottom_pgd failure\n");
 			if (recover_required) {
 				/* Invalidate the pages we have partially
@@ -675,7 +770,6 @@ int kbase_mmu_insert_pages(struct kbase_context *kctx, u64 vpfn,
 								  recover_vpfn,
 								  recover_count);
 			}
-			err = -EINVAL;
 			goto fail_unlock;
 		}
 
@@ -704,7 +798,7 @@ int kbase_mmu_insert_pages(struct kbase_context *kctx, u64 vpfn,
 
 		phys += count;
 		vpfn += count;
-		nr -= count;
+		remain -= count;
 
 		kbase_mmu_sync_pgd(kctx->kbdev,
 				kbase_dma_addr(p) + (index * sizeof(u64)),
@@ -726,77 +820,196 @@ fail_unlock:
 	return err;
 }
 
+/*
+ * Map 'nr' pages pointed to by 'phys' at GPU PFN 'vpfn'
+ */
+int kbase_mmu_insert_pages(struct kbase_context *kctx, u64 vpfn,
+				  phys_addr_t *phys, size_t nr,
+				  unsigned long flags)
+{
+	int err;
+
+	err = kbase_mmu_insert_pages_no_flush(kctx, vpfn, phys, nr, flags);
+	kbase_mmu_flush_invalidate(kctx, vpfn, nr, false);
+	return err;
+}
+
 KBASE_EXPORT_TEST_API(kbase_mmu_insert_pages);
 
 /**
- * This function is responsible for validating the MMU PTs
- * triggering reguired flushes.
+ * kbase_mmu_flush_invalidate_noretain() - Flush and invalidate the GPU caches
+ * without retaining the kbase context.
+ * @kctx: The KBase context.
+ * @vpfn: The virtual page frame number to start the flush on.
+ * @nr: The number of pages to flush.
+ * @sync: Set if the operation should be synchronous or not.
  *
- * * IMPORTANT: This uses kbasep_js_runpool_release_ctx() when the context is
- * currently scheduled into the runpool, and so potentially uses a lot of locks.
- * These locks must be taken in the correct order with respect to others
- * already held by the caller. Refer to kbasep_js_runpool_release_ctx() for more
- * information.
+ * As per kbase_mmu_flush_invalidate but doesn't retain the kctx or do any
+ * other locking.
  */
-static void kbase_mmu_flush(struct kbase_context *kctx, u64 vpfn, size_t nr)
+static void kbase_mmu_flush_invalidate_noretain(struct kbase_context *kctx,
+		u64 vpfn, size_t nr, bool sync)
+{
+	struct kbase_device *kbdev = kctx->kbdev;
+	int err;
+	u32 op;
+
+	/* Early out if there is nothing to do */
+	if (nr == 0)
+		return;
+
+	if (sync)
+		op = AS_COMMAND_FLUSH_MEM;
+	else
+		op = AS_COMMAND_FLUSH_PT;
+
+	err = kbase_mmu_hw_do_operation(kbdev,
+				&kbdev->as[kctx->as_nr],
+				kctx, vpfn, nr, op, 0);
+#if KBASE_GPU_RESET_EN
+	if (err) {
+		/* Flush failed to complete, assume the
+		 * GPU has hung and perform a reset to
+		 * recover */
+		dev_err(kbdev->dev, "Flush for GPU page table update did not complete. Issuing GPU soft-reset to recover\n");
+
+		if (kbase_prepare_to_reset_gpu_locked(kbdev))
+			kbase_reset_gpu_locked(kbdev);
+	}
+#endif /* KBASE_GPU_RESET_EN */
+
+#ifndef CONFIG_MALI_NO_MALI
+	/*
+	 * As this function could be called in interrupt context the sync
+	 * request can't block. Instead log the request and the next flush
+	 * request will pick it up.
+	 */
+	if ((!err) && sync &&
+			kbase_hw_has_issue(kctx->kbdev, BASE_HW_ISSUE_6367))
+		atomic_set(&kctx->drain_pending, 1);
+#endif /* !CONFIG_MALI_NO_MALI */
+}
+
+static void kbase_mmu_flush_invalidate(struct kbase_context *kctx,
+		u64 vpfn, size_t nr, bool sync)
 {
 	struct kbase_device *kbdev;
 	bool ctx_is_in_runpool;
+#ifndef CONFIG_MALI_NO_MALI
+	bool drain_pending = false;
 
-	KBASE_DEBUG_ASSERT(NULL != kctx);
+	if (atomic_xchg(&kctx->drain_pending, 0))
+		drain_pending = true;
+#endif /* !CONFIG_MALI_NO_MALI */
+
+	/* Early out if there is nothing to do */
+	if (nr == 0)
+		return;
 
 	kbdev = kctx->kbdev;
-
-	/* We must flush if we're currently running jobs. At the very least, we need to retain the
-	 * context to ensure it doesn't schedule out whilst we're trying to flush it */
 	ctx_is_in_runpool = kbasep_js_runpool_retain_ctx(kbdev, kctx);
 
 	if (ctx_is_in_runpool) {
 		KBASE_DEBUG_ASSERT(kctx->as_nr != KBASEP_AS_NR_INVALID);
 
-		/* Second level check is to try to only do this when jobs are running. The refcount is
-		 * a heuristic for this. */
-		if (kbdev->js_data.runpool_irq.per_as_data[kctx->as_nr].as_busy_refcount >= 2) {
-			if (!kbase_pm_context_active_handle_suspend(kbdev,
-				KBASE_PM_SUSPEND_HANDLER_DONT_REACTIVATE)) {
-				int ret;
-				u32 op;
+		if (!kbase_pm_context_active_handle_suspend(kbdev,
+			KBASE_PM_SUSPEND_HANDLER_DONT_REACTIVATE)) {
+			int err;
+			u32 op;
 
-				/* AS transaction begin */
-				mutex_lock(&kbdev->as[
-						kctx->as_nr].transaction_mutex);
+			/* AS transaction begin */
+			mutex_lock(&kbdev->mmu_hw_mutex);
 
-				if (kbase_hw_has_issue(kbdev,
-						BASE_HW_ISSUE_6367))
-					op = AS_COMMAND_FLUSH;
-				else
-					op = AS_COMMAND_FLUSH_MEM;
+			if (sync)
+				op = AS_COMMAND_FLUSH_MEM;
+			else
+				op = AS_COMMAND_FLUSH_PT;
 
-				ret = kbase_mmu_hw_do_operation(kbdev,
-							&kbdev->as[kctx->as_nr],
-							kctx, vpfn, nr,
-							op, 0);
+			err = kbase_mmu_hw_do_operation(kbdev,
+						&kbdev->as[kctx->as_nr],
+						kctx, vpfn, nr, op, 0);
+
 #if KBASE_GPU_RESET_EN
-				if (ret) {
-					/* Flush failed to complete, assume the
-					 * GPU has hung and perform a reset to
-					 * recover */
-					dev_err(kbdev->dev, "Flush for GPU page table update did not complete. Issueing GPU soft-reset to recover\n");
-					if (kbase_prepare_to_reset_gpu(kbdev))
-						kbase_reset_gpu(kbdev);
-				}
+			if (err) {
+				/* Flush failed to complete, assume the
+				 * GPU has hung and perform a reset to
+				 * recover */
+				dev_err(kbdev->dev, "Flush for GPU page table update did not complete. Issueing GPU soft-reset to recover\n");
+
+				if (kbase_prepare_to_reset_gpu(kbdev))
+					kbase_reset_gpu(kbdev);
+			}
 #endif /* KBASE_GPU_RESET_EN */
 
-				mutex_unlock(&kbdev->as[
-						kctx->as_nr].transaction_mutex);
-				/* AS transaction end */
+			mutex_unlock(&kbdev->mmu_hw_mutex);
+			/* AS transaction end */
 
-				kbase_pm_context_idle(kbdev);
+#ifndef CONFIG_MALI_NO_MALI
+			/*
+			 * The transaction lock must be dropped before here
+			 * as kbase_wait_write_flush could take it if
+			 * the GPU was powered down (static analysis doesn't
+			 * know this can't happen).
+			 */
+			drain_pending |= (!err) && sync &&
+					kbase_hw_has_issue(kctx->kbdev,
+							BASE_HW_ISSUE_6367);
+			if (drain_pending) {
+				/* Wait for GPU to flush write buffer */
+				kbase_wait_write_flush(kctx);
 			}
+#endif /* !CONFIG_MALI_NO_MALI */
+
+			kbase_pm_context_idle(kbdev);
 		}
 		kbasep_js_runpool_release_ctx(kbdev, kctx);
 	}
 }
+
+void kbase_mmu_update(struct kbase_context *kctx)
+{
+	lockdep_assert_held(&kctx->kbdev->hwaccess_lock);
+	lockdep_assert_held(&kctx->kbdev->mmu_hw_mutex);
+	/* ASSERT that the context has a valid as_nr, which is only the case
+	 * when it's scheduled in.
+	 *
+	 * as_nr won't change because the caller has the hwaccess_lock */
+	KBASE_DEBUG_ASSERT(kctx->as_nr != KBASEP_AS_NR_INVALID);
+
+	kctx->kbdev->mmu_mode->update(kctx);
+}
+KBASE_EXPORT_TEST_API(kbase_mmu_update);
+
+void kbase_mmu_disable_as(struct kbase_device *kbdev, int as_nr)
+{
+	lockdep_assert_held(&kbdev->hwaccess_lock);
+	lockdep_assert_held(&kbdev->mmu_hw_mutex);
+
+	kbdev->mmu_mode->disable_as(kbdev, as_nr);
+}
+
+void kbase_mmu_disable(struct kbase_context *kctx)
+{
+	/* ASSERT that the context has a valid as_nr, which is only the case
+	 * when it's scheduled in.
+	 *
+	 * as_nr won't change because the caller has the hwaccess_lock */
+	KBASE_DEBUG_ASSERT(kctx->as_nr != KBASEP_AS_NR_INVALID);
+
+	lockdep_assert_held(&kctx->kbdev->hwaccess_lock);
+
+	/*
+	 * The address space is being disabled, drain all knowledge of it out
+	 * from the caches as pages and page tables might be freed after this.
+	 *
+	 * The job scheduler code will already be holding the locks and context
+	 * so just do the flush.
+	 */
+	kbase_mmu_flush_invalidate_noretain(kctx, 0, ~0, true);
+
+	kctx->kbdev->mmu_mode->disable_as(kctx->kbdev, kctx->as_nr);
+}
+KBASE_EXPORT_TEST_API(kbase_mmu_disable);
 
 /*
  * We actually only discard the ATE, and not the page table
@@ -841,8 +1054,8 @@ int kbase_mmu_teardown_pages(struct kbase_context *kctx, u64 vpfn, size_t nr)
 		if (count > nr)
 			count = nr;
 
-		pgd = mmu_get_bottom_pgd(kctx, vpfn);
-		if (!pgd) {
+		err = mmu_get_bottom_pgd(kctx, vpfn, &pgd);
+		if (err) {
 			dev_warn(kbdev->dev, "kbase_mmu_teardown_pages: mmu_get_bottom_pgd failure\n");
 			err = -EINVAL;
 			goto fail_unlock;
@@ -870,11 +1083,12 @@ int kbase_mmu_teardown_pages(struct kbase_context *kctx, u64 vpfn, size_t nr)
 	}
 
 	mutex_unlock(&kctx->mmu_lock);
-	kbase_mmu_flush(kctx, vpfn, requested_nr);
+	kbase_mmu_flush_invalidate(kctx, vpfn, requested_nr, true);
 	return 0;
 
 fail_unlock:
 	mutex_unlock(&kctx->mmu_lock);
+	kbase_mmu_flush_invalidate(kctx, vpfn, requested_nr, true);
 	return err;
 }
 
@@ -904,6 +1118,10 @@ int kbase_mmu_update_pages(struct kbase_context *kctx, u64 vpfn, phys_addr_t *ph
 	KBASE_DEBUG_ASSERT(0 != vpfn);
 	KBASE_DEBUG_ASSERT(vpfn <= (U64_MAX / PAGE_SIZE));
 
+	/* Early out if there is nothing to do */
+	if (nr == 0)
+		return 0;
+
 	mutex_lock(&kctx->mmu_lock);
 
 	mmu_mode = kctx->kbdev->mmu_mode;
@@ -920,10 +1138,20 @@ int kbase_mmu_update_pages(struct kbase_context *kctx, u64 vpfn, phys_addr_t *ph
 		if (count > nr)
 			count = nr;
 
-		pgd = mmu_get_bottom_pgd(kctx, vpfn);
-		if (!pgd) {
+		do {
+			err = mmu_get_bottom_pgd(kctx, vpfn, &pgd);
+			if (err != -ENOMEM)
+				break;
+			/* Fill the memory pool with enough pages for
+			 * the page walk to succeed
+			 */
+			mutex_unlock(&kctx->mmu_lock);
+			err = kbase_mem_pool_grow(&kctx->mem_pool,
+					MIDGARD_MMU_BOTTOMLEVEL);
+			mutex_lock(&kctx->mmu_lock);
+		} while (!err);
+		if (err) {
 			dev_warn(kctx->kbdev->dev, "mmu_get_bottom_pgd failure\n");
-			err = -EINVAL;
 			goto fail_unlock;
 		}
 
@@ -951,11 +1179,12 @@ int kbase_mmu_update_pages(struct kbase_context *kctx, u64 vpfn, phys_addr_t *ph
 	}
 
 	mutex_unlock(&kctx->mmu_lock);
-	kbase_mmu_flush(kctx, vpfn, requested_nr);
+	kbase_mmu_flush_invalidate(kctx, vpfn, requested_nr, true);
 	return 0;
 
 fail_unlock:
 	mutex_unlock(&kctx->mmu_lock);
+	kbase_mmu_flush_invalidate(kctx, vpfn, requested_nr, true);
 	return err;
 }
 
@@ -1143,12 +1372,12 @@ void *kbase_mmu_dump(struct kbase_context *kctx, int nr_pages)
 		return NULL;
 	}
 
-	mutex_lock(&kctx->mmu_lock);
-
 	size_left = nr_pages * PAGE_SIZE;
 
 	KBASE_DEBUG_ASSERT(0 != size_left);
 	kaddr = vmalloc_user(size_left);
+
+	mutex_lock(&kctx->mmu_lock);
 
 	if (kaddr) {
 		u64 end_marker = 0xFFULL;
@@ -1234,6 +1463,18 @@ void bus_fault_worker(struct work_struct *data)
 		return;
 	}
 
+	if (unlikely(faulting_as->protected_mode))
+	{
+		kbase_mmu_report_fault_and_kill(kctx, faulting_as,
+				"Permission failure");
+		kbase_mmu_hw_clear_fault(kbdev, faulting_as, kctx,
+				KBASE_MMU_FAULT_TYPE_BUS_UNEXPECTED);
+		kbasep_js_runpool_release_ctx(kbdev, kctx);
+		atomic_dec(&kbdev->faults_pending);
+		return;
+
+	}
+
 #if KBASE_GPU_RESET_EN
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8245)) {
 		/* Due to H/W issue 8245 we need to reset the GPU after using UNMAPPED mode.
@@ -1246,15 +1487,18 @@ void bus_fault_worker(struct work_struct *data)
 #endif /* KBASE_GPU_RESET_EN */
 	/* NOTE: If GPU already powered off for suspend, we don't need to switch to unmapped */
 	if (!kbase_pm_context_active_handle_suspend(kbdev, KBASE_PM_SUSPEND_HANDLER_DONT_REACTIVATE)) {
+		unsigned long flags;
 
 		/* switch to UNMAPPED mode, will abort all jobs and stop any hw counter dumping */
 		/* AS transaction begin */
-		mutex_lock(&kbdev->as[as_no].transaction_mutex);
+		mutex_lock(&kbdev->mmu_hw_mutex);
 
 		/* Set the MMU into unmapped mode */
-		kbase_mmu_disable_as(kbdev, as_no);
+		spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
+		kbase_mmu_disable(kctx);
+		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
-		mutex_unlock(&kbdev->as[as_no].transaction_mutex);
+		mutex_unlock(&kbdev->mmu_hw_mutex);
 		/* AS transaction end */
 
 		kbase_mmu_hw_clear_fault(kbdev, faulting_as, kctx,
@@ -1489,7 +1733,7 @@ static void kbase_mmu_report_fault_and_kill(struct kbase_context *kctx,
 	dev_err(kbdev->dev,
 		"Unhandled Page fault in AS%d at VA 0x%016llX\n"
 		"Reason: %s\n"
-		"raw fault status 0x%X\n"
+		"raw fault status: 0x%X\n"
 		"decoded fault status: %s\n"
 		"exception type 0x%X: %s\n"
 		"access type 0x%X: %s\n"
@@ -1518,15 +1762,15 @@ static void kbase_mmu_report_fault_and_kill(struct kbase_context *kctx,
 
 	/* Stop the kctx from submitting more jobs and cause it to be scheduled
 	 * out/rescheduled - this will occur on releasing the context's refcount */
-	spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	kbasep_js_clear_submit_allowed(js_devdata, kctx);
-	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 	/* Kill any running jobs from the context. Submit is disallowed, so no more jobs from this
 	 * context can appear in the job slots from this point on */
 	kbase_backend_jm_kill_jobs_from_kctx(kctx);
 	/* AS transaction begin */
-	mutex_lock(&as->transaction_mutex);
+	mutex_lock(&kbdev->mmu_hw_mutex);
 #if KBASE_GPU_RESET_EN
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8245)) {
 		/* Due to H/W issue 8245 we need to reset the GPU after using UNMAPPED mode.
@@ -1538,9 +1782,11 @@ static void kbase_mmu_report_fault_and_kill(struct kbase_context *kctx,
 	}
 #endif /* KBASE_GPU_RESET_EN */
 	/* switch to UNMAPPED mode, will abort all jobs and stop any hw counter dumping */
-	kbase_mmu_disable_as(kbdev, as_no);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
+	kbase_mmu_disable(kctx);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
-	mutex_unlock(&as->transaction_mutex);
+	mutex_unlock(&kbdev->mmu_hw_mutex);
 	/* AS transaction end */
 	/* Clear down the fault */
 	kbase_mmu_hw_clear_fault(kbdev, as, kctx,
@@ -1577,20 +1823,20 @@ void kbasep_as_do_poke(struct work_struct *work)
 	kctx = kbasep_js_runpool_lookup_ctx_noretain(kbdev, as->number);
 
 	/* AS transaction begin */
-	mutex_lock(&as->transaction_mutex);
+	mutex_lock(&kbdev->mmu_hw_mutex);
 	/* Force a uTLB invalidate */
 	kbase_mmu_hw_do_operation(kbdev, as, kctx, 0, 0,
 				  AS_COMMAND_UNLOCK, 0);
-	mutex_unlock(&as->transaction_mutex);
+	mutex_unlock(&kbdev->mmu_hw_mutex);
 	/* AS transaction end */
 
-	spin_lock_irqsave(&kbdev->js_data.runpool_irq.lock, flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	if (as->poke_refcount &&
 		!(as->poke_state & KBASE_AS_POKE_STATE_KILLING_POKE)) {
 		/* Only queue up the timer if we need it, and we're not trying to kill it */
 		hrtimer_start(&as->poke_timer, HR_TIMER_DELAY_MSEC(5), HRTIMER_MODE_REL);
 	}
-	spin_unlock_irqrestore(&kbdev->js_data.runpool_irq.lock, flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 }
 
 enum hrtimer_restart kbasep_as_poke_timer_callback(struct hrtimer *timer)
@@ -1614,7 +1860,7 @@ enum hrtimer_restart kbasep_as_poke_timer_callback(struct hrtimer *timer)
  * This must only be called on a context that's scheduled in, and an atom
  * that's running on the GPU.
  *
- * The caller must hold kbasep_js_device_data::runpool_irq::lock
+ * The caller must hold hwaccess_lock
  *
  * This can be called safely from atomic context
  */
@@ -1626,7 +1872,7 @@ void kbase_as_poking_timer_retain_atom(struct kbase_device *kbdev, struct kbase_
 	KBASE_DEBUG_ASSERT(kctx);
 	KBASE_DEBUG_ASSERT(katom);
 	KBASE_DEBUG_ASSERT(kctx->as_nr != KBASEP_AS_NR_INVALID);
-	lockdep_assert_held(&kbdev->js_data.runpool_irq.lock);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 
 	if (katom->poking)
 		return;
@@ -1634,7 +1880,7 @@ void kbase_as_poking_timer_retain_atom(struct kbase_device *kbdev, struct kbase_
 	katom->poking = 1;
 
 	/* It's safe to work on the as/as_nr without an explicit reference,
-	 * because the caller holds the runpool_irq lock, and the atom itself
+	 * because the caller holds the hwaccess_lock, and the atom itself
 	 * was also running and had already taken a reference  */
 	as = &kbdev->as[kctx->as_nr];
 
@@ -1671,18 +1917,18 @@ void kbase_as_poking_timer_release_atom(struct kbase_device *kbdev, struct kbase
 
 	as = &kbdev->as[kctx->as_nr];
 
-	spin_lock_irqsave(&kbdev->js_data.runpool_irq.lock, flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	KBASE_DEBUG_ASSERT(as->poke_refcount > 0);
 	KBASE_DEBUG_ASSERT(as->poke_state & KBASE_AS_POKE_STATE_IN_FLIGHT);
 
 	if (--(as->poke_refcount) == 0) {
 		as->poke_state |= KBASE_AS_POKE_STATE_KILLING_POKE;
-		spin_unlock_irqrestore(&kbdev->js_data.runpool_irq.lock, flags);
+		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 		hrtimer_cancel(&as->poke_timer);
 		flush_workqueue(as->poke_wq);
 
-		spin_lock_irqsave(&kbdev->js_data.runpool_irq.lock, flags);
+		spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 
 		/* Re-check whether it's still needed */
 		if (as->poke_refcount) {
@@ -1707,7 +1953,7 @@ void kbase_as_poking_timer_release_atom(struct kbase_device *kbdev, struct kbase
 			 * the context until new atoms are run */
 		}
 	}
-	spin_unlock_irqrestore(&kbdev->js_data.runpool_irq.lock, flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 	katom->poking = 0;
 }
@@ -1716,7 +1962,7 @@ void kbase_mmu_interrupt_process(struct kbase_device *kbdev, struct kbase_contex
 {
 	struct kbasep_js_device_data *js_devdata = &kbdev->js_data;
 
-	lockdep_assert_held(&kbdev->js_data.runpool_irq.lock);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 
 	if (!kctx) {
 		dev_warn(kbdev->dev, "%s in AS%d at 0x%016llx with no context present! Suprious IRQ or SW Design Error?\n",

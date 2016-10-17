@@ -61,6 +61,7 @@
 #define LATEST_FLUSH            0x038	/* (RO) */
 
 #define GROUPS_L2_COHERENT      (1 << 0)	/* Cores groups are l2 coherent */
+#define GPU_DBGEN               (1 << 8)	/* DBGEN wire status */
 
 #define GPU_FAULTSTATUS         0x03C	/* (RO) GPU exception type and fault status */
 #define GPU_FAULTADDRESS_LO     0x040	/* (RO) GPU exception fault address, low word */
@@ -214,6 +215,8 @@
 #define JS_AFFINITY_LO         0x10	/* (RO) Core affinity mask for job slot n, low word */
 #define JS_AFFINITY_HI         0x14	/* (RO) Core affinity mask for job slot n, high word */
 #define JS_CONFIG              0x18	/* (RO) Configuration settings for job slot n */
+#define JS_XAFFINITY           0x1C	/* (RO) Extended affinity mask for job
+					   slot n */
 
 #define JS_COMMAND             0x20	/* (WO) Command register for job slot n */
 #define JS_STATUS              0x24	/* (RO) Status register for job slot n */
@@ -224,6 +227,8 @@
 #define JS_AFFINITY_NEXT_LO    0x50	/* (RW) Next core affinity mask for job slot n, low word */
 #define JS_AFFINITY_NEXT_HI    0x54	/* (RW) Next core affinity mask for job slot n, high word */
 #define JS_CONFIG_NEXT         0x58	/* (RW) Next configuration settings for job slot n */
+#define JS_XAFFINITY_NEXT      0x5C	/* (RW) Next extended affinity mask for
+					   job slot n */
 
 #define JS_COMMAND_NEXT        0x60	/* (RW) Next command register for job slot n */
 
@@ -393,6 +398,11 @@
 #define JS_CONFIG_ENABLE_FLUSH_REDUCTION       (1u << 14)
 #define JS_CONFIG_DISABLE_DESCRIPTOR_WR_BK     (1u << 15)
 #define JS_CONFIG_THREAD_PRI(n)                ((n) << 16)
+
+/* JS_XAFFINITY register values */
+#define JS_XAFFINITY_XAFFINITY_ENABLE (1u << 0)
+#define JS_XAFFINITY_TILER_ENABLE     (1u << 8)
+#define JS_XAFFINITY_CACHE_ENABLE     (1u << 16)
 
 /* JS_STATUS register values */
 

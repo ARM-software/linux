@@ -27,7 +27,9 @@
 #include <linux/mm.h>
 #include <linux/highmem.h>
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 8, 0))
 #include <linux/dma-attrs.h>
+#endif
 #include <linux/dma-mapping.h>
 #endif
 
@@ -156,7 +158,14 @@ static void dma_buf_te_release(struct dma_buf *buf)
 	/* no need for locking */
 
 	if (alloc->contiguous) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0))
+		dma_free_attrs(te_device.this_device,
+						alloc->nr_pages * PAGE_SIZE,
+						alloc->contig_cpu_addr,
+						alloc->contig_dma_addr,
+						DMA_ATTR_WRITE_COMBINE);
+
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0))
 		DEFINE_DMA_ATTRS(attrs);
 
 		dma_set_attr(DMA_ATTR_WRITE_COMBINE, &attrs);
@@ -368,7 +377,14 @@ static int do_dma_buf_te_ioctl_alloc(struct dma_buf_te_ioctl_alloc __user *buf, 
 	if (contiguous) {
 		dma_addr_t dma_aux;
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0))
+		alloc->contig_cpu_addr = dma_alloc_attrs(te_device.this_device,
+				alloc->nr_pages * PAGE_SIZE,
+				&alloc->contig_dma_addr,
+				GFP_KERNEL | __GFP_ZERO,
+				DMA_ATTR_WRITE_COMBINE);
+
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0))
 		DEFINE_DMA_ATTRS(attrs);
 
 		dma_set_attr(DMA_ATTR_WRITE_COMBINE, &attrs);
@@ -446,7 +462,15 @@ no_export:
 	/* i still valid */
 no_page:
 	if (contiguous) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0))
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0))
+		dma_free_attrs(te_device.this_device,
+						alloc->nr_pages * PAGE_SIZE,
+						alloc->contig_cpu_addr,
+						alloc->contig_dma_addr,
+						DMA_ATTR_WRITE_COMBINE);
+
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0))
 		DEFINE_DMA_ATTRS(attrs);
 
 		dma_set_attr(DMA_ATTR_WRITE_COMBINE, &attrs);
@@ -566,27 +590,36 @@ static u32 dma_te_buf_fill(struct dma_buf *dma_buf, unsigned int value)
 		goto no_import;
 	}
 
+	ret = dma_buf_begin_cpu_access(dma_buf,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
+			0, dma_buf->size,
+#endif
+			DMA_BIDIRECTIONAL);
+	if (ret)
+		goto no_cpu_access;
+
 	for_each_sg(sgt->sgl, sg, sgt->nents, count) {
-		ret = dma_buf_begin_cpu_access(dma_buf, offset, sg_dma_len(sg), DMA_BIDIRECTIONAL);
-		if (ret)
-			goto no_cpu_access;
 		for (i = 0; i < sg_dma_len(sg); i = i + PAGE_SIZE) {
 			void *addr;
 
 			addr = dma_buf_kmap(dma_buf, i >> PAGE_SHIFT);
 			if (!addr) {
 				/* dma_buf_kmap is unimplemented in exynos and returns NULL */
-				dma_buf_end_cpu_access(dma_buf, offset, sg_dma_len(sg), DMA_BIDIRECTIONAL);
 				ret = -EPERM;
-				goto no_cpu_access;
+				goto no_kmap;
 			}
 			memset(addr, value, PAGE_SIZE);
 			dma_buf_kunmap(dma_buf, i >> PAGE_SHIFT, addr);
 		}
-		dma_buf_end_cpu_access(dma_buf, offset, sg_dma_len(sg), DMA_BIDIRECTIONAL);
 		offset += sg_dma_len(sg);
 	}
 
+no_kmap:
+	dma_buf_end_cpu_access(dma_buf,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
+			0, dma_buf->size,
+#endif
+			DMA_BIDIRECTIONAL);
 no_cpu_access:
 	dma_buf_unmap_attachment(attachment, sgt, DMA_BIDIRECTIONAL);
 no_import:

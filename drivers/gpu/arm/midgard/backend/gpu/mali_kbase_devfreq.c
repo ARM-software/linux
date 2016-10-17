@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -16,6 +16,7 @@
 
 
 #include <mali_kbase.h>
+#include <mali_kbase_tlstream.h>
 #include <mali_kbase_config_defaults.h>
 #include <backend/gpu/mali_kbase_pm_internal.h>
 #ifdef CONFIG_DEVFREQ_THERMAL
@@ -104,6 +105,8 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 	*target_freq = freq;
 	kbdev->current_voltage = voltage;
 	kbdev->current_freq = freq;
+
+	kbase_tlstream_aux_devfreq_target((u64)freq);
 
 	kbase_pm_reset_dvfs_utilisation(kbdev);
 

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -104,7 +104,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 	js_devdata = &kbdev->js_data;
 
 	/* Loop through the slots */
-	spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	for (s = 0; s < kbdev->gpu_props.num_job_slots; s++) {
 		struct kbase_jd_atom *atom = NULL;
 
@@ -138,6 +138,17 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 						js_devdata->gpu_reset_ticks_ss;
 				}
 
+				/* If timeouts have been changed then ensure
+				 * that atom tick count is not greater than the
+				 * new soft_stop timeout. This ensures that
+				 * atoms do not miss any of the timeouts due to
+				 * races between this worker and the thread
+				 * changing the timeouts. */
+				if (backend->timeouts_updated &&
+						ticks > soft_stop_ticks)
+					ticks = atom->sched_info.cfs.ticks =
+							soft_stop_ticks;
+
 				/* Job is Soft-Stoppable */
 				if (ticks == soft_stop_ticks) {
 					int disjoint_threshold =
@@ -157,8 +168,8 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 * However, if it's about to be
 					 * increased then the new context can't
 					 * run any jobs until they take the
-					 * runpool_irq lock, so it's OK to
-					 * observe the older value.
+					 * hwaccess_lock, so it's OK to observe
+					 * the older value.
 					 *
 					 * Similarly, if it's about to be
 					 * decreased, the last job from another
@@ -257,7 +268,9 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 			HR_TIMER_DELAY_NSEC(js_devdata->scheduling_period_ns),
 			HRTIMER_MODE_REL);
 
-	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+	backend->timeouts_updated = false;
+
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 	return HRTIMER_NORESTART;
 }
@@ -272,9 +285,9 @@ void kbase_backend_ctx_count_changed(struct kbase_device *kbdev)
 
 	if (!timer_callback_should_run(kbdev)) {
 		/* Take spinlock to force synchronisation with timer */
-		spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
+		spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 		backend->timer_running = false;
-		spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 		/* From now on, return value of timer_callback_should_run() will
 		 * also cause the timer to not requeue itself. Its return value
 		 * cannot change, because it depends on variables updated with
@@ -285,9 +298,9 @@ void kbase_backend_ctx_count_changed(struct kbase_device *kbdev)
 
 	if (timer_callback_should_run(kbdev) && !backend->timer_running) {
 		/* Take spinlock to force synchronisation with timer */
-		spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
+		spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 		backend->timer_running = true;
-		spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 		hrtimer_start(&backend->scheduling_timer,
 			HR_TIMER_DELAY_NSEC(js_devdata->scheduling_period_ns),
 							HRTIMER_MODE_REL);
@@ -333,5 +346,12 @@ void kbase_backend_timer_resume(struct kbase_device *kbdev)
 	backend->suspend_timer = false;
 
 	kbase_backend_ctx_count_changed(kbdev);
+}
+
+void kbase_backend_timeouts_changed(struct kbase_device *kbdev)
+{
+	struct kbase_backend_data *backend = &kbdev->hwaccess.backend;
+
+	backend->timeouts_updated = true;
 }
 

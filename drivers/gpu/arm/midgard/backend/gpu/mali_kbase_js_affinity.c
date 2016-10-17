@@ -23,6 +23,7 @@
 
 #include <mali_kbase.h>
 #include "mali_kbase_js_affinity.h"
+#include "mali_kbase_hw.h"
 
 #include <backend/gpu/mali_kbase_pm_internal.h>
 
@@ -93,9 +94,8 @@ bool kbase_js_choose_affinity(u64 * const affinity,
 	base_jd_core_req core_req = katom->core_req;
 	unsigned int num_core_groups = kbdev->gpu_props.num_core_groups;
 	u64 core_availability_mask;
-	unsigned long flags;
 
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 
 	core_availability_mask = kbase_pm_ca_get_core_mask(kbdev);
 
@@ -104,7 +104,6 @@ bool kbase_js_choose_affinity(u64 * const affinity,
 	 * transitioning) then fail.
 	 */
 	if (0 == core_availability_mask) {
-		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
 		*affinity = 0;
 		return false;
 	}
@@ -113,10 +112,14 @@ bool kbase_js_choose_affinity(u64 * const affinity,
 
 	if ((core_req & (BASE_JD_REQ_FS | BASE_JD_REQ_CS | BASE_JD_REQ_T)) ==
 								BASE_JD_REQ_T) {
-		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
-		/* Tiler only job, bit 0 needed to enable tiler but no shader
-		 * cores required */
-		*affinity = 1;
+		 /* If the hardware supports XAFFINITY then we'll only enable
+		  * the tiler (which is the default so this is a no-op),
+		  * otherwise enable shader core 0. */
+		if (!kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_XAFFINITY))
+			*affinity = 1;
+		else
+			*affinity = 0;
+
 		return true;
 	}
 
@@ -163,8 +166,6 @@ bool kbase_js_choose_affinity(u64 * const affinity,
 		}
 	}
 
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
-
 	/*
 	 * If no cores are currently available in the desired core group(s)
 	 * (core availability policy is transitioning) then fail.
@@ -172,9 +173,12 @@ bool kbase_js_choose_affinity(u64 * const affinity,
 	if (*affinity == 0)
 		return false;
 
-	/* Enable core 0 if tiler required */
-	if (core_req & BASE_JD_REQ_T)
-		*affinity = *affinity | 1;
+	/* Enable core 0 if tiler required for hardware without XAFFINITY
+	 * support (notes above) */
+	if (core_req & BASE_JD_REQ_T) {
+		if (!kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_XAFFINITY))
+			*affinity = *affinity | 1;
+	}
 
 	return true;
 }

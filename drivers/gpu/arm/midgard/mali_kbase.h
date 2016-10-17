@@ -45,10 +45,15 @@
 #include <mali_kbase_uku.h>
 #include <mali_kbase_linux.h>
 
-#include "mali_kbase_strings.h"
-#include "mali_kbase_pm.h"
-#include "mali_kbase_mem_lowlevel.h"
+/*
+ * Include mali_kbase_defs.h first as this provides types needed by other local
+ * header files.
+ */
 #include "mali_kbase_defs.h"
+
+#include "mali_kbase_context.h"
+#include "mali_kbase_strings.h"
+#include "mali_kbase_mem_lowlevel.h"
 #include "mali_kbase_trace_timeline.h"
 #include "mali_kbase_js.h"
 #include "mali_kbase_mem.h"
@@ -105,7 +110,6 @@ u32 kbase_get_profiling_control(struct kbase_device *kbdev, u32 control);
 struct kbase_context *
 kbase_create_context(struct kbase_device *kbdev, bool is_compat);
 void kbase_destroy_context(struct kbase_context *kctx);
-int kbase_context_set_create_flags(struct kbase_context *kctx, u32 flags);
 
 int kbase_jd_init(struct kbase_context *kctx);
 void kbase_jd_exit(struct kbase_context *kctx);
@@ -163,7 +167,7 @@ void kbase_gpu_cacheclean(struct kbase_device *kbdev,
  * than @katom will be soft stopped and put back in the queue, so that atoms
  * with higher priority can run.
  *
- * The js_data.runpool_irq.lock must be held when calling this function.
+ * The hwaccess_lock must be held when calling this function.
  */
 void kbase_job_slot_ctx_priority_check_locked(struct kbase_context *kctx,
 				struct kbase_jd_atom *katom);
@@ -175,7 +179,7 @@ void kbase_job_slot_softstop_swflags(struct kbase_device *kbdev, int js,
 void kbase_job_slot_hardstop(struct kbase_context *kctx, int js,
 		struct kbase_jd_atom *target_katom);
 void kbase_job_check_enter_disjoint(struct kbase_device *kbdev, u32 action,
-		u16 core_reqs, struct kbase_jd_atom *target_katom);
+		base_jd_core_req core_reqs, struct kbase_jd_atom *target_katom);
 void kbase_job_check_leave_disjoint(struct kbase_device *kbdev,
 		struct kbase_jd_atom *target_katom);
 
@@ -193,15 +197,15 @@ void kbase_finish_soft_job(struct kbase_jd_atom *katom);
 void kbase_cancel_soft_job(struct kbase_jd_atom *katom);
 void kbase_resume_suspended_soft_jobs(struct kbase_device *kbdev);
 void kbasep_add_waiting_soft_job(struct kbase_jd_atom *katom);
+void kbasep_remove_waiting_soft_job(struct kbase_jd_atom *katom);
+int kbase_soft_event_update(struct kbase_context *kctx,
+			    u64 event,
+			    unsigned char new_status);
 
 bool kbase_replay_process(struct kbase_jd_atom *katom);
 
-enum hrtimer_restart kbasep_soft_event_timeout_worker(struct hrtimer *timer);
+void kbasep_soft_job_timeout_worker(unsigned long data);
 void kbasep_complete_triggered_soft_events(struct kbase_context *kctx, u64 evt);
-int kbasep_read_soft_event_status(
-		struct kbase_context *kctx, u64 evt, unsigned char *status);
-int kbasep_write_soft_event_status(
-		struct kbase_context *kctx, u64 evt, unsigned char new_status);
 
 /* api used internally for register access. Contains validation and tracing */
 void kbase_device_trace_register_access(struct kbase_context *kctx, enum kbase_reg_access_type type, u16 reg_offset, u32 reg_value);
@@ -357,14 +361,6 @@ void kbase_disjoint_state_down(struct kbase_device *kbdev);
 #if !defined(UINT64_MAX)
 	#define UINT64_MAX ((uint64_t)0xFFFFFFFFFFFFFFFFULL)
 #endif
-
-/**
- * Platform-specific function to setup the OPPs for Mali
- *
- * Platform's can define this function if they need to setup the OPPs
- * in a platform-specific way
- */
-int setup_opps(void);
 
 #if KBASE_TRACE_ENABLE
 void kbasep_trace_debugfs_init(struct kbase_device *kbdev);
@@ -554,4 +550,58 @@ void kbasep_trace_dump(struct kbase_device *kbdev);
 void kbase_set_driver_inactive(struct kbase_device *kbdev, bool inactive);
 #endif /* CONFIG_MALI_DEBUG */
 
+
+#if defined(CONFIG_DEBUG_FS) && !defined(CONFIG_MALI_NO_MALI)
+
+/* kbase_io_history_init - initialize data struct for register access history
+ *
+ * @kbdev The register history to initialize
+ * @n The number of register accesses that the buffer could hold
+ *
+ * @return 0 if successfully initialized, failure otherwise
+ */
+int kbase_io_history_init(struct kbase_io_history *h, u16 n);
+
+/* kbase_io_history_term - uninit all resources for the register access history
+ *
+ * @h The register history to terminate
+ */
+void kbase_io_history_term(struct kbase_io_history *h);
+
+/* kbase_io_history_dump - print the register history to the kernel ring buffer
+ *
+ * @kbdev Pointer to kbase_device containing the register history to dump
+ */
+void kbase_io_history_dump(struct kbase_device *kbdev);
+
+/**
+ * kbase_io_history_resize - resize the register access history buffer.
+ *
+ * @h: Pointer to a valid register history to resize
+ * @new_size: Number of accesses the buffer could hold
+ *
+ * A successful resize will clear all recent register accesses.
+ * If resizing fails for any reason (e.g., could not allocate memory, invalid
+ * buffer size) then the original buffer will be kept intact.
+ *
+ * @return 0 if the buffer was resized, failure otherwise
+ */
+int kbase_io_history_resize(struct kbase_io_history *h, u16 new_size);
+
+#else /* CONFIG_DEBUG_FS */
+
+#define kbase_io_history_init(...) ((int)0)
+
+#define kbase_io_history_term CSTD_NOP
+
+#define kbase_io_history_dump CSTD_NOP
+
+#define kbase_io_history_resize CSTD_NOP
+
+#endif /* CONFIG_DEBUG_FS */
+
+
 #endif
+
+
+

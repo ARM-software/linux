@@ -192,12 +192,14 @@ union kbase_pm_ca_policy_data {
  * @gpu_poweroff_pending: number of poweroff timer ticks until the GPU is
  *                        powered off
  * @shader_poweroff_pending_time: number of poweroff timer ticks until shaders
- *                        are powered off
+ *                        and/or timers are powered off
  * @gpu_poweroff_timer: Timer for powering off GPU
  * @gpu_poweroff_wq:   Workqueue to power off GPU on when timer fires
  * @gpu_poweroff_work: Workitem used on @gpu_poweroff_wq
  * @shader_poweroff_pending: Bit mask of shaders to be powered off on next
  *                           timer callback
+ * @tiler_poweroff_pending: Bit mask of tilers to be powered off on next timer
+ *                          callback
  * @poweroff_timer_needed: true if the poweroff timer is currently required,
  *                         false otherwise
  * @poweroff_timer_running: true if the poweroff timer is currently running,
@@ -205,6 +207,17 @@ union kbase_pm_ca_policy_data {
  *                          power_change_lock should be held when accessing,
  *                          unless there is no way the timer can be running (eg
  *                          hrtimer_cancel() was called immediately before)
+ * @poweroff_wait_in_progress: true if a wait for GPU power off is in progress.
+ *                             hwaccess_lock must be held when accessing
+ * @poweron_required: true if a GPU power on is required. Should only be set
+ *                    when poweroff_wait_in_progress is true, and therefore the
+ *                    GPU can not immediately be powered on. pm.lock must be
+ *                    held when accessing
+ * @poweroff_is_suspend: true if the GPU is being powered off due to a suspend
+ *                       request. pm.lock must be held when accessing
+ * @gpu_poweroff_wait_wq: workqueue for waiting for GPU to power off
+ * @gpu_poweroff_wait_work: work item for use with @gpu_poweroff_wait_wq
+ * @poweroff_wait: waitqueue for waiting for @gpu_poweroff_wait_work to complete
  * @callback_power_on: Callback when the GPU needs to be turned on. See
  *                     &struct kbase_pm_callback_conf
  * @callback_power_off: Callback when the GPU may be turned off. See
@@ -274,9 +287,19 @@ struct kbase_pm_backend_data {
 	struct work_struct gpu_poweroff_work;
 
 	u64 shader_poweroff_pending;
+	u64 tiler_poweroff_pending;
 
 	bool poweroff_timer_needed;
 	bool poweroff_timer_running;
+
+	bool poweroff_wait_in_progress;
+	bool poweron_required;
+	bool poweroff_is_suspend;
+
+	struct workqueue_struct *gpu_poweroff_wait_wq;
+	struct work_struct gpu_poweroff_wait_work;
+
+	wait_queue_head_t poweroff_wait;
 
 	int (*callback_power_on)(struct kbase_device *kbdev);
 	void (*callback_power_off)(struct kbase_device *kbdev);

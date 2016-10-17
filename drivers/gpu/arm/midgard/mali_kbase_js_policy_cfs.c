@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -149,9 +149,9 @@ static inline int kbasep_js_policy_trace_get_refcnt(struct kbase_device *kbdev, 
 
 	js_devdata = &kbdev->js_data;
 
-	spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	refcnt = kbasep_js_policy_trace_get_refcnt_nolock(kbdev, kctx);
-	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 	return refcnt;
 }
@@ -223,7 +223,7 @@ int kbasep_js_policy_init_ctx(struct kbase_device *kbdev, struct kbase_context *
 	 * head_runtime_us occur strictly after this context is initialized */
 	mutex_lock(&js_devdata->queue_mutex);
 
-	/* No need to hold the the runpool_irq.lock here, because we're initializing
+	/* No need to hold the the hwaccess_lock here, because we're initializing
 	 * the value, and the context is definitely not being updated in the
 	 * runpool at this point. The queue_mutex ensures the memory barrier. */
 	ctx_info->runtime_us = policy_info->head_runtime_us + priority_weight(ctx_info, (u64) js_devdata->cfs_ctx_runtime_init_slices * (u64) (js_devdata->ctx_timeslice_ns / 1000u));
@@ -235,15 +235,10 @@ int kbasep_js_policy_init_ctx(struct kbase_device *kbdev, struct kbase_context *
 
 void kbasep_js_policy_term_ctx(union kbasep_js_policy *js_policy, struct kbase_context *kctx)
 {
-	struct kbasep_js_policy_cfs_ctx *ctx_info;
-	struct kbasep_js_policy_cfs *policy_info;
 	struct kbase_device *kbdev;
 
 	KBASE_DEBUG_ASSERT(js_policy != NULL);
 	KBASE_DEBUG_ASSERT(kctx != NULL);
-
-	policy_info = &js_policy->cfs;
-	ctx_info = &kctx->jctx.sched_info.runpool.policy_ctx.cfs;
 
 	kbdev = container_of(js_policy, struct kbase_device, js_data.policy);
 	KBASE_TRACE_ADD_REFCOUNT(kbdev, JS_POLICY_TERM_CTX, kctx, NULL, 0u, kbasep_js_policy_trace_get_refcnt(kbdev, kctx));
