@@ -355,3 +355,17 @@
 			method = "smc";
 		};
 	};
+
+	buslogger@0x6f020000 {
+		compatible = "arm,buslogger";
+		reg = <0x0 0x6f020000 0x0 0x1000>,<0x0 0x60000000 0x0 0x8000000>,<0x0 0x0 0x0 0xFFF00000>;
+		reg-names = "REGISTER", "APERTURE", "MEMORY";
+		arm,axi-max-outstanding = <16>;
+		arm,axi-burst-length = <16>;
+		arm,pager-module = <1>;
+	};
+
+	fpga_sysctl@0x6f020000 {
+		compatible = "arm,mali_fpga_sysctl";
+		reg = <0x0 0x6f020000 0x0 0x000000CC>;
+	};
