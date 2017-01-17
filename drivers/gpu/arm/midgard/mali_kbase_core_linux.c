@@ -124,15 +124,15 @@ static void kbase_create_timeline_objects(struct kbase_context *kctx)
 	for (lpu_id = 0; lpu_id < kbdev->gpu_props.num_job_slots; lpu_id++) {
 		u32 *lpu =
 			&kbdev->gpu_props.props.raw_props.js_features[lpu_id];
-		kbase_tlstream_tl_summary_new_lpu(lpu, lpu_id, *lpu);
+		KBASE_TLSTREAM_TL_SUMMARY_NEW_LPU(lpu, lpu_id, *lpu);
 	}
 
 	/* Create Address Space objects. */
 	for (as_nr = 0; as_nr < kbdev->nr_hw_address_spaces; as_nr++)
-		kbase_tlstream_tl_summary_new_as(&kbdev->as[as_nr], as_nr);
+		KBASE_TLSTREAM_TL_SUMMARY_NEW_AS(&kbdev->as[as_nr], as_nr);
 
 	/* Create GPU object and make it retain all LPUs and address spaces. */
-	kbase_tlstream_tl_summary_new_gpu(
+	KBASE_TLSTREAM_TL_SUMMARY_NEW_GPU(
 			kbdev,
 			kbdev->gpu_props.props.raw_props.gpu_id,
 			kbdev->gpu_props.num_cores);
@@ -140,17 +140,17 @@ static void kbase_create_timeline_objects(struct kbase_context *kctx)
 	for (lpu_id = 0; lpu_id < kbdev->gpu_props.num_job_slots; lpu_id++) {
 		void *lpu =
 			&kbdev->gpu_props.props.raw_props.js_features[lpu_id];
-		kbase_tlstream_tl_summary_lifelink_lpu_gpu(lpu, kbdev);
+		KBASE_TLSTREAM_TL_SUMMARY_LIFELINK_LPU_GPU(lpu, kbdev);
 	}
 	for (as_nr = 0; as_nr < kbdev->nr_hw_address_spaces; as_nr++)
-		kbase_tlstream_tl_summary_lifelink_as_gpu(
+		KBASE_TLSTREAM_TL_SUMMARY_LIFELINK_AS_GPU(
 				&kbdev->as[as_nr],
 				kbdev);
 
 	/* Create object for each known context. */
 	mutex_lock(&kbdev->kctx_list_lock);
 	list_for_each_entry(element, &kbdev->kctx_list, link) {
-		kbase_tlstream_tl_summary_new_ctx(
+		KBASE_TLSTREAM_TL_SUMMARY_NEW_CTX(
 				element->kctx,
 				(u32)(element->kctx->id),
 				(u32)(element->kctx->tgid));
@@ -374,8 +374,9 @@ static int kbase_dispatch(struct kbase_context *kctx, void * const args, u32 arg
 
 			reg = kbase_mem_alloc(kctx, mem->va_pages,
 					mem->commit_pages, mem->extent,
-					&mem->flags, &mem->gpu_va,
-					&mem->va_alignment);
+					&mem->flags, &mem->gpu_va);
+			mem->va_alignment = 0;
+
 			if (!reg)
 				ukh->ret = MALI_ERROR_FUNCTION_FAILED;
 			break;
@@ -697,9 +698,8 @@ copy_failed:
 
 				err = kbasep_find_enclosing_cpu_mapping_offset(
 						kctx,
-						find->gpu_addr,
-						(uintptr_t) find->cpu_addr,
-						(size_t) find->size,
+						find->cpu_addr,
+						find->size,
 						&find->offset);
 
 				if (err)
@@ -1054,11 +1054,11 @@ static int assign_irqs(struct platform_device *pdev)
 		}
 
 #ifdef CONFIG_OF
-		if (!strcmp(irq_res->name, "JOB")) {
+		if (!strncmp(irq_res->name, "JOB", 4)) {
 			irqtag = JOB_IRQ_TAG;
-		} else if (!strcmp(irq_res->name, "MMU")) {
+		} else if (!strncmp(irq_res->name, "MMU", 4)) {
 			irqtag = MMU_IRQ_TAG;
-		} else if (!strcmp(irq_res->name, "GPU")) {
+		} else if (!strncmp(irq_res->name, "GPU", 4)) {
 			irqtag = GPU_IRQ_TAG;
 		} else {
 			dev_err(&pdev->dev, "Invalid irq res name: '%s'\n",
@@ -1248,7 +1248,7 @@ static int kbase_open(struct inode *inode, struct file *filp)
 			mutex_lock(&kbdev->kctx_list_lock);
 			element->kctx = kctx;
 			list_add(&element->link, &kbdev->kctx_list);
-			kbase_tlstream_tl_new_ctx(
+			KBASE_TLSTREAM_TL_NEW_CTX(
 					element->kctx,
 					(u32)(element->kctx->id),
 					(u32)(element->kctx->tgid));
@@ -1272,7 +1272,7 @@ static int kbase_release(struct inode *inode, struct file *filp)
 	struct kbasep_kctx_list_element *element, *tmp;
 	bool found_element = false;
 
-	kbase_tlstream_tl_del_ctx(kctx);
+	KBASE_TLSTREAM_TL_DEL_CTX(kctx);
 
 #ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(kctx->kctx_dentry);
@@ -1409,13 +1409,56 @@ static int kbase_check_flags(int flags)
 	return 0;
 }
 
-#ifdef CONFIG_64BIT
+
+/**
+ * align_and_check - Align the specified pointer to the provided alignment and
+ *                   check that it is still in range.
+ * @gap_end:        Highest possible start address for allocation (end of gap in
+ *                  address space)
+ * @gap_start:      Start address of current memory area / gap in address space
+ * @info:           vm_unmapped_area_info structure passed to caller, containing
+ *                  alignment, length and limits for the allocation
+ * @is_shader_code: True if the allocation is for shader code (which has
+ *                  additional alignment requirements)
+ *
+ * Return: true if gap_end is now aligned correctly and is still in range,
+ *         false otherwise
+ */
+static bool align_and_check(unsigned long *gap_end, unsigned long gap_start,
+		struct vm_unmapped_area_info *info, bool is_shader_code)
+{
+	/* Compute highest gap address at the desired alignment */
+	(*gap_end) -= info->length;
+	(*gap_end) -= (*gap_end - info->align_offset) & info->align_mask;
+
+	if (is_shader_code) {
+		/* Check for 4GB boundary */
+		if (0 == (*gap_end & BASE_MEM_MASK_4GB))
+			(*gap_end) -= (info->align_offset ? info->align_offset :
+					info->length);
+		if (0 == ((*gap_end + info->length) & BASE_MEM_MASK_4GB))
+			(*gap_end) -= (info->align_offset ? info->align_offset :
+					info->length);
+
+		if (!(*gap_end & BASE_MEM_MASK_4GB) || !((*gap_end +
+				info->length) & BASE_MEM_MASK_4GB))
+			return false;
+	}
+
+
+	if ((*gap_end < info->low_limit) || (*gap_end < gap_start))
+		return false;
+
+
+	return true;
+}
+
 /* The following function is taken from the kernel and just
  * renamed. As it's not exported to modules we must copy-paste it here.
  */
 
 static unsigned long kbase_unmapped_area_topdown(struct vm_unmapped_area_info
-		*info)
+		*info, bool is_shader_code)
 {
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
@@ -1441,8 +1484,10 @@ static unsigned long kbase_unmapped_area_topdown(struct vm_unmapped_area_info
 
 	/* Check highest gap, which does not precede any rbtree node */
 	gap_start = mm->highest_vm_end;
-	if (gap_start <= high_limit)
-		goto found_highest;
+	if (gap_start <= high_limit) {
+		if (align_and_check(&gap_end, gap_start, info, is_shader_code))
+			return gap_end;
+	}
 
 	/* Check if rbtree root looks promising */
 	if (RB_EMPTY_ROOT(&mm->mm_rb))
@@ -1469,8 +1514,16 @@ check_current:
 		gap_end = vma->vm_start;
 		if (gap_end < low_limit)
 			return -ENOMEM;
-		if (gap_start <= high_limit && gap_end - gap_start >= length)
-			goto found;
+		if (gap_start <= high_limit && gap_end - gap_start >= length) {
+			/* We found a suitable gap. Clip it with the original
+			 * high_limit. */
+			if (gap_end > info->high_limit)
+				gap_end = info->high_limit;
+
+			if (align_and_check(&gap_end, gap_start, info,
+					is_shader_code))
+				return gap_end;
+		}
 
 		/* Visit left subtree if it looks promising */
 		if (vma->vm_rb.rb_left) {
@@ -1498,21 +1551,8 @@ check_current:
 		}
 	}
 
-found:
-	/* We found a suitable gap. Clip it with the original high_limit. */
-	if (gap_end > info->high_limit)
-		gap_end = info->high_limit;
-
-found_highest:
-	/* Compute highest gap address at the desired alignment */
-	gap_end -= info->length;
-	gap_end -= (gap_end - info->align_offset) & info->align_mask;
-
-	VM_BUG_ON(gap_end < info->low_limit);
-	VM_BUG_ON(gap_end < gap_start);
-	return gap_end;
+	return -ENOMEM;
 }
-
 
 static unsigned long kbase_get_unmapped_area(struct file *filp,
 		const unsigned long addr, const unsigned long len,
@@ -1523,41 +1563,74 @@ static unsigned long kbase_get_unmapped_area(struct file *filp,
 	struct kbase_context *kctx = filp->private_data;
 	struct mm_struct *mm = current->mm;
 	struct vm_unmapped_area_info info;
+	unsigned long align_offset = 0;
+	unsigned long align_mask = 0;
+	unsigned long high_limit = mm->mmap_base;
+	unsigned long low_limit = PAGE_SIZE;
+	int cpu_va_bits = BITS_PER_LONG;
+	int gpu_pc_bits =
+	      kctx->kbdev->gpu_props.props.core_props.log2_program_counter_size;
+	bool is_shader_code = false;
 
 	/* err on fixed address */
 	if ((flags & MAP_FIXED) || addr)
 		return -EINVAL;
 
+#ifdef CONFIG_64BIT
 	/* too big? */
 	if (len > TASK_SIZE - SZ_2M)
 		return -ENOMEM;
 
-	if (kbase_ctx_flag(kctx, KCTX_COMPAT))
-		return current->mm->get_unmapped_area(filp, addr, len, pgoff,
-				flags);
+	if (!kbase_ctx_flag(kctx, KCTX_COMPAT)) {
 
-	if (kbase_hw_has_feature(kctx->kbdev, BASE_HW_FEATURE_33BIT_VA)) {
-		info.high_limit = kctx->same_va_end << PAGE_SHIFT;
-		info.align_mask = 0;
-		info.align_offset = 0;
-	} else {
-		info.high_limit = min_t(unsigned long, mm->mmap_base,
-					(kctx->same_va_end << PAGE_SHIFT));
-		if (len >= SZ_2M) {
-			info.align_offset = SZ_2M;
-			info.align_mask = SZ_2M - 1;
+		if (kbase_hw_has_feature(kctx->kbdev,
+						BASE_HW_FEATURE_33BIT_VA)) {
+			high_limit = kctx->same_va_end << PAGE_SHIFT;
 		} else {
-			info.align_mask = 0;
-			info.align_offset = 0;
+			high_limit = min_t(unsigned long, mm->mmap_base,
+					(kctx->same_va_end << PAGE_SHIFT));
+			if (len >= SZ_2M) {
+				align_offset = SZ_2M;
+				align_mask = SZ_2M - 1;
+			}
 		}
+
+		low_limit = SZ_2M;
+	} else {
+		cpu_va_bits = 32;
+	}
+#endif /* CONFIG_64BIT */
+	if ((PFN_DOWN(BASE_MEM_COOKIE_BASE) <= pgoff) &&
+		(PFN_DOWN(BASE_MEM_FIRST_FREE_ADDRESS) > pgoff)) {
+			int cookie = pgoff - PFN_DOWN(BASE_MEM_COOKIE_BASE);
+
+			if (!kctx->pending_regions[cookie])
+				return -EINVAL;
+
+			if (!(kctx->pending_regions[cookie]->flags &
+							KBASE_REG_GPU_NX)) {
+				if (cpu_va_bits > gpu_pc_bits) {
+					align_offset = 1ULL << gpu_pc_bits;
+					align_mask = align_offset - 1;
+					is_shader_code = true;
+				}
+			}
+#ifndef CONFIG_64BIT
+	} else {
+		return current->mm->get_unmapped_area(filp, addr, len, pgoff,
+						      flags);
+#endif
 	}
 
 	info.flags = 0;
 	info.length = len;
-	info.low_limit = SZ_2M;
-	return kbase_unmapped_area_topdown(&info);
+	info.low_limit = low_limit;
+	info.high_limit = high_limit;
+	info.align_offset = align_offset;
+	info.align_mask = align_mask;
+
+	return kbase_unmapped_area_topdown(&info, is_shader_code);
 }
-#endif
 
 static const struct file_operations kbase_fops = {
 	.owner = THIS_MODULE,
@@ -1569,9 +1642,7 @@ static const struct file_operations kbase_fops = {
 	.compat_ioctl = kbase_ioctl,
 	.mmap = kbase_mmap,
 	.check_flags = kbase_check_flags,
-#ifdef CONFIG_64BIT
 	.get_unmapped_area = kbase_get_unmapped_area,
-#endif
 };
 
 #ifndef CONFIG_MALI_NO_MALI
@@ -2587,6 +2658,8 @@ static ssize_t kbase_show_gpuinfo(struct device *dev,
 		  .name = "Mali-G71" },
 		{ .id = GPU_ID2_PRODUCT_THEX >> GPU_ID_VERSION_PRODUCT_ID_SHIFT,
 		  .name = "Mali-THEx" },
+		{ .id = GPU_ID2_PRODUCT_TSIX >> GPU_ID_VERSION_PRODUCT_ID_SHIFT,
+		  .name = "Mali-TSIx" },
 	};
 	const char *product_name = "(Unknown Mali GPU)";
 	struct kbase_device *kbdev;
@@ -2913,6 +2986,130 @@ static ssize_t set_mem_pool_max_size(struct device *dev,
 static DEVICE_ATTR(mem_pool_max_size, S_IRUGO | S_IWUSR, show_mem_pool_max_size,
 		set_mem_pool_max_size);
 
+#ifdef CONFIG_DEBUG_FS
+
+/* Number of entries in serialize_jobs_settings[] */
+#define NR_SERIALIZE_JOBS_SETTINGS 5
+/* Maximum string length in serialize_jobs_settings[].name */
+#define MAX_SERIALIZE_JOBS_NAME_LEN 16
+
+static struct
+{
+	char *name;
+	u8 setting;
+} serialize_jobs_settings[NR_SERIALIZE_JOBS_SETTINGS] = {
+	{"none", 0},
+	{"intra-slot", KBASE_SERIALIZE_INTRA_SLOT},
+	{"inter-slot", KBASE_SERIALIZE_INTER_SLOT},
+	{"full", KBASE_SERIALIZE_INTRA_SLOT | KBASE_SERIALIZE_INTER_SLOT},
+	{"full-reset", KBASE_SERIALIZE_INTRA_SLOT | KBASE_SERIALIZE_INTER_SLOT |
+			KBASE_SERIALIZE_RESET}
+};
+
+/**
+ * kbasep_serialize_jobs_seq_show: Show callback for the serialize_jobs debugfs
+ *                                 file
+ * @sfile: seq_file pointer
+ * @data:  Private callback data
+ *
+ * This function is called to get the contents of the serialize_jobs debugfs
+ * file. This is a list of the available settings with the currently active one
+ * surrounded by square brackets.
+ *
+ * Return: 0 on success, or an error code on error
+ */
+static int kbasep_serialize_jobs_seq_show(struct seq_file *sfile, void *data)
+{
+	struct kbase_device *kbdev = sfile->private;
+	int i;
+
+	CSTD_UNUSED(data);
+
+	for (i = 0; i < NR_SERIALIZE_JOBS_SETTINGS; i++) {
+		if (kbdev->serialize_jobs == serialize_jobs_settings[i].setting)
+			seq_printf(sfile, "[%s] ",
+					serialize_jobs_settings[i].name);
+		else
+			seq_printf(sfile, "%s ",
+					serialize_jobs_settings[i].name);
+	}
+
+	seq_puts(sfile, "\n");
+
+	return 0;
+}
+
+/**
+ * kbasep_serialize_jobs_debugfs_write: Store callback for the serialize_jobs
+ *                                      debugfs file.
+ * @file:  File pointer
+ * @ubuf:  User buffer containing data to store
+ * @count: Number of bytes in user buffer
+ * @ppos:  File position
+ *
+ * This function is called when the serialize_jobs debugfs file is written to.
+ * It matches the requested setting against the available settings and if a
+ * matching setting is found updates kbdev->serialize_jobs.
+ *
+ * @return @c count if the function succeeded. An error code on failure.
+ */
+static ssize_t kbasep_serialize_jobs_debugfs_write(struct file *file,
+		const char __user *ubuf, size_t count, loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct kbase_device *kbdev = s->private;
+	char buf[MAX_SERIALIZE_JOBS_NAME_LEN];
+	int i;
+	bool valid = false;
+
+	CSTD_UNUSED(ppos);
+
+	count = min_t(size_t, sizeof(buf) - 1, count);
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+
+	buf[count] = 0;
+
+	for (i = 0; i < NR_SERIALIZE_JOBS_SETTINGS; i++) {
+		if (sysfs_streq(serialize_jobs_settings[i].name, buf)) {
+			kbdev->serialize_jobs =
+					serialize_jobs_settings[i].setting;
+			valid = true;
+			break;
+		}
+	}
+
+	if (!valid) {
+		dev_err(kbdev->dev, "serialize_jobs: invalid setting\n");
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+/**
+ * kbasep_serialize_jobs_debugfs_open: Open callback for the serialize_jobs
+ *                                     debugfs file
+ * @in:   inode pointer
+ * @file: file pointer
+ *
+ * Return: Zero on success, error code on failure
+ */
+static int kbasep_serialize_jobs_debugfs_open(struct inode *in,
+		struct file *file)
+{
+	return single_open(file, kbasep_serialize_jobs_seq_show, in->i_private);
+}
+
+static const struct file_operations kbasep_serialize_jobs_debugfs_fops = {
+	.open = kbasep_serialize_jobs_debugfs_open,
+	.read = seq_read,
+	.write = kbasep_serialize_jobs_debugfs_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+#endif /* CONFIG_DEBUG_FS */
 
 static int kbasep_protected_mode_enter(struct kbase_device *kbdev)
 {
@@ -3283,6 +3480,12 @@ static int kbase_device_debugfs_init(struct kbase_device *kbdev)
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	kbasep_trace_timeline_debugfs_init(kbdev);
 #endif /* CONFIG_MALI_TRACE_TIMELINE */
+
+#ifdef CONFIG_DEBUG_FS
+	debugfs_create_file("serialize_jobs", S_IRUGO | S_IWUSR,
+			kbdev->mali_debugfs_directory, kbdev,
+			&kbasep_serialize_jobs_debugfs_fops);
+#endif /* CONFIG_DEBUG_FS */
 
 	return 0;
 

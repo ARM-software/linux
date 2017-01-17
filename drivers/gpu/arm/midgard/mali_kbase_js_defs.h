@@ -52,27 +52,9 @@ struct kbasep_atom_req {
 	u32 device_nr;
 };
 
-#include "mali_kbase_js_policy_cfs.h"
-
-/* Wrapper Interface - doxygen is elsewhere */
-union kbasep_js_policy {
-	struct kbasep_js_policy_cfs cfs;
-};
-
-/* Wrapper Interface - doxygen is elsewhere */
-union kbasep_js_policy_ctx_info {
-	struct kbasep_js_policy_cfs_ctx cfs;
-};
-
-/* Wrapper Interface - doxygen is elsewhere */
-union kbasep_js_policy_job_info {
-	struct kbasep_js_policy_cfs_job cfs;
-};
-
-
 /** Callback function run on all of a context's jobs registered with the Job
  * Scheduler */
-typedef void (*kbasep_js_policy_ctx_job_cb)(struct kbase_device *kbdev, struct kbase_jd_atom *katom);
+typedef void (*kbasep_js_ctx_job_cb)(struct kbase_device *kbdev, struct kbase_jd_atom *katom);
 
 /**
  * @brief Maximum number of jobs that can be submitted to a job slot whilst
@@ -124,9 +106,7 @@ enum kbasep_js_ctx_attr {
 
 	/** Attribute indicating a context that contains Non-Compute jobs. That is,
 	 * the context has some jobs that are \b not of type @ref
-	 * BASE_JD_REQ_ONLY_COMPUTE. The context usually has
-	 * BASE_CONTEXT_HINT_COMPUTE \b clear, but this depends on the HW
-	 * workarounds in use in the Job Scheduling Policy.
+	 * BASE_JD_REQ_ONLY_COMPUTE.
 	 *
 	 * @note A context can be both 'Compute' and 'Non Compute' if it contains
 	 * both types of jobs.
@@ -293,14 +273,6 @@ struct kbasep_js_device_data {
 	/** Number of currently scheduled contexts (including ones that are not submitting jobs) */
 	s8 nr_all_contexts_running;
 
-	/**
-	 * Policy-specific information.
-	 *
-	 * Refer to the structure defined by the current policy to determine which
-	 * locks must be held when accessing this.
-	 */
-	union kbasep_js_policy policy;
-
 	/** Core Requirements to match up with base_js_atom's core_req memeber
 	 * @note This is a write-once member, and so no locking is required to read */
 	base_jd_core_req js_reqs[BASE_JM_MAX_NR_SLOTS];
@@ -315,8 +287,6 @@ struct kbasep_js_device_data {
 	u32 gpu_reset_ticks_cl;	     /*< Value for JS_RESET_TICKS_CL */
 	u32 gpu_reset_ticks_dumping; /*< Value for JS_RESET_TICKS_DUMPING */
 	u32 ctx_timeslice_ns;		 /**< Value for JS_CTX_TIMESLICE_NS */
-	u32 cfs_ctx_runtime_init_slices; /**< Value for DEFAULT_JS_CFS_CTX_RUNTIME_INIT_SLICES */
-	u32 cfs_ctx_runtime_min_slices;	 /**< Value for  DEFAULT_JS_CFS_CTX_RUNTIME_MIN_SLICES */
 
 	/**< Value for JS_SOFT_JOB_TIMEOUT */
 	atomic_t soft_job_timeout_ms;
@@ -349,19 +319,6 @@ struct kbasep_js_device_data {
  * scheduling information.
  */
 struct kbasep_js_kctx_info {
-	/**
-	 * Runpool substructure. This must only be accessed whilst the Run Pool
-	 * mutex ( kbasep_js_device_data::runpool_mutex ) is held.
-	 *
-	 * In addition, the hwaccess_lock may need to be held for certain
-	 * sub-members.
-	 *
-	 * @note some of the members could be moved into struct kbasep_js_device_data for
-	 * improved d-cache/tlb efficiency.
-	 */
-	struct {
-		union kbasep_js_policy_ctx_info policy_ctx;	/**< Policy-specific context */
-	} runpool;
 
 	/**
 	 * Job Scheduler Context information sub-structure. These members are

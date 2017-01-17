@@ -55,11 +55,13 @@ struct kbase_jd_atom;
  * @KBASE_PM_CORE_L2: The L2 cache
  * @KBASE_PM_CORE_SHADER: Shader cores
  * @KBASE_PM_CORE_TILER: Tiler cores
+ * @KBASE_PM_CORE_STACK: Core stacks
  */
 enum kbase_pm_core_type {
 	KBASE_PM_CORE_L2 = L2_PRESENT_LO,
 	KBASE_PM_CORE_SHADER = SHADER_PRESENT_LO,
-	KBASE_PM_CORE_TILER = TILER_PRESENT_LO
+	KBASE_PM_CORE_TILER = TILER_PRESENT_LO,
+	KBASE_PM_CORE_STACK = STACK_PRESENT_LO
 };
 
 /**
@@ -174,6 +176,8 @@ union kbase_pm_ca_policy_data {
  *                           currently in a power-on transition
  * @powering_on_l2_state: A bit mask indicating which l2-caches are currently
  *                        in a power-on transition
+ * @powering_on_stack_state: A bit mask indicating which core stacks are
+ *                           currently in a power-on transition
  * @gpu_in_desired_state: This flag is set if the GPU is powered as requested
  *                        by the desired_xxx_state variables
  * @gpu_in_desired_state_wait: Wait queue set when @gpu_in_desired_state != 0
@@ -260,6 +264,9 @@ struct kbase_pm_backend_data {
 	u64 desired_tiler_state;
 	u64 powering_on_tiler_state;
 	u64 powering_on_l2_state;
+#ifdef CONFIG_MALI_CORESTACK
+	u64 powering_on_stack_state;
+#endif /* CONFIG_MALI_CORESTACK */
 
 	bool gpu_in_desired_state;
 	wait_queue_head_t gpu_in_desired_state_wait;
@@ -409,6 +416,11 @@ enum kbase_pm_ca_policy_id {
 typedef u32 kbase_pm_ca_policy_flags;
 
 /**
+ * Maximum length of a CA policy names
+ */
+#define KBASE_PM_CA_MAX_POLICY_NAME_LEN 15
+
+/**
  * struct kbase_pm_ca_policy - Core availability policy structure.
  *
  * Each core availability policy exposes a (static) instance of this structure
@@ -427,7 +439,7 @@ typedef u32 kbase_pm_ca_policy_flags;
  *                      It is used purely for debugging.
  */
 struct kbase_pm_ca_policy {
-	char *name;
+	char name[KBASE_PM_CA_MAX_POLICY_NAME_LEN + 1];
 
 	/**
 	 * Function called when the policy is selected

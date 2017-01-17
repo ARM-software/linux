@@ -71,9 +71,6 @@
 #endif
 /**
  * @page page_base_kernel_main Kernel-side Base (KBase) APIs
- *
- * The Kernel-side Base (KBase) APIs are divided up as follows:
- * - @subpage page_kbase_js_policy
  */
 
 /**

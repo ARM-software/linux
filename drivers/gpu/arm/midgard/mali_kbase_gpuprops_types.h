@@ -51,6 +51,8 @@ struct kbase_gpuprops_regdump {
 	u32 tiler_present_hi;
 	u32 l2_present_lo;
 	u32 l2_present_hi;
+	u32 stack_present_lo;
+	u32 stack_present_hi;
 	u32 coherency_features;
 };
 

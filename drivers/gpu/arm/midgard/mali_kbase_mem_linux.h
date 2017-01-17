@@ -32,7 +32,9 @@ struct kbase_hwc_dma_mapping {
 	size_t      size;
 };
 
-struct kbase_va_region *kbase_mem_alloc(struct kbase_context *kctx, u64 va_pages, u64 commit_pages, u64 extent, u64 *flags, u64 *gpu_va, u16 *va_alignment);
+struct kbase_va_region *kbase_mem_alloc(struct kbase_context *kctx,
+		u64 va_pages, u64 commit_pages, u64 extent, u64 *flags,
+		u64 *gpu_va);
 int kbase_mem_query(struct kbase_context *kctx, u64 gpu_addr, int query, u64 *const pages);
 int kbase_mem_import(struct kbase_context *kctx, enum base_mem_import_type type,
 		void __user *phandle, u64 *gpu_va, u64 *va_pages,
@@ -212,5 +214,7 @@ void *kbase_va_alloc(struct kbase_context *kctx, u32 size, struct kbase_hwc_dma_
  * @param handle An opaque structure returned by the kbase_va_alloc function.
  */
 void kbase_va_free(struct kbase_context *kctx, struct kbase_hwc_dma_mapping *handle);
+
+extern const struct vm_operations_struct kbase_vm_ops;
 
 #endif				/* _KBASE_MEM_LINUX_H_ */

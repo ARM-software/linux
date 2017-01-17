@@ -17,5 +17,3 @@
 menu "ARM GPU Configuration"
 source "drivers/gpu/arm/midgard/Kconfig"
 endmenu
-
-source "drivers/base/ump/Kconfig"

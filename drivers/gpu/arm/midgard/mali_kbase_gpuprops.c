@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -185,9 +185,22 @@ static void kbase_gpuprops_get_props(base_gpu_props * const gpu_props, struct kb
 
 	gpu_props->raw_props.as_present = regdump.as_present;
 	gpu_props->raw_props.js_present = regdump.js_present;
-	gpu_props->raw_props.shader_present = ((u64) regdump.shader_present_hi << 32) + regdump.shader_present_lo;
-	gpu_props->raw_props.tiler_present = ((u64) regdump.tiler_present_hi << 32) + regdump.tiler_present_lo;
-	gpu_props->raw_props.l2_present = ((u64) regdump.l2_present_hi << 32) + regdump.l2_present_lo;
+	gpu_props->raw_props.shader_present =
+		((u64) regdump.shader_present_hi << 32) +
+		regdump.shader_present_lo;
+	gpu_props->raw_props.tiler_present =
+		((u64) regdump.tiler_present_hi << 32) +
+		regdump.tiler_present_lo;
+	gpu_props->raw_props.l2_present =
+		((u64) regdump.l2_present_hi << 32) +
+		regdump.l2_present_lo;
+#ifdef CONFIG_MALI_CORESTACK
+	gpu_props->raw_props.stack_present =
+		((u64) regdump.stack_present_hi << 32) +
+		regdump.stack_present_lo;
+#else /* CONFIG_MALI_CORESTACK */
+	gpu_props->raw_props.stack_present = 0;
+#endif /* CONFIG_MALI_CORESTACK */
 
 	for (i = 0; i < GPU_MAX_JOB_SLOTS; i++)
 		gpu_props->raw_props.js_features[i] = regdump.js_features[i];

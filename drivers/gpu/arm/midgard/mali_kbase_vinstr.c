@@ -328,14 +328,13 @@ static int kbasep_vinstr_map_kernel_dump_buffer(
 	struct kbase_va_region *reg;
 	struct kbase_context *kctx = vinstr_ctx->kctx;
 	u64 flags, nr_pages;
-	u16 va_align = 0;
 
 	flags = BASE_MEM_PROT_CPU_RD | BASE_MEM_PROT_GPU_WR;
 	vinstr_ctx->dump_size = kbasep_vinstr_dump_size_ctx(vinstr_ctx);
 	nr_pages = PFN_UP(vinstr_ctx->dump_size);
 
 	reg = kbase_mem_alloc(kctx, nr_pages, nr_pages, 0, &flags,
-			&vinstr_ctx->gpu_va, &va_align);
+			&vinstr_ctx->gpu_va);
 	if (!reg)
 		return -ENOMEM;
 
@@ -397,7 +396,7 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 		/* Inform timeline client about new context.
 		 * Do this while holding the lock to avoid tracepoint
 		 * being created in both body and summary stream. */
-		kbase_tlstream_tl_new_ctx(
+		KBASE_TLSTREAM_TL_NEW_CTX(
 				vinstr_ctx->kctx,
 				(u32)(vinstr_ctx->kctx->id),
 				(u32)(vinstr_ctx->kctx->tgid));
@@ -428,7 +427,7 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 			kfree(element);
 			mutex_unlock(&kbdev->kctx_list_lock);
 		}
-		kbase_tlstream_tl_del_ctx(vinstr_ctx->kctx);
+		KBASE_TLSTREAM_TL_DEL_CTX(vinstr_ctx->kctx);
 		vinstr_ctx->kctx = NULL;
 		return err;
 	}
@@ -447,7 +446,7 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 			kfree(element);
 			mutex_unlock(&kbdev->kctx_list_lock);
 		}
-		kbase_tlstream_tl_del_ctx(vinstr_ctx->kctx);
+		KBASE_TLSTREAM_TL_DEL_CTX(vinstr_ctx->kctx);
 		vinstr_ctx->kctx = NULL;
 		return -EFAULT;
 	}
@@ -487,7 +486,7 @@ static void kbasep_vinstr_destroy_kctx(struct kbase_vinstr_context *vinstr_ctx)
 		dev_warn(kbdev->dev, "kctx not in kctx_list\n");
 
 	/* Inform timeline client about context destruction. */
-	kbase_tlstream_tl_del_ctx(vinstr_ctx->kctx);
+	KBASE_TLSTREAM_TL_DEL_CTX(vinstr_ctx->kctx);
 
 	vinstr_ctx->kctx = NULL;
 }

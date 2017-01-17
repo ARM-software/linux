@@ -850,6 +850,8 @@ static void kbase_mem_copy_from_extres_page(struct kbase_context *kctx,
 	void *target_page = kmap(pages[*target_page_nr]);
 	size_t chunk = PAGE_SIZE-offset;
 
+	lockdep_assert_held(&kctx->reg_lock);
+
 	if (!target_page) {
 		*target_page_nr += 1;
 		dev_warn(kctx->kbdev->dev, "kmap failed in debug_copy job.");
@@ -1389,6 +1391,17 @@ int kbase_prepare_soft_job(struct kbase_jd_atom *katom)
 			katom->fence = sync_fence_fdget(fence.basep.fd);
 			if (katom->fence == NULL)
 				return -EINVAL;
+
+#ifdef CONFIG_MALI_DMA_FENCE
+			/*
+			 * Set KCTX_NO_IMPLICIT_FENCE in the context the first
+			 * time a soft fence wait job is observed. This will
+			 * prevent the implicit dma-buf fence to conflict with
+			 * the Android native sync fences.
+			 */
+			if (!kbase_ctx_flag(katom->kctx, KCTX_NO_IMPLICIT_SYNC))
+				kbase_ctx_flag_set(katom->kctx, KCTX_NO_IMPLICIT_SYNC);
+#endif /* CONFIG_MALI_DMA_FENCE */
 		}
 		break;
 #endif				/* CONFIG_SYNC */

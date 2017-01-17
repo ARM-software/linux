@@ -69,10 +69,8 @@ struct kbase_cpu_mapping {
 	struct   kbase_mem_phy_alloc *alloc;
 	struct   kbase_context *kctx;
 	struct   kbase_va_region *region;
-	pgoff_t  page_off;
 	int      count;
-	unsigned long vm_start;
-	unsigned long vm_end;
+	int      free_on_close;
 };
 
 enum kbase_memory_type {
@@ -247,9 +245,6 @@ struct kbase_va_region {
 #define KBASE_REG_GPU_RD            (1ul<<13)
 /* CPU read access */
 #define KBASE_REG_CPU_RD            (1ul<<14)
-
-/* Aligned for GPU EX in SAME_VA */
-#define KBASE_REG_ALIGNED           (1ul<<15)
 
 /* Index of chosen MEMATTR for this region (0..7) */
 #define KBASE_REG_MEMATTR_MASK      (7ul << 16)
@@ -774,31 +769,24 @@ static inline void kbase_process_page_usage_dec(struct kbase_context *kctx, int 
 }
 
 /**
- * @brief Find the offset of the CPU mapping of a memory allocation containing
- *        a given address range
+ * kbasep_find_enclosing_cpu_mapping_offset() - Find the offset of the CPU
+ * mapping of a memory allocation containing a given address range
  *
- * Searches for a CPU mapping of any part of the region starting at @p gpu_addr
- * that fully encloses the CPU virtual address range specified by @p uaddr and
- * @p size. Returns a failure indication if only part of the address range lies
- * within a CPU mapping, or the address range lies within a CPU mapping of a
- * different region.
+ * Searches for a CPU mapping of any part of any region that fully encloses the
+ * CPU virtual address range specified by @uaddr and @size. Returns a failure
+ * indication if only part of the address range lies within a CPU mapping.
  *
- * @param[in,out] kctx      The kernel base context used for the allocation.
- * @param[in]     gpu_addr  GPU address of the start of the allocated region
- *                          within which to search.
- * @param[in]     uaddr     Start of the CPU virtual address range.
- * @param[in]     size      Size of the CPU virtual address range (in bytes).
- * @param[out]    offset    The offset from the start of the allocation to the
- *                          specified CPU virtual address.
+ * @kctx:      The kernel base context used for the allocation.
+ * @uaddr:     Start of the CPU virtual address range.
+ * @size:      Size of the CPU virtual address range (in bytes).
+ * @offset:    The offset from the start of the allocation to the specified CPU
+ *             virtual address.
  *
- * @return 0 if offset was obtained successfully. Error code
- *         otherwise.
+ * Return: 0 if offset was obtained successfully. Error code otherwise.
  */
-int kbasep_find_enclosing_cpu_mapping_offset(struct kbase_context *kctx,
-							u64 gpu_addr,
-							unsigned long uaddr,
-							size_t size,
-							u64 *offset);
+int kbasep_find_enclosing_cpu_mapping_offset(
+		struct kbase_context *kctx,
+		unsigned long uaddr, size_t size, u64 *offset);
 
 enum hrtimer_restart kbasep_as_poke_timer_callback(struct hrtimer *timer);
 void kbase_as_poking_timer_retain_atom(struct kbase_device *kbdev, struct kbase_context *kctx, struct kbase_jd_atom *katom);

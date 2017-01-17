@@ -93,6 +93,25 @@ static u64 kbase_pm_get_state(
 static u32 core_type_to_reg(enum kbase_pm_core_type core_type,
 						enum kbasep_pm_action action)
 {
+#ifdef CONFIG_MALI_CORESTACK
+	if (core_type == KBASE_PM_CORE_STACK) {
+		switch (action) {
+		case ACTION_PRESENT:
+			return STACK_PRESENT_LO;
+		case ACTION_READY:
+			return STACK_READY_LO;
+		case ACTION_PWRON:
+			return STACK_PWRON_LO;
+		case ACTION_PWROFF:
+			return STACK_PWROFF_LO;
+		case ACTION_PWRTRANS:
+			return STACK_PWRTRANS_LO;
+		default:
+			BUG();
+		}
+	}
+#endif /* CONFIG_MALI_CORESTACK */
+
 	return (u32)core_type + (u32)action;
 }
 
@@ -172,7 +191,7 @@ static void kbase_pm_invoke(struct kbase_device *kbdev,
 			state |= cores;
 		else if (action == ACTION_PWROFF)
 			state &= ~cores;
-		kbase_tlstream_aux_pm_state(core_type, state);
+		KBASE_TLSTREAM_AUX_PM_STATE(core_type, state);
 	}
 
 	/* Tracing */
@@ -289,8 +308,15 @@ u64 kbase_pm_get_present_cores(struct kbase_device *kbdev,
 		return kbdev->gpu_props.props.raw_props.shader_present;
 	case KBASE_PM_CORE_TILER:
 		return kbdev->gpu_props.props.raw_props.tiler_present;
+#ifdef CONFIG_MALI_CORESTACK
+	case KBASE_PM_CORE_STACK:
+		return kbdev->gpu_props.props.raw_props.stack_present;
+#endif /* CONFIG_MALI_CORESTACK */
+	default:
+		break;
 	}
 	KBASE_DEBUG_ASSERT(0);
+
 	return 0;
 }
 
@@ -546,20 +572,49 @@ static u64 get_desired_cache_status(u64 present, u64 cores_powered,
 
 KBASE_EXPORT_TEST_API(get_desired_cache_status);
 
+#ifdef CONFIG_MALI_CORESTACK
+u64 kbase_pm_core_stack_mask(u64 cores)
+{
+	u64 stack_mask = 0;
+	size_t const MAX_CORE_ID = 31;
+	size_t const NUM_CORES_PER_STACK = 4;
+	size_t i;
+
+	for (i = 0; i <= MAX_CORE_ID; ++i) {
+		if (test_bit(i, (unsigned long *)&cores)) {
+			/* Every core which ID >= 16 is filled to stacks 4-7
+			 * instead of 0-3 */
+			size_t const stack_num = (i > 16) ?
+				(i % NUM_CORES_PER_STACK) + 4 :
+				(i % NUM_CORES_PER_STACK);
+			set_bit(stack_num, (unsigned long *)&stack_mask);
+		}
+	}
+
+	return stack_mask;
+}
+#endif /* CONFIG_MALI_CORESTACK */
+
 bool
 MOCKABLE(kbase_pm_check_transitions_nolock) (struct kbase_device *kbdev)
 {
 	bool cores_are_available = false;
 	bool in_desired_state = true;
 	u64 desired_l2_state;
+#ifdef CONFIG_MALI_CORESTACK
+	u64 desired_stack_state;
+	u64 stacks_powered;
+#endif /* CONFIG_MALI_CORESTACK */
 	u64 cores_powered;
 	u64 tilers_powered;
 	u64 tiler_available_bitmap;
+	u64 tiler_transitioning_bitmap;
 	u64 shader_available_bitmap;
 	u64 shader_ready_bitmap;
 	u64 shader_transitioning_bitmap;
 	u64 l2_available_bitmap;
 	u64 prev_l2_available_bitmap;
+	u64 l2_inuse_bitmap;
 
 	KBASE_DEBUG_ASSERT(NULL != kbdev);
 	lockdep_assert_held(&kbdev->hwaccess_lock);
@@ -583,11 +638,22 @@ MOCKABLE(kbase_pm_check_transitions_nolock) (struct kbase_device *kbdev)
 				KBASE_TIMELINE_PM_EVENT_CHANGE_GPU_STATE);
 
 	/* If any cores are already powered then, we must keep the caches on */
+	shader_transitioning_bitmap = kbase_pm_get_trans_cores(kbdev,
+							KBASE_PM_CORE_SHADER);
 	cores_powered = kbase_pm_get_ready_cores(kbdev, KBASE_PM_CORE_SHADER);
 
 	cores_powered |= kbdev->pm.backend.desired_shader_state;
 
+#ifdef CONFIG_MALI_CORESTACK
+	/* Work out which core stacks want to be powered */
+	desired_stack_state = kbase_pm_core_stack_mask(cores_powered);
+	stacks_powered = kbase_pm_get_ready_cores(kbdev, KBASE_PM_CORE_STACK) |
+		desired_stack_state;
+#endif /* CONFIG_MALI_CORESTACK */
+
 	/* Work out which tilers want to be powered */
+	tiler_transitioning_bitmap = kbase_pm_get_trans_cores(kbdev,
+							KBASE_PM_CORE_TILER);
 	tilers_powered = kbase_pm_get_ready_cores(kbdev, KBASE_PM_CORE_TILER);
 	tilers_powered |= kbdev->pm.backend.desired_tiler_state;
 
@@ -600,20 +666,40 @@ MOCKABLE(kbase_pm_check_transitions_nolock) (struct kbase_device *kbdev)
 			kbdev->gpu_props.props.raw_props.l2_present,
 			cores_powered, tilers_powered);
 
+	l2_inuse_bitmap = get_desired_cache_status(
+			kbdev->gpu_props.props.raw_props.l2_present,
+			cores_powered | shader_transitioning_bitmap,
+			tilers_powered | tiler_transitioning_bitmap);
+
+#ifdef CONFIG_MALI_CORESTACK
+	if (stacks_powered)
+		desired_l2_state |= 1;
+#endif /* CONFIG_MALI_CORESTACK */
+
 	/* If any l2 cache is on, then enable l2 #0, for use by job manager */
 	if (0 != desired_l2_state)
 		desired_l2_state |= 1;
 
 	prev_l2_available_bitmap = kbdev->l2_available_bitmap;
 	in_desired_state &= kbase_pm_transition_core_type(kbdev,
-				KBASE_PM_CORE_L2, desired_l2_state, 0,
-				&l2_available_bitmap,
-				&kbdev->pm.backend.powering_on_l2_state);
+			KBASE_PM_CORE_L2, desired_l2_state, l2_inuse_bitmap,
+			&l2_available_bitmap,
+			&kbdev->pm.backend.powering_on_l2_state);
 
 	if (kbdev->l2_available_bitmap != l2_available_bitmap)
 		KBASE_TIMELINE_POWER_L2(kbdev, l2_available_bitmap);
 
 	kbdev->l2_available_bitmap = l2_available_bitmap;
+
+
+#ifdef CONFIG_MALI_CORESTACK
+	if (in_desired_state) {
+		in_desired_state &= kbase_pm_transition_core_type(kbdev,
+				KBASE_PM_CORE_STACK, desired_stack_state, 0,
+				&kbdev->stack_available_bitmap,
+				&kbdev->pm.backend.powering_on_stack_state);
+	}
+#endif /* CONFIG_MALI_CORESTACK */
 
 	if (in_desired_state) {
 		in_desired_state &= kbase_pm_transition_core_type(kbdev,
@@ -707,21 +793,33 @@ MOCKABLE(kbase_pm_check_transitions_nolock) (struct kbase_device *kbdev)
 		kbase_trace_mali_pm_status(KBASE_PM_CORE_TILER,
 						kbase_pm_get_ready_cores(kbdev,
 							KBASE_PM_CORE_TILER));
+#ifdef CONFIG_MALI_CORESTACK
+		kbase_trace_mali_pm_status(KBASE_PM_CORE_STACK,
+						kbase_pm_get_ready_cores(kbdev,
+							KBASE_PM_CORE_STACK));
+#endif /* CONFIG_MALI_CORESTACK */
 #endif
 
-		kbase_tlstream_aux_pm_state(
+		KBASE_TLSTREAM_AUX_PM_STATE(
 				KBASE_PM_CORE_L2,
 				kbase_pm_get_ready_cores(
 					kbdev, KBASE_PM_CORE_L2));
-		kbase_tlstream_aux_pm_state(
+		KBASE_TLSTREAM_AUX_PM_STATE(
 				KBASE_PM_CORE_SHADER,
 				kbase_pm_get_ready_cores(
 					kbdev, KBASE_PM_CORE_SHADER));
-		kbase_tlstream_aux_pm_state(
+		KBASE_TLSTREAM_AUX_PM_STATE(
 				KBASE_PM_CORE_TILER,
 				kbase_pm_get_ready_cores(
 					kbdev,
 					KBASE_PM_CORE_TILER));
+#ifdef CONFIG_MALI_CORESTACK
+		KBASE_TLSTREAM_AUX_PM_STATE(
+				KBASE_PM_CORE_STACK,
+				kbase_pm_get_ready_cores(
+					kbdev,
+					KBASE_PM_CORE_STACK));
+#endif /* CONFIG_MALI_CORESTACK */
 
 		KBASE_TRACE_ADD(kbdev, PM_DESIRED_REACHED, NULL, NULL,
 				kbdev->pm.backend.gpu_in_desired_state,
@@ -1195,7 +1293,10 @@ static void kbase_pm_hw_issues_detect(struct kbase_device *kbdev)
 		kbdev->hw_quirks_jm = KBASE_JM_CONFIG_UNUSED;
 	}
 
-
+#ifdef CONFIG_MALI_CORESTACK
+#define MANUAL_POWER_CONTROL ((u32)(1 << 8))
+	kbdev->hw_quirks_jm |= MANUAL_POWER_CONTROL;
+#endif /* CONFIG_MALI_CORESTACK */
 }
 
 static void kbase_pm_hw_issues_apply(struct kbase_device *kbdev)
@@ -1250,7 +1351,7 @@ static int kbase_pm_reset_do_normal(struct kbase_device *kbdev)
 
 	KBASE_TRACE_ADD(kbdev, CORE_GPU_SOFT_RESET, NULL, NULL, 0u, 0);
 
-	kbase_tlstream_jd_gpu_soft_reset(kbdev);
+	KBASE_TLSTREAM_JD_GPU_SOFT_RESET(kbdev);
 
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_COMMAND),
 						GPU_COMMAND_SOFT_RESET, NULL);
@@ -1327,7 +1428,7 @@ static int kbase_pm_reset_do_normal(struct kbase_device *kbdev)
 static int kbase_pm_reset_do_protected(struct kbase_device *kbdev)
 {
 	KBASE_TRACE_ADD(kbdev, CORE_GPU_SOFT_RESET, NULL, NULL, 0u, 0);
-	kbase_tlstream_jd_gpu_soft_reset(kbdev);
+	KBASE_TLSTREAM_JD_GPU_SOFT_RESET(kbdev);
 
 	return kbdev->protected_ops->protected_mode_reset(kbdev);
 }

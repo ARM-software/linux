@@ -290,7 +290,18 @@ static int kbase_jd_pre_external_resources(struct kbase_jd_atom *katom, const st
 	struct kbase_dma_fence_resv_info info = {
 		.dma_fence_resv_count = 0,
 	};
-#endif
+#ifdef CONFIG_SYNC
+	/*
+	 * When both dma-buf fence and Android native sync is enabled, we
+	 * disable dma-buf fence for contexts that are using Android native
+	 * fences.
+	 */
+	const bool implicit_sync = !kbase_ctx_flag(katom->kctx,
+						   KCTX_NO_IMPLICIT_SYNC);
+#else /* CONFIG_SYNC */
+	const bool implicit_sync = true;
+#endif /* CONFIG_SYNC */
+#endif /* CONFIG_MALI_DMA_FENCE */
 	struct base_external_resource *input_extres;
 
 	KBASE_DEBUG_ASSERT(katom);
@@ -342,20 +353,22 @@ static int kbase_jd_pre_external_resources(struct kbase_jd_atom *katom, const st
 #endif				/* CONFIG_KDS */
 
 #ifdef CONFIG_MALI_DMA_FENCE
-	info.resv_objs = kmalloc_array(katom->nr_extres,
-				       sizeof(struct reservation_object *),
-				       GFP_KERNEL);
-	if (!info.resv_objs) {
-		err_ret_val = -ENOMEM;
-		goto early_err_out;
-	}
+	if (implicit_sync) {
+		info.resv_objs = kmalloc_array(katom->nr_extres,
+					sizeof(struct reservation_object *),
+					GFP_KERNEL);
+		if (!info.resv_objs) {
+			err_ret_val = -ENOMEM;
+			goto early_err_out;
+		}
 
-	info.dma_fence_excl_bitmap = kcalloc(BITS_TO_LONGS(katom->nr_extres),
-					     sizeof(unsigned long),
-					     GFP_KERNEL);
-	if (!info.dma_fence_excl_bitmap) {
-		err_ret_val = -ENOMEM;
-		goto early_err_out;
+		info.dma_fence_excl_bitmap =
+				kcalloc(BITS_TO_LONGS(katom->nr_extres),
+					sizeof(unsigned long), GFP_KERNEL);
+		if (!info.dma_fence_excl_bitmap) {
+			err_ret_val = -ENOMEM;
+			goto early_err_out;
+		}
 	}
 #endif /* CONFIG_MALI_DMA_FENCE */
 
@@ -400,7 +413,8 @@ static int kbase_jd_pre_external_resources(struct kbase_jd_atom *katom, const st
 		}
 
 #ifdef CONFIG_MALI_DMA_FENCE
-		if (reg->gpu_alloc->type == KBASE_MEM_TYPE_IMPORTED_UMM) {
+		if (implicit_sync &&
+		    reg->gpu_alloc->type == KBASE_MEM_TYPE_IMPORTED_UMM) {
 			struct reservation_object *resv;
 
 			resv = reg->gpu_alloc->imported.umm.dma_buf->resv;
@@ -451,16 +465,18 @@ static int kbase_jd_pre_external_resources(struct kbase_jd_atom *katom, const st
 #endif				/* CONFIG_KDS */
 
 #ifdef CONFIG_MALI_DMA_FENCE
-	if (info.dma_fence_resv_count) {
-		int ret;
+	if (implicit_sync) {
+		if (info.dma_fence_resv_count) {
+			int ret;
 
-		ret = kbase_dma_fence_wait(katom, &info);
-		if (ret < 0)
-			goto failed_dma_fence_setup;
+			ret = kbase_dma_fence_wait(katom, &info);
+			if (ret < 0)
+				goto failed_dma_fence_setup;
+		}
+
+		kfree(info.resv_objs);
+		kfree(info.dma_fence_excl_bitmap);
 	}
-
-	kfree(info.resv_objs);
-	kfree(info.dma_fence_excl_bitmap);
 #endif /* CONFIG_MALI_DMA_FENCE */
 
 	/* all done OK */
@@ -515,8 +531,10 @@ failed_kds_setup:
 	kfree(kds_access_bitmap);
 #endif				/* CONFIG_KDS */
 #ifdef CONFIG_MALI_DMA_FENCE
-	kfree(info.resv_objs);
-	kfree(info.dma_fence_excl_bitmap);
+	if (implicit_sync) {
+		kfree(info.resv_objs);
+		kfree(info.dma_fence_excl_bitmap);
+	}
 #endif
 	return err_ret_val;
 }
@@ -993,8 +1011,6 @@ bool jd_submit_atom(struct kbase_context *kctx, const struct base_jd_atom_v2 *us
 	atomic_set(&katom->dma_fence.dep_count, -1);
 #endif
 
-	kbase_tlstream_tl_attrib_atom_state(katom, TL_ATOM_STATE_IDLE);
-
 	/* Don't do anything if there is a mess up with dependencies.
 	   This is done in a separate cycle to check both the dependencies at ones, otherwise
 	   it will be extra complexity to deal with 1st dependency ( just added to the list )
@@ -1013,11 +1029,13 @@ bool jd_submit_atom(struct kbase_context *kctx, const struct base_jd_atom_v2 *us
 				/* Wrong dependency setup. Atom will be sent
 				 * back to user space. Do not record any
 				 * dependencies. */
-				kbase_tlstream_tl_new_atom(
+				KBASE_TLSTREAM_TL_NEW_ATOM(
 						katom,
 						kbase_jd_atom_id(kctx, katom));
-				kbase_tlstream_tl_ret_atom_ctx(
+				KBASE_TLSTREAM_TL_RET_ATOM_CTX(
 						katom, kctx);
+				KBASE_TLSTREAM_TL_ATTRIB_ATOM_STATE(katom,
+						TL_ATOM_STATE_IDLE);
 
 				ret = jd_done_nolock(katom, NULL);
 				goto out;
@@ -1058,10 +1076,12 @@ bool jd_submit_atom(struct kbase_context *kctx, const struct base_jd_atom_v2 *us
 			/* This atom is going through soft replay or
 			 * will be sent back to user space. Do not record any
 			 * dependencies. */
-			kbase_tlstream_tl_new_atom(
+			KBASE_TLSTREAM_TL_NEW_ATOM(
 					katom,
 					kbase_jd_atom_id(kctx, katom));
-			kbase_tlstream_tl_ret_atom_ctx(katom, kctx);
+			KBASE_TLSTREAM_TL_RET_ATOM_CTX(katom, kctx);
+			KBASE_TLSTREAM_TL_ATTRIB_ATOM_STATE(katom,
+					TL_ATOM_STATE_IDLE);
 
 			if ((katom->core_req & BASE_JD_REQ_SOFT_JOB_TYPE)
 					 == BASE_JD_REQ_SOFT_REPLAY) {
@@ -1106,15 +1126,16 @@ bool jd_submit_atom(struct kbase_context *kctx, const struct base_jd_atom_v2 *us
 	katom->sched_priority = sched_prio;
 
 	/* Create a new atom recording all dependencies it was set up with. */
-	kbase_tlstream_tl_new_atom(
+	KBASE_TLSTREAM_TL_NEW_ATOM(
 			katom,
 			kbase_jd_atom_id(kctx, katom));
-	kbase_tlstream_tl_attrib_atom_priority(katom, katom->sched_priority);
-	kbase_tlstream_tl_ret_atom_ctx(katom, kctx);
+	KBASE_TLSTREAM_TL_ATTRIB_ATOM_STATE(katom, TL_ATOM_STATE_IDLE);
+	KBASE_TLSTREAM_TL_ATTRIB_ATOM_PRIORITY(katom, katom->sched_priority);
+	KBASE_TLSTREAM_TL_RET_ATOM_CTX(katom, kctx);
 	for (i = 0; i < 2; i++)
 		if (BASE_JD_DEP_TYPE_INVALID != kbase_jd_katom_dep_type(
 					&katom->dep[i])) {
-			kbase_tlstream_tl_dep_atom_atom(
+			KBASE_TLSTREAM_TL_DEP_ATOM_ATOM(
 					(void *)kbase_jd_katom_dep_atom(
 						&katom->dep[i]),
 					(void *)katom);
@@ -1126,7 +1147,7 @@ bool jd_submit_atom(struct kbase_context *kctx, const struct base_jd_atom_v2 *us
 			struct kbase_jd_atom *dep_atom =
 				&jctx->atoms[dep_atom_number];
 
-			kbase_tlstream_tl_rdep_atom_atom(
+			KBASE_TLSTREAM_TL_RDEP_ATOM_ATOM(
 					(void *)dep_atom,
 					(void *)katom);
 		}
@@ -1459,7 +1480,7 @@ void kbase_jd_done_worker(struct work_struct *data)
 	 * Begin transaction on JD context and JS context
 	 */
 	mutex_lock(&jctx->lock);
-	kbase_tlstream_tl_attrib_atom_state(katom, TL_ATOM_STATE_DONE);
+	KBASE_TLSTREAM_TL_ATTRIB_ATOM_STATE(katom, TL_ATOM_STATE_DONE);
 	mutex_lock(&js_devdata->queue_mutex);
 	mutex_lock(&js_kctx_info->ctx.jsctx_mutex);
 
@@ -1714,14 +1735,11 @@ KBASE_EXPORT_TEST_API(kbase_jd_done);
 void kbase_jd_cancel(struct kbase_device *kbdev, struct kbase_jd_atom *katom)
 {
 	struct kbase_context *kctx;
-	struct kbasep_js_kctx_info *js_kctx_info;
 
 	KBASE_DEBUG_ASSERT(NULL != kbdev);
 	KBASE_DEBUG_ASSERT(NULL != katom);
 	kctx = katom->kctx;
 	KBASE_DEBUG_ASSERT(NULL != kctx);
-
-	js_kctx_info = &kctx->jctx.sched_info;
 
 	KBASE_TRACE_ADD(kbdev, JD_CANCEL, kctx, katom, katom->jc, 0);
 

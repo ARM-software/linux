@@ -332,7 +332,7 @@ void page_fault_worker(struct work_struct *data)
 #if defined(CONFIG_MALI_GATOR_SUPPORT)
 		kbase_trace_mali_page_fault_insert_pages(as_no, new_pages);
 #endif
-		kbase_tlstream_aux_pagefault(kctx->id, (u64)new_pages);
+		KBASE_TLSTREAM_AUX_PAGEFAULT(kctx->id, (u64)new_pages);
 
 		/* AS transaction begin */
 		mutex_lock(&kbdev->mmu_hw_mutex);
@@ -398,7 +398,7 @@ phys_addr_t kbase_mmu_alloc_pgd(struct kbase_context *kctx)
 	if (!p)
 		goto sub_pages;
 
-	kbase_tlstream_aux_pagesalloc(
+	KBASE_TLSTREAM_AUX_PAGESALLOC(
 			(u32)kctx->id,
 			(u64)new_page_count);
 
@@ -510,6 +510,7 @@ static phys_addr_t mmu_insert_pages_recover_get_next_pgd(struct kbase_context *k
 	KBASE_DEBUG_ASSERT(NULL != kctx);
 
 	lockdep_assert_held(&kctx->mmu_lock);
+	lockdep_assert_held(&kctx->reg_lock);
 
 	/*
 	 * Architecture spec defines level-0 as being the top-most.
@@ -560,6 +561,7 @@ static void mmu_insert_pages_failure_recovery(struct kbase_context *kctx, u64 vp
 	KBASE_DEBUG_ASSERT(vpfn <= (U64_MAX / PAGE_SIZE));
 
 	lockdep_assert_held(&kctx->mmu_lock);
+	lockdep_assert_held(&kctx->reg_lock);
 
 	mmu_mode = kctx->kbdev->mmu_mode;
 
@@ -1194,6 +1196,8 @@ static void mmu_check_unused(struct kbase_context *kctx, phys_addr_t pgd)
 	u64 *page;
 	int i;
 
+	lockdep_assert_held(&kctx->reg_lock);
+
 	page = kmap_atomic(pfn_to_page(PFN_DOWN(pgd)));
 	/* kmap_atomic should NEVER fail. */
 	KBASE_DEBUG_ASSERT(NULL != page);
@@ -1214,6 +1218,7 @@ static void mmu_teardown_level(struct kbase_context *kctx, phys_addr_t pgd, int 
 
 	KBASE_DEBUG_ASSERT(NULL != kctx);
 	lockdep_assert_held(&kctx->mmu_lock);
+	lockdep_assert_held(&kctx->reg_lock);
 
 	pgd_page = kmap_atomic(pfn_to_page(PFN_DOWN(pgd)));
 	/* kmap_atomic should NEVER fail. */
@@ -1295,7 +1300,7 @@ void kbase_mmu_free_pgd(struct kbase_context *kctx)
 	new_page_count = kbase_atomic_sub_pages(1, &kctx->used_pages);
 	kbase_atomic_sub_pages(1, &kctx->kbdev->memdev.used_pages);
 
-	kbase_tlstream_aux_pagesalloc(
+	KBASE_TLSTREAM_AUX_PAGESALLOC(
 			(u32)kctx->id,
 			(u64)new_page_count);
 }

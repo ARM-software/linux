@@ -106,7 +106,7 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 	kbdev->current_voltage = voltage;
 	kbdev->current_freq = freq;
 
-	kbase_tlstream_aux_devfreq_target((u64)freq);
+	KBASE_TLSTREAM_AUX_DEVFREQ_TARGET((u64)freq);
 
 	kbase_pm_reset_dvfs_utilisation(kbdev);
 

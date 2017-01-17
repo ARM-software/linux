@@ -15,7 +15,7 @@
 
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= "r14p0-01rel0"
+MALI_RELEASE_NAME ?= "r15p0-00rel0"
 
 # Paths required for build
 KBASE_PATH = $(src)
@@ -124,9 +124,6 @@ ifeq ($(MALI_CUSTOMER_RELEASE),0)
 	SRC += mali_kbase_regs_dump_debugfs.c
 endif
 
-
-# Job Scheduler Policy: Completely Fair Scheduler
-SRC += mali_kbase_js_policy_cfs.c
 
 ccflags-y += -I$(KBASE_PATH)
 

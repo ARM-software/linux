@@ -98,8 +98,7 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 		cfg |= JS_CONFIG_END_FLUSH_CLEAN_INVALIDATE;
 #endif /* CONFIG_MALI_COH_GPU */
 
-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10649) ||
-		!kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_T76X_3982))
+	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10649))
 		cfg |= JS_CONFIG_START_MMU;
 
 	cfg |= JS_CONFIG_THREAD_PRI(8);
@@ -146,14 +145,14 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 				GATOR_MAKE_EVENT(GATOR_JOB_SLOT_START, js),
 				kctx, kbase_jd_atom_id(kctx, katom));
 #endif
-	kbase_tlstream_tl_attrib_atom_config(katom, jc_head,
+	KBASE_TLSTREAM_TL_ATTRIB_ATOM_CONFIG(katom, jc_head,
 			katom->affinity, cfg);
-	kbase_tlstream_tl_ret_ctx_lpu(
+	KBASE_TLSTREAM_TL_RET_CTX_LPU(
 		kctx,
 		&kbdev->gpu_props.props.raw_props.js_features[
 			katom->slot_nr]);
-	kbase_tlstream_tl_ret_atom_as(katom, &kbdev->as[kctx->as_nr]);
-	kbase_tlstream_tl_ret_atom_lpu(
+	KBASE_TLSTREAM_TL_RET_ATOM_AS(katom, &kbdev->as[kctx->as_nr]);
+	KBASE_TLSTREAM_TL_RET_ATOM_LPU(
 			katom,
 			&kbdev->gpu_props.props.raw_props.js_features[js],
 			"ctx_nr,atom_nr");
@@ -163,7 +162,8 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 		char js_string[16];
 
 		trace_gpu_sched_switch(
-				kbasep_make_job_slot_string(js, js_string),
+				kbasep_make_job_slot_string(js, js_string,
+						sizeof(js_string)),
 				ktime_to_ns(katom->start_timestamp),
 				(u32)katom->kctx->id, 0, katom->work_id);
 		kbdev->hwaccess.backend.slot_rb[js].last_context = katom->kctx;
@@ -236,7 +236,7 @@ static void kbasep_trace_tl_nret_atom_lpu(struct kbase_device *kbdev, int js)
 	     i++) {
 		struct kbase_jd_atom *katom = kbase_gpu_inspect(kbdev, js, i);
 
-		kbase_tlstream_tl_nret_atom_lpu(katom,
+		KBASE_TLSTREAM_TL_NRET_ATOM_LPU(katom,
 			&kbdev->gpu_props.props.raw_props.js_features[js]);
 	}
 }
@@ -253,7 +253,7 @@ static void kbasep_trace_tl_nret_atom_lpu(struct kbase_device *kbdev, int js)
 static void kbasep_trace_tl_event_lpu_softstop(struct kbase_device *kbdev,
 					int js)
 {
-	kbase_tlstream_tl_event_lpu_softstop(
+	KBASE_TLSTREAM_TL_EVENT_LPU_SOFTSTOP(
 		&kbdev->gpu_props.props.raw_props.js_features[js]);
 }
 
@@ -561,7 +561,7 @@ void kbasep_job_slot_soft_or_hard_stop_do_action(struct kbase_device *kbdev,
 		target_katom->atom_flags |= KBASE_KATOM_FLAG_BEEN_SOFT_STOPPPED;
 
 		/* Mark the point where we issue the soft-stop command */
-		kbase_tlstream_tl_event_atom_softstop_issue(target_katom);
+		KBASE_TLSTREAM_TL_EVENT_ATOM_SOFTSTOP_ISSUE(target_katom);
 
 		if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8316)) {
 			int i;
@@ -790,7 +790,7 @@ void kbase_job_slot_ctx_priority_check_locked(struct kbase_context *kctx,
 
 		if (katom->sched_priority > priority) {
 			if (!stop_sent)
-				kbase_tlstream_tl_attrib_atom_priority_change(
+				KBASE_TLSTREAM_TL_ATTRIB_ATOM_PRIORITY_CHANGE(
 						target_katom);
 
 			kbase_job_slot_softstop(kbdev, js, katom);

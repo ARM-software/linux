@@ -26,7 +26,6 @@
 #define _KBASE_JS_H_
 
 #include "mali_kbase_js_defs.h"
-#include "mali_kbase_js_policy.h"
 #include "mali_kbase_context.h"
 #include "mali_kbase_defs.h"
 #include "mali_kbase_debug.h"
@@ -47,8 +46,7 @@
  * @addtogroup kbase_js Job Scheduler Internal APIs
  * @{
  *
- * These APIs are Internal to KBase and are available for use by the
- * @ref kbase_js_policy "Job Scheduler Policy APIs"
+ * These APIs are Internal to KBase.
  */
 
 /**
@@ -182,9 +180,7 @@ bool kbasep_js_add_job(struct kbase_context *kctx, struct kbase_jd_atom *atom);
  * It is a programming error to call this when:
  * - \a atom is not a job belonging to kctx.
  * - \a atom has already been removed from the Job Scheduler.
- * - \a atom is still in the runpool:
- *  - it has not been removed with kbasep_js_policy_dequeue_job()
- *  - or, it has not been removed with kbasep_js_policy_dequeue_job_irq()
+ * - \a atom is still in the runpool
  *
  * Do not use this for removing jobs being killed by kbase_jd_cancel() - use
  * kbasep_js_remove_cancelled_job() instead.
@@ -208,8 +204,6 @@ void kbasep_js_remove_job(struct kbase_device *kbdev, struct kbase_context *kctx
  * - \a atom has already been removed from the Job Scheduler.
  * - \a atom is still in the runpool:
  *  - it is not being killed with kbasep_jd_cancel()
- *  - or, it has not been removed with kbasep_js_policy_dequeue_job()
- *  - or, it has not been removed with kbasep_js_policy_dequeue_job_irq()
  *
  * The following locking conditions are made on the caller:
  * - it must hold kbasep_js_kctx_info::ctx::jsctx_mutex.
@@ -464,9 +458,8 @@ void kbase_js_try_run_jobs(struct kbase_device *kbdev);
  *
  * The emptying mechanism may take some time to complete, since it can wait for
  * jobs to complete naturally instead of forcing them to end quickly. However,
- * this is bounded by the Job Scheduling Policy's Job Timeouts. Hence, this
- * function is guaranteed to complete in a finite time whenever the Job
- * Scheduling Policy implements Job Timeouts (such as those done by CFS).
+ * this is bounded by the Job Scheduler's Job Timeouts. Hence, this
+ * function is guaranteed to complete in a finite time.
  */
 void kbasep_js_suspend(struct kbase_device *kbdev);
 

@@ -212,6 +212,13 @@
 
 #define KBASEP_ATOM_ID_INVALID BASE_JD_ATOM_COUNT
 
+/* Serialize atoms within a slot (ie only one atom per job slot) */
+#define KBASE_SERIALIZE_INTRA_SLOT (1 << 0)
+/* Serialize atoms between slots (ie only one job slot running at any time) */
+#define KBASE_SERIALIZE_INTER_SLOT (1 << 1)
+/* Reset the GPU after each atom completion */
+#define KBASE_SERIALIZE_RESET (1 << 2)
+
 #ifdef CONFIG_DEBUG_FS
 struct base_job_fault_event {
 
@@ -353,7 +360,7 @@ enum kbase_atom_gpu_rb_state {
 	KBASE_ATOM_GPU_RB_SUBMITTED,
 	/* Atom must be returned to JS as soon as it reaches the head of the
 	 * ringbuffer due to a previous failure */
-	KBASE_ATOM_GPU_RB_RETURN_TO_JS
+	KBASE_ATOM_GPU_RB_RETURN_TO_JS = -1
 };
 
 enum kbase_atom_enter_protected_state {
@@ -496,7 +503,7 @@ struct kbase_jd_atom {
 	 * NOTE: see if this can be unified into the another member e.g. the event */
 	int retry_submit_on_slot;
 
-	union kbasep_js_policy_job_info sched_info;
+	u32 ticks;
 	/* JS atom priority with respect to other atoms on its kctx. */
 	int sched_priority;
 
@@ -604,8 +611,7 @@ struct kbase_jd_context {
 	 * This waitq can be waited upon to find out when the context jobs are all
 	 * done/cancelled (including those that might've been blocked on
 	 * dependencies) - and so, whether it can be terminated. However, it should
-	 * only be terminated once it is neither present in the policy-queue (see
-	 * kbasep_js_policy_try_evict_ctx() ) nor the run-pool (see
+	 * only be terminated once it is not present in the run-pool (see
 	 * kbasep_js_kctx_info::ctx::is_scheduled).
 	 *
 	 * Since the waitq is only set under kbase_jd_context::lock,
@@ -1038,6 +1044,7 @@ struct kbase_device {
 	u64 shader_available_bitmap;
 	u64 tiler_available_bitmap;
 	u64 l2_available_bitmap;
+	u64 stack_available_bitmap;
 
 	u64 shader_ready_bitmap;
 	u64 shader_transitioning_bitmap;
@@ -1232,6 +1239,9 @@ struct kbase_device {
 
 	/* Protects access to MMU operations */
 	struct mutex mmu_hw_mutex;
+
+	/* Current serialization mode. See KBASE_SERIALIZE_* for details */
+	u8 serialize_jobs;
 };
 
 /**
@@ -1284,6 +1294,10 @@ struct jsctx_queue {
  *
  * @KCTX_DYING: Set when the context process is in the process of being evicted.
  *
+ * @KCTX_NO_IMPLICIT_SYNC: Set when explicit Android fences are in use on this
+ * context, to disable use of implicit dma-buf fences. This is used to avoid
+ * potential synchronization deadlocks.
+ *
  * All members need to be separate bits. This enum is intended for use in a
  * bitmask where multiple values get OR-ed together.
  */
@@ -1298,6 +1312,7 @@ enum kbase_context_flags {
 	KCTX_PRIVILEGED = 1U << 7,
 	KCTX_SCHEDULED = 1U << 8,
 	KCTX_DYING = 1U << 9,
+	KCTX_NO_IMPLICIT_SYNC = 1U << 10,
 };
 
 struct kbase_context {
@@ -1342,7 +1357,6 @@ struct kbase_context {
 
 	struct shrinker         reclaim;
 	struct list_head        evict_list;
-	struct mutex            evict_lock;
 
 	struct list_head waiting_soft_jobs;
 	spinlock_t waiting_soft_jobs_lock;
@@ -1408,6 +1422,15 @@ struct kbase_context {
 	atomic_t atoms_pulled;
 	/* Number of atoms currently pulled from this context, per slot */
 	atomic_t atoms_pulled_slot[BASE_JM_MAX_NR_SLOTS];
+	/* Number of atoms currently pulled from this context, per slot and
+	 * priority. Hold hwaccess_lock when accessing */
+	int atoms_pulled_slot_pri[BASE_JM_MAX_NR_SLOTS][
+			KBASE_JS_ATOM_SCHED_PRIO_COUNT];
+
+	/* true if slot is blocked on the given priority. This will be set on a
+	 * soft-stop */
+	bool blocked_js[BASE_JM_MAX_NR_SLOTS][KBASE_JS_ATOM_SCHED_PRIO_COUNT];
+
 	/* Bitmask of slots that can be pulled from */
 	u32 slots_pullable;
 
@@ -1434,7 +1457,7 @@ struct kbase_context {
 	struct list_head jit_active_head;
 	struct list_head jit_pool_head;
 	struct list_head jit_destroy_head;
-	struct mutex jit_lock;
+	struct mutex jit_evict_lock;
 	struct work_struct jit_work;
 
 	/* External sticky resource management */

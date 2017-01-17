@@ -39,44 +39,6 @@
 #define DEFAULT_IRQ_THROTTLE_TIME_US 20
 
 /**
- *  Default Job Scheduler initial runtime of a context for the CFS Policy,
- *  in time-slices.
- *
- * This value is relative to that of the least-run context, and defines
- * where in the CFS queue a new context is added. A value of 1 means 'after
- * the least-run context has used its timeslice'. Therefore, when all
- * contexts consistently use the same amount of time, a value of 1 models a
- * FIFO. A value of 0 would model a LIFO.
- *
- * The value is represented in "numbers of time slices". Multiply this
- * value by that defined in @ref DEFAULT_JS_CTX_TIMESLICE_NS to get
- * the time value for this in nanoseconds.
- */
-#define DEFAULT_JS_CFS_CTX_RUNTIME_INIT_SLICES 1
-
-/**
- * Default Job Scheduler minimum runtime value of a context for CFS, in
- * time_slices relative to that of the least-run context.
- *
- * This is a measure of how much preferrential treatment is given to a
- * context that is not run very often.
- *
- * Specficially, this value defines how many timeslices such a context is
- * (initially) allowed to use at once. Such contexts (e.g. 'interactive'
- * processes) will appear near the front of the CFS queue, and can initially
- * use more time than contexts that run continuously (e.g. 'batch'
- * processes).
- *
- * This limit \b prevents a "stored-up timeslices" DoS attack, where a ctx
- * not run for a long time attacks the system by using a very large initial
- * number of timeslices when it finally does run.
- *
- * @note A value of zero allows not-run-often contexts to get scheduled in
- * quickly, but to only use a single timeslice when they get scheduled in.
- */
-#define DEFAULT_JS_CFS_CTX_RUNTIME_MIN_SLICES 2
-
-/**
 * Boolean indicating whether the driver is configured to be secure at
 * a potential loss of performance.
 *
@@ -200,13 +162,13 @@ enum {
 /*
  * Default minimum number of scheduling ticks before jobs are hard-stopped
  */
-#define DEFAULT_JS_HARD_STOP_TICKS_SS    (100) /* 10s */
+#define DEFAULT_JS_HARD_STOP_TICKS_SS    (50) /* 5s */
 #define DEFAULT_JS_HARD_STOP_TICKS_SS_8408  (300) /* 30s */
 
 /*
  * Default minimum number of scheduling ticks before CL jobs are hard-stopped.
  */
-#define DEFAULT_JS_HARD_STOP_TICKS_CL    (100) /* 10s */
+#define DEFAULT_JS_HARD_STOP_TICKS_CL    (50) /* 5s */
 
 /*
  * Default minimum number of scheduling ticks before jobs are hard-stopped
@@ -224,14 +186,14 @@ enum {
  * Default minimum number of scheduling ticks before the GPU is reset to clear a
  * "stuck" job
  */
-#define DEFAULT_JS_RESET_TICKS_SS           (105) /* 10.5s */
+#define DEFAULT_JS_RESET_TICKS_SS           (55) /* 5.5s */
 #define DEFAULT_JS_RESET_TICKS_SS_8408     (450) /* 45s */
 
 /*
  * Default minimum number of scheduling ticks before the GPU is reset to clear a
  * "stuck" CL job.
  */
-#define DEFAULT_JS_RESET_TICKS_CL        (105) /* 10.5s */
+#define DEFAULT_JS_RESET_TICKS_CL        (55) /* 5.5s */
 
 /*
  * Default minimum number of scheduling ticks before the GPU is reset to clear a

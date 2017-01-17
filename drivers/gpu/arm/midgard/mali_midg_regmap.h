@@ -123,6 +123,9 @@
 #define L2_PRESENT_LO           0x120	/* (RO) Level 2 cache present bitmap, low word */
 #define L2_PRESENT_HI           0x124	/* (RO) Level 2 cache present bitmap, high word */
 
+#define STACK_PRESENT_LO        0xE00   /* (RO) Core stack present bitmap, low word */
+#define STACK_PRESENT_HI        0xE04   /* (RO) Core stack present bitmap, high word */
+
 
 #define SHADER_READY_LO         0x140	/* (RO) Shader core ready bitmap, low word */
 #define SHADER_READY_HI         0x144	/* (RO) Shader core ready bitmap, high word */
@@ -132,6 +135,9 @@
 
 #define L2_READY_LO             0x160	/* (RO) Level 2 cache ready bitmap, low word */
 #define L2_READY_HI             0x164	/* (RO) Level 2 cache ready bitmap, high word */
+
+#define STACK_READY_LO          0xE10   /* (RO) Core stack ready bitmap, low word */
+#define STACK_READY_HI          0xE14   /* (RO) Core stack ready bitmap, high word */
 
 
 #define SHADER_PWRON_LO         0x180	/* (WO) Shader core power on bitmap, low word */
@@ -143,6 +149,10 @@
 #define L2_PWRON_LO             0x1A0	/* (WO) Level 2 cache power on bitmap, low word */
 #define L2_PWRON_HI             0x1A4	/* (WO) Level 2 cache power on bitmap, high word */
 
+#define STACK_PWRON_LO          0xE20   /* (RO) Core stack power on bitmap, low word */
+#define STACK_PWRON_HI          0xE24   /* (RO) Core stack power on bitmap, high word */
+
+
 #define SHADER_PWROFF_LO        0x1C0	/* (WO) Shader core power off bitmap, low word */
 #define SHADER_PWROFF_HI        0x1C4	/* (WO) Shader core power off bitmap, high word */
 
@@ -152,6 +162,10 @@
 #define L2_PWROFF_LO            0x1E0	/* (WO) Level 2 cache power off bitmap, low word */
 #define L2_PWROFF_HI            0x1E4	/* (WO) Level 2 cache power off bitmap, high word */
 
+#define STACK_PWROFF_LO         0xE30   /* (RO) Core stack power off bitmap, low word */
+#define STACK_PRWOFF_HI         0xE34   /* (RO) Core stack power off bitmap, high word */
+
+
 #define SHADER_PWRTRANS_LO      0x200	/* (RO) Shader core power transition bitmap, low word */
 #define SHADER_PWRTRANS_HI      0x204	/* (RO) Shader core power transition bitmap, high word */
 
@@ -160,6 +174,10 @@
 
 #define L2_PWRTRANS_LO          0x220	/* (RO) Level 2 cache power transition bitmap, low word */
 #define L2_PWRTRANS_HI          0x224	/* (RO) Level 2 cache power transition bitmap, high word */
+
+#define STACK_PWRTRANS_LO       0xE40   /* (RO) Core stack power transition bitmap, low word */
+#define STACK_PRWTRANS_HI       0xE44   /* (RO) Core stack power transition bitmap, high word */
+
 
 #define SHADER_PWRACTIVE_LO     0x240	/* (RO) Shader core active bitmap, low word */
 #define SHADER_PWRACTIVE_HI     0x244	/* (RO) Shader core active bitmap, high word */

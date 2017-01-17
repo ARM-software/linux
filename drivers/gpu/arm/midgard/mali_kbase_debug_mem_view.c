@@ -90,8 +90,10 @@ static void *debug_mem_next(struct seq_file *m, void *v, loff_t *pos)
 		return data;
 	}
 
-	if (list_is_last(data->lh, &mem_data->mapping_list))
+	if (list_is_last(data->lh, &mem_data->mapping_list)) {
+		kfree(data);
 		return NULL;
+	}
 
 	data->lh = data->lh->next;
 	data->offset = 0;

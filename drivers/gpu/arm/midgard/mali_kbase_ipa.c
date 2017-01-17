@@ -20,6 +20,7 @@
 #include <mali_kbase.h>
 
 #define NR_IPA_GROUPS 8
+#define MAX_GROUP_NAME_LEN 15
 
 struct kbase_ipa_context;
 
@@ -30,7 +31,7 @@ struct kbase_ipa_context;
  * @calc_power:         function to calculate power for IPA group
  */
 struct ipa_group {
-	const char *name;
+	const char name[MAX_GROUP_NAME_LEN + 1];
 	u32 capacitance;
 	u32 (*calc_power)(struct kbase_ipa_context *,
 			struct ipa_group *);
@@ -65,7 +66,8 @@ static ssize_t show_ipa_group(struct device *dev,
 
 	mutex_lock(&ctx->ipa_lock);
 	for (i = 0; i < ARRAY_SIZE(ctx->groups); i++) {
-		if (!strcmp(ctx->groups[i].name, attr->attr.name)) {
+		if (!strncmp(ctx->groups[i].name, attr->attr.name,
+				MAX_GROUP_NAME_LEN + 1)) {
 			count = snprintf(buf, PAGE_SIZE, "%lu\n",
 				(unsigned long)ctx->groups[i].capacitance);
 			break;
@@ -94,7 +96,8 @@ static ssize_t set_ipa_group(struct device *dev,
 
 	mutex_lock(&ctx->ipa_lock);
 	for (i = 0; i < ARRAY_SIZE(ctx->groups); i++) {
-		if (!strcmp(ctx->groups[i].name, attr->attr.name)) {
+		if (!strncmp(ctx->groups[i].name, attr->attr.name,
+				MAX_GROUP_NAME_LEN + 1)) {
 			ctx->groups[i].capacitance = capacitance;
 			mutex_unlock(&ctx->ipa_lock);
 			return count;
@@ -177,7 +180,8 @@ static int update_ipa_groups_from_dt(struct kbase_ipa_context *ctx)
 
 		for (i = 0; i < ARRAY_SIZE(ctx->groups); i++) {
 			group = &ctx->groups[i];
-			if (!strcmp(group->name, name)) {
+			if (!strncmp(group->name, name,
+					MAX_GROUP_NAME_LEN + 1)) {
 				group->capacitance = capacitance;
 				break;
 			}

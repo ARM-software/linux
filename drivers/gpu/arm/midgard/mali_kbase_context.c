@@ -113,7 +113,10 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 				MIDGARD_MMU_BOTTOMLEVEL);
 		if (err)
 			goto pgd_no_mem;
+
+		mutex_lock(&kctx->mmu_lock);
 		kctx->pgd = kbase_mmu_alloc_pgd(kctx);
+		mutex_unlock(&kctx->mmu_lock);
 	} while (!kctx->pgd);
 
 	kctx->aliasing_sink_page = kbase_mem_alloc_page(kctx->kbdev);

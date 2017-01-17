@@ -928,7 +928,7 @@ static inline void base_jd_atom_dep_copy(struct base_dependency *dep,
  * be set to trigger when a GPU job has finished.
  *
  * The base fence object must not be terminated until the atom
- * has been submitted to @a base_jd_submit_bag and @a base_jd_submit_bag has returned.
+ * has been submitted to @a base_jd_submit and @a base_jd_submit has returned.
  *
  * @a fence must be a valid fence set up with @a base_fence_init.
  * Calling this function with a uninitialized fence results in undefined behavior.
@@ -957,7 +957,7 @@ static inline void base_jd_fence_trigger_setup_v2(struct base_jd_atom_v2 *atom, 
  * be set to block a GPU job until it has been triggered.
  *
  * The base fence object must not be terminated until the atom
- * has been submitted to @a base_jd_submit_bag and @a base_jd_submit_bag has returned.
+ * has been submitted to @a base_jd_submit and @a base_jd_submit has returned.
  *
  * @a fence must be a valid fence set up with @a base_fence_init or @a base_fence_import.
  * Calling this function with a uninitialized fence results in undefined behavior.
@@ -1589,7 +1589,7 @@ struct gpu_raw_gpu_props {
 	u64 shader_present;
 	u64 tiler_present;
 	u64 l2_present;
-	u64 unused_1; /* keep for backward compatibility */
+	u64 stack_present;
 
 	u32 l2_features;
 	u32 suspend_size; /* API 8.2+ */
