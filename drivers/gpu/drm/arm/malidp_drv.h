@@ -25,9 +25,17 @@ struct malidp_drm {
 	wait_queue_head_t wq;
 	atomic_t config_valid;
 	struct drm_atomic_state *pm_state;
+	struct drm_property *prop_yuv2rgb;
 };
 
 #define crtc_to_malidp_device(x) container_of(x, struct malidp_drm, crtc)
+
+enum malidp_de_yuv2rgb_ctm {
+	MALIDP_YUV2RGB_BT601_NARROW,
+	MALIDP_YUV2RGB_BT601_WIDE,
+	MALIDP_YUV2RGB_BT709_NARROW,
+	MALIDP_YUV2RGB_BT709_WIDE,
+};
 
 struct malidp_plane {
 	struct drm_plane base;
@@ -37,7 +45,7 @@ struct malidp_plane {
 
 struct malidp_plane_state {
 	struct drm_plane_state base;
-
+	enum malidp_de_yuv2rgb_ctm yuv2rgb_coeffs;
 	/* size of the required rotation memory if plane is rotated */
 	u32 rotmem_size;
 	/* internal format ID */

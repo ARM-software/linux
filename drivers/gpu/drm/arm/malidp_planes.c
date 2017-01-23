@@ -49,6 +49,44 @@
  */
 #define MALIDP_ALPHA_LUT 0xffaa5500
 
+static const struct drm_prop_enum_list malidp_de_yuv2rgb_enum_list[] = {
+	{ MALIDP_YUV2RGB_BT601_NARROW, "BT.601 narrow" },
+	{ MALIDP_YUV2RGB_BT601_WIDE,   "BT.601 wide" },
+	{ MALIDP_YUV2RGB_BT709_NARROW, "BT.709 narrow" },
+	{ MALIDP_YUV2RGB_BT709_WIDE,   "BT.709 wide" },
+};
+
+static const enum malidp_de_yuv2rgb_ctm malidp_yuv2rgb_default_coeffs = MALIDP_YUV2RGB_BT601_NARROW;
+
+#define DE_N_YUV2RGB_COEFFS 12
+
+static const s32 malidp_de_yuv2rgb_coeffs[][DE_N_YUV2RGB_COEFFS] = {
+	[MALIDP_YUV2RGB_BT601_NARROW] = {
+		1192,    0, 1634,
+		1192, -401, -832,
+		1192, 2066,    0,
+		64,  512,  512
+	},
+	[MALIDP_YUV2RGB_BT601_WIDE] = {
+		1024,    0, 1436,
+		1024, -352, -731,
+		1024, 1815,    0,
+		0,  512,  512
+	},
+	[MALIDP_YUV2RGB_BT709_NARROW] = {
+		1192,    0, 1836,
+		1192, -218, -546,
+		1192, 2163,    0,
+		64,  512,  512
+	},
+	[MALIDP_YUV2RGB_BT709_WIDE] = {
+		1024,    0, 1613,
+		1024, -192, -479,
+		1024, 1900,    0,
+		0,  512,  512
+	}
+};
+
 static void malidp_de_plane_destroy(struct drm_plane *plane)
 {
 	struct malidp_plane *mp = to_malidp_plane(plane);
@@ -96,6 +134,7 @@ drm_plane_state *malidp_duplicate_plane_state(struct drm_plane *plane)
 
 	m_state = to_malidp_plane_state(plane->state);
 	__drm_atomic_helper_plane_duplicate_state(plane, &state->base);
+	state->yuv2rgb_coeffs = m_state->yuv2rgb_coeffs;
 	state->rotmem_size = m_state->rotmem_size;
 	state->format = m_state->format;
 	state->n_planes = m_state->n_planes;
@@ -112,11 +151,46 @@ static void malidp_destroy_plane_state(struct drm_plane *plane,
 	kfree(m_state);
 }
 
+static int malidp_plane_atomic_set_property(struct drm_plane *plane,
+					    struct drm_plane_state *state,
+					    struct drm_property *property,
+					    uint64_t val)
+{
+	struct malidp_drm *drm = plane->dev->dev_private;
+	struct malidp_plane_state *ms = to_malidp_plane_state(state);
+
+	if (drm->prop_yuv2rgb != property)
+		return -EINVAL;
+
+	ms->yuv2rgb_coeffs = val;
+	return 0;
+}
+
+static int malidp_plane_atomic_get_property(struct drm_plane *plane,
+					    const struct drm_plane_state *state,
+					    struct drm_property *property,
+					    uint64_t *val)
+{
+	struct malidp_drm *drm = plane->dev->dev_private;
+	struct malidp_plane_state *ms = to_malidp_plane_state(state);
+
+	if (drm->prop_yuv2rgb != property)
+		return -EINVAL;
+
+	*val = ms->yuv2rgb_coeffs;
+	return 0;
+}
+
 static void malidp_plane_atomic_print_state(struct drm_printer *p,
 					    const struct drm_plane_state *state)
 {
 	struct malidp_plane_state *ms = to_malidp_plane_state(state);
+	struct malidp_plane *mp = to_malidp_plane(state->plane);
 
+	/* The yuv2rgb_coeffs only make sense for video layers. */
+	if (mp->layer->id & (DE_VIDEO1 | DE_VIDEO2))
+		drm_printf(p, "\tyuv2rgb_coeffs=%s\n",
+			   malidp_de_yuv2rgb_enum_list[ms->yuv2rgb_coeffs].name);
 	drm_printf(p, "\trotmem_size=%u\n", ms->rotmem_size);
 	drm_printf(p, "\tformat_id=%u\n", ms->format);
 	drm_printf(p, "\tn_planes=%u\n", ms->n_planes);
@@ -130,6 +204,8 @@ static const struct drm_plane_funcs malidp_de_plane_funcs = {
 	.reset = malidp_plane_reset,
 	.atomic_duplicate_state = malidp_duplicate_plane_state,
 	.atomic_destroy_state = malidp_destroy_plane_state,
+	.atomic_set_property = malidp_plane_atomic_set_property,
+	.atomic_get_property = malidp_plane_atomic_get_property,
 	.atomic_print_state = malidp_plane_atomic_print_state,
 };
 
@@ -214,6 +290,17 @@ static int malidp_de_plane_check(struct drm_plane *plane,
 	return 0;
 }
 
+static void malidp_lv_set_yuv2rgb_coeffs(struct malidp_hw_device *hwdev,
+					 const struct malidp_layer *layer,
+					 enum malidp_de_yuv2rgb_ctm ctm)
+{
+	unsigned int i;
+
+	for (i = 0; i < DE_N_YUV2RGB_COEFFS; ++i)
+		malidp_hw_write(hwdev, malidp_de_yuv2rgb_coeffs[ctm][i],
+				layer->base + layer->yuv2rgb_offset + i * 4);
+}
+
 static void malidp_de_set_plane_pitches(struct malidp_plane *mp,
 					int num_planes, unsigned int pitches[3])
 {
@@ -240,6 +327,7 @@ static void malidp_de_plane_update(struct drm_plane *plane,
 	struct malidp_plane *mp;
 	const struct malidp_hw_regmap *map;
 	struct malidp_plane_state *ms = to_malidp_plane_state(plane->state);
+	struct malidp_plane_state *old_ms = to_malidp_plane_state(old_state);
 	u16 ptr;
 	u32 src_w, src_h, dest_w, dest_h, val;
 	int i;
@@ -254,6 +342,9 @@ static void malidp_de_plane_update(struct drm_plane *plane,
 	dest_h = plane->state->crtc_h;
 
 	malidp_hw_write(mp->hwdev, ms->format, mp->layer->base);
+	if (ms->yuv2rgb_coeffs != old_ms->yuv2rgb_coeffs)
+		malidp_lv_set_yuv2rgb_coeffs(mp->hwdev, mp->layer,
+					     ms->yuv2rgb_coeffs);
 
 	for (i = 0; i < ms->n_planes; i++) {
 		/* calculate the offset for the layer's plane registers */
@@ -324,6 +415,21 @@ static const struct drm_plane_helper_funcs malidp_de_plane_helper_funcs = {
 	.atomic_disable = malidp_de_plane_disable,
 };
 
+static int malidp_create_yuv2rgb_property(struct drm_device *drm)
+{
+	struct malidp_drm *malidp = drm->dev_private;
+
+	malidp->prop_yuv2rgb =
+		drm_property_create_enum(drm,
+					 DRM_MODE_PROP_ATOMIC,
+					 "YUV2RGB",
+					 malidp_de_yuv2rgb_enum_list,
+					 ARRAY_SIZE(malidp_de_yuv2rgb_enum_list));
+	if (!malidp->prop_yuv2rgb)
+		return -EINVAL;
+	return 0;
+}
+
 int malidp_de_planes_init(struct drm_device *drm)
 {
 	struct malidp_drm *malidp = drm->dev_private;
@@ -335,6 +441,10 @@ int malidp_de_planes_init(struct drm_device *drm)
 			      DRM_ROTATE_270 | DRM_REFLECT_X | DRM_REFLECT_Y;
 	u32 *formats;
 	int ret, i, j, n;
+
+	ret = malidp_create_yuv2rgb_property(drm);
+	if (ret)
+		return ret;
 
 	formats = kcalloc(map->n_pixel_formats, sizeof(*formats), GFP_KERNEL);
 	if (!formats) {
@@ -384,6 +494,15 @@ int malidp_de_planes_init(struct drm_device *drm)
 		drm_plane_create_rotation_property(&plane->base, DRM_ROTATE_0, flags);
 		malidp_hw_write(malidp->dev, MALIDP_ALPHA_LUT,
 				plane->layer->base + MALIDP_LAYER_COMPOSE);
+
+		/* Attach the YUV->RGB property only to video layers. */
+		if (id & (DE_VIDEO1 | DE_VIDEO2)) {
+			drm_object_attach_property(&plane->base.base,
+						   malidp->prop_yuv2rgb,
+						   malidp_yuv2rgb_default_coeffs);
+			malidp_lv_set_yuv2rgb_coeffs(malidp->dev, plane->layer,
+						     malidp_yuv2rgb_default_coeffs);
+		}
 	}
 
 	kfree(formats);

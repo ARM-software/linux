@@ -123,7 +123,12 @@
 #define MALIDP500_CONFIG_3D		0x00038
 #define MALIDP500_BGND_COLOR		0x0003c
 #define MALIDP500_OUTPUT_DEPTH		0x00044
-#define MALIDP500_YUV_RGB_COEF		0x00048
+/*
+ * The YUV2RGB coefficients on the DP500 are not in the video layer's register
+ * block. They belong in a separate block above the layer's registers, hence
+ * the negative offset.
+ */
+#define MALIDP500_LV_YUV2RGB		((s16)(-0xB8))
 #define MALIDP500_COLOR_ADJ_COEF	0x00078
 #define MALIDP500_COEF_TABLE_ADDR	0x000a8
 #define MALIDP500_COEF_TABLE_DATA	0x000ac
@@ -160,6 +165,7 @@
 #define MALIDP550_TIMINGS_BASE		0x00030
 #define MALIDP550_HSYNCPOL		(1 << 12)
 #define MALIDP550_VSYNCPOL		(1 << 28)
+#define MALIDP550_LV_YUV2RGB		0x00084
 
 #define MALIDP550_DE_DISP_SIDEBAND	0x00040
 #define MALIDP550_DE_BGND_COLOR		0x00044
