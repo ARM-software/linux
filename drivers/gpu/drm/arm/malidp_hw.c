@@ -431,6 +431,15 @@ static void malidp500_disable_memwrite(struct malidp_hw_device *hwdev)
 	malidp_hw_clearbits(hwdev, MALIDP_SCALE_ENGINE_EN, base + MALIDP_DE_DISPLAY_FUNC);
 }
 
+static void malidp500_select_igamma_table(struct malidp_hw_device *hwdev, u32 table_num)
+{
+	u32 base = 19 + 3 * table_num;
+	WARN_ON(table_num >= MALIDP_NUM_IGAMMA_DP500);
+	malidp_hw_write(hwdev, GENMASK(base + 2, base),
+			hwdev->hw->map.coeffs_base +
+			MALIDP_COEF_TABLE_ADDR);
+}
+
 static int malidp550_query_hw(struct malidp_hw_device *hwdev)
 {
 	u32 conf = malidp_hw_read(hwdev, MALIDP550_CONFIG_ID);
@@ -701,6 +710,14 @@ static void malidp550_disable_memwrite(struct malidp_hw_device *hwdev)
 	malidp_hw_clearbits(hwdev, MALIDP_SCALE_ENGINE_EN, base + MALIDP_DE_DISPLAY_FUNC);
 }
 
+static void malidp550_select_igamma_table(struct malidp_hw_device *hwdev, u32 table_num)
+{
+	WARN_ON(table_num >= MALIDP_NUM_IGAMMA_DP550);
+	malidp_hw_write(hwdev, BIT(20 + table_num),
+			hwdev->hw->map.coeffs_base +
+			MALIDP_COEF_TABLE_ADDR);
+}
+
 static int malidp650_query_hw(struct malidp_hw_device *hwdev)
 {
 	u32 conf = malidp_hw_read(hwdev, MALIDP550_CONFIG_ID);
@@ -777,6 +794,7 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 		.se_calc_mclk = malidp500_se_calc_mclk,
 		.enable_memwrite = malidp500_enable_memwrite,
 		.disable_memwrite = malidp500_disable_memwrite,
+		.select_igamma_table = malidp500_select_igamma_table,
 		.features = MALIDP_DEVICE_LV_HAS_3_STRIDES,
 	},
 	[MALIDP_550] = {
@@ -823,7 +841,8 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 		.se_calc_mclk = malidp550_se_calc_mclk,
 		.enable_memwrite = malidp550_enable_memwrite,
 		.disable_memwrite = malidp550_disable_memwrite,
-		.features = 0,
+		.select_igamma_table = malidp550_select_igamma_table,
+		.features = MALIDP_DEVICE_HAS_3_IGAMMA,
 	},
 	[MALIDP_650] = {
 		.map = {
@@ -875,7 +894,8 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 		.se_calc_mclk = malidp550_se_calc_mclk,
 		.enable_memwrite = malidp550_enable_memwrite,
 		.disable_memwrite = malidp550_disable_memwrite,
-		.features = 0,
+		.select_igamma_table = malidp550_select_igamma_table,
+		.features = MALIDP_DEVICE_HAS_3_IGAMMA,
 	},
 };
 

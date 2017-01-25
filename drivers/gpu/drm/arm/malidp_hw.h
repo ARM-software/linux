@@ -122,6 +122,8 @@ struct malidp_hw_regmap {
 /* device features */
 /* Unlike DP550/650, DP500 has 3 stride registers in its video layer. */
 #define MALIDP_DEVICE_LV_HAS_3_STRIDES	BIT(0)
+/* DP500 only has 2 inverse gamma tables available. */
+#define MALIDP_DEVICE_HAS_3_IGAMMA	BIT(1)
 
 struct malidp_hw_device;
 
@@ -197,6 +199,15 @@ struct malidp_hw {
 	 * Disable the writing to memory of the next frame's content.
 	 */
 	void (*disable_memwrite)(struct malidp_hw_device *hwdev);
+
+	/**
+	 * Select igamma tables to be update by following writes into
+	 * MALIDP_COEF_TABLE_DATA.
+	 * @param hwdev - malidp_hw_device structure containing the HW description
+	 * @param table_num - number of the table to be updated: 0, 1, 2 for DP550/DP650
+	 * and 0,1 for DP500.
+	 */
+	void (*select_igamma_table)(struct malidp_hw_device *hwdev, u32 table_num);
 
 	u8 features;
 };
@@ -377,6 +388,10 @@ static inline void malidp_se_set_enh_coeffs(struct malidp_hw_device *hwdev)
 
 #define MALIDP_COLORADJ_NUM_COEFFS	12
 #define MALIDP_COEFFTAB_NUM_COEFFS	64
+
+#define MALIDP_NUM_IGAMMA_DP550 3
+#define MALIDP_NUM_IGAMMA_DP500 2
+#define MAX_IGAMMA_TABLES MALIDP_NUM_IGAMMA_DP550
 
 #define MALIDP_GAMMA_LUT_SIZE		4096
 

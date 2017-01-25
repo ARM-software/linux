@@ -166,6 +166,56 @@ static void malidp_atomic_commit_se_config(struct drm_crtc *crtc,
 	malidp_hw_write(hwdev, s->v_delta_phase, scr + MALIDP_SE_V_DELTA_PH);
 }
 
+static void
+malidp_atomic_commit_update_igamma_tables(struct drm_crtc *crtc,
+					  struct drm_crtc_state *old_state)
+{
+	struct malidp_crtc_state *cs = to_malidp_crtc_state(crtc->state);
+	struct malidp_crtc_state *old_cs = to_malidp_crtc_state(old_state);
+	struct malidp_drm *malidp = crtc_to_malidp_device(crtc);
+	struct malidp_hw_device *hwdev = malidp->dev;
+	struct malidp_hw *hw = hwdev->hw;
+	int i, j;
+
+	for (i = 0; i < ARRAY_SIZE(cs->igamma_coeffs); ++i) {
+		/*
+		 * We only need to write out a table if it has changed.
+		 * Disabling degamma per-plane does not modify igamma_ids;
+		 * igamma_ids only changes if userspace requests a new blob_id
+		 * for one of the planes' degamma.
+		 */
+		if (cs->igamma_ids[i] == old_cs->igamma_ids[i])
+			continue;
+
+		WARN_ON(!crtc->state->mode_changed);
+		hw->select_igamma_table(hwdev, i);
+		for (j = 0; j < MALIDP_COEFFTAB_NUM_COEFFS; ++j)
+			malidp_hw_write(hwdev, cs->igamma_coeffs[i][j],
+					hw->map.coeffs_base +
+					MALIDP_COEF_TABLE_DATA);
+	}
+}
+
+static void malidp_atomic_commit_update_plane_igamma(struct drm_crtc *crtc,
+						     struct drm_plane *plane)
+{
+	struct malidp_plane *mp = to_malidp_plane(plane);
+	struct malidp_plane_state *ms = to_malidp_plane_state(plane->state);
+	const struct malidp_layer *layer = mp->layer;
+	struct malidp_drm *malidp = crtc_to_malidp_device(crtc);
+	struct malidp_hw_device *hwdev = malidp->dev;
+	u32 ctrl;
+
+	ctrl = malidp_hw_read(hwdev, layer->base + MALIDP_LAYER_CONTROL);
+
+	ctrl &= ~MALIDP_LAYER_CONTROL_IGEN & ~MALIDP_LAYER_CONTROL_IGSEL_MASK;
+	if (ms->igamma_status != -1)
+		ctrl |= MALIDP_LAYER_CONTROL_IGEN |
+			MALIDP_LAYER_CONTROL_IGSEL(ms->igamma_status);
+
+	malidp_hw_write(hwdev, ctrl, layer->base + MALIDP_LAYER_CONTROL);
+}
+
 /*
  * set the "config valid" bit and wait until the hardware acts on it
  */
@@ -225,6 +275,7 @@ static void malidp_atomic_commit_tail(struct drm_atomic_state *state)
 	struct malidp_drm *malidp = drm->dev_private;
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *old_crtc_state;
+	struct drm_plane *plane;
 	int i;
 
 	pm_runtime_get_sync(drm->dev);
@@ -242,6 +293,11 @@ static void malidp_atomic_commit_tail(struct drm_atomic_state *state)
 		malidp_atomic_commit_update_gamma(crtc, old_crtc_state);
 		malidp_atomic_commit_update_coloradj(crtc, old_crtc_state);
 		malidp_atomic_commit_se_config(crtc, old_crtc_state);
+		malidp_atomic_commit_update_igamma_tables(crtc, old_crtc_state);
+
+		drm_atomic_crtc_for_each_plane(plane, crtc)
+				malidp_atomic_commit_update_plane_igamma(crtc,
+									 plane);
 	}
 
 	drm_atomic_helper_commit_planes(drm, state, DRM_PLANE_COMMIT_ACTIVE_ONLY);

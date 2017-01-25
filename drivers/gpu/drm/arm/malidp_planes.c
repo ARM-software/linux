@@ -24,7 +24,6 @@
 /* Layer specific register offsets */
 #define MALIDP_LAYER_FORMAT		0x000
 #define   LAYER_FORMAT_MASK		0x3f
-#define MALIDP_LAYER_CONTROL		0x004
 #define   LAYER_ENABLE			(1 << 0)
 #define   LAYER_FLOWCFG_MASK		7
 #define   LAYER_FLOWCFG(x)		(((x) & LAYER_FLOWCFG_MASK) << 1)
@@ -80,6 +79,7 @@ static void malidp_plane_reset(struct drm_plane *plane)
 	plane->state = NULL;
 	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (state) {
+		state->igamma_status = -1;
 		state->base.plane = plane;
 		state->base.rotation = DRM_MODE_ROTATE_0;
 		state->base.pixel_blend_mode = DRM_MODE_BLEND_PREMULTI;
@@ -105,6 +105,7 @@ drm_plane_state *malidp_duplicate_plane_state(struct drm_plane *plane)
 	state->rotmem_size = m_state->rotmem_size;
 	state->format = m_state->format;
 	state->n_planes = m_state->n_planes;
+	state->igamma_status = m_state->igamma_status;
 
 	return &state->base;
 }
@@ -126,6 +127,7 @@ static void malidp_plane_atomic_print_state(struct drm_printer *p,
 	drm_printf(p, "\trotmem_size=%u\n", ms->rotmem_size);
 	drm_printf(p, "\tformat_id=%u\n", ms->format);
 	drm_printf(p, "\tn_planes=%u\n", ms->n_planes);
+	drm_printf(p, "\tigamma_status=%d\n", ms->igamma_status);
 }
 
 static const struct drm_plane_funcs malidp_de_plane_funcs = {
@@ -176,6 +178,35 @@ static int malidp_se_check_scaling(struct malidp_plane *mp,
 
 	mc->scaled_planes_mask |= mp->layer->id;
 	/* Defer scaling requirements calculation to the crtc check. */
+	return 0;
+}
+
+/*
+ * Check if there are any changes to the igamma LUTs. If so, trigger the slow
+ * path in malidp_crtc_atomic_check_igamma.
+ */
+static int malidp_plane_atomic_check_igamma(struct drm_plane *plane,
+					    struct drm_plane_state *state)
+{
+	struct drm_crtc_state *crtc_state =
+		drm_atomic_get_existing_crtc_state(state->state, state->crtc);
+	struct malidp_plane_state *ms = to_malidp_plane_state(state);
+
+	if (!crtc_state)
+		return -EINVAL;
+
+	if (!state->degamma_lut) {
+		ms->igamma_status = -1;
+		return 0;
+	}
+
+	if (!state->color_mgmt_changed)
+		return 0;
+
+	if (!plane->state->degamma_lut ||
+	    (plane->state->degamma_lut->base.id != state->degamma_lut->base.id))
+		crtc_state->color_mgmt_changed = true;
+
 	return 0;
 }
 
@@ -254,7 +285,9 @@ static int malidp_de_plane_check(struct drm_plane *plane,
 	    (pixel_alpha != DRM_MODE_BLEND_PIXEL_NONE))
 		return -EINVAL;
 
-	return 0;
+	ret = malidp_plane_atomic_check_igamma(plane, state);
+
+	return ret;
 }
 
 static void malidp_de_set_plane_pitches(struct malidp_plane *mp,
@@ -425,6 +458,15 @@ static void malidp_de_plane_update(struct drm_plane *plane,
 			val |= LAYER_FLOWCFG(LAYER_FLOWCFG_SCALE_SE);
 	}
 
+	/*
+	 * In case none of the igamma curves require re-writing, the plane's
+	 * igamma_status will be correct.
+	 */
+	val &= ~MALIDP_LAYER_CONTROL_IGSEL_MASK & ~MALIDP_LAYER_CONTROL_IGEN;
+	if (ms->igamma_status != -1)
+		val |= MALIDP_LAYER_CONTROL_IGEN |
+		       MALIDP_LAYER_CONTROL_IGSEL(ms->igamma_status);
+
 	/* set the 'enable layer' bit */
 	val |= LAYER_ENABLE;
 
@@ -496,6 +538,14 @@ int malidp_de_planes_init(struct drm_device *drm)
 				     &malidp_de_plane_helper_funcs);
 		plane->hwdev = malidp->dev;
 		plane->layer = &map->layers[i];
+
+		/* DE_GRAPHICS2 on DP500 doesn't support inverse gamma. */
+		if (id & (DE_VIDEO1 | DE_VIDEO2 | DE_GRAPHICS1 | DE_SMART)) {
+			ret = drm_plane_color_create_prop(drm, &plane->base);
+			if (ret < 0)
+				goto cleanup;
+			drm_plane_enable_color_mgmt(&plane->base, 4096, 0, 0);
+		}
 
 		if (id == DE_SMART) {
 			/*

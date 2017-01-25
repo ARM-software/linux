@@ -64,6 +64,8 @@ struct malidp_plane_state {
 	/* internal format ID */
 	u8 format;
 	u8 n_planes;
+	/* -1: inverse gamma off; 0,1(,2): on (2 not allowed for DP500). */
+	s8 igamma_status;
 };
 
 #define to_malidp_plane(x) container_of(x, struct malidp_plane, base)
@@ -72,6 +74,16 @@ struct malidp_plane_state {
 struct malidp_crtc_state {
 	struct drm_crtc_state base;
 	u32 gamma_coeffs[MALIDP_COEFFTAB_NUM_COEFFS];
+	/* Inverse-gamma coefficients. */
+	u32 igamma_coeffs[MAX_IGAMMA_TABLES][MALIDP_COEFFTAB_NUM_COEFFS];
+	/*
+	 * These are the degamma curves currently (or about to be) written to
+	 * hardware. DP550/650 have storage for 3 curves. For DP500, only use
+	 * the first two entries. We don't need to store references to the blobs
+	 * themselves, since they have the same lifetime as the degamma_lut
+	 * fields in drm_plane_state.
+	 */
+	u32 igamma_ids[MAX_IGAMMA_TABLES];
 	u32 coloradj_coeffs[MALIDP_COLORADJ_NUM_COEFFS];
 	struct malidp_se_config scaler_config;
 	/* Bitfield of all the planes that have requested a scaled output. */

@@ -91,7 +91,11 @@
 #define MALIDP_DE_SYNC_WIDTH		0x8
 #define MALIDP_DE_HV_ACTIVE		0xc
 
-/* Stride register offsets relative to Lx_BASE */
+/* Register offsets relative to Lx_BASE */
+#define MALIDP_LAYER_CONTROL		0x04
+#	define MALIDP_LAYER_CONTROL_IGEN	(1 << 4)
+#	define MALIDP_LAYER_CONTROL_IGSEL(x)	(((x) & 0x3) << 6)
+#	define MALIDP_LAYER_CONTROL_IGSEL_MASK	GENMASK(7, 6)
 #define MALIDP_DE_LG_STRIDE		0x18
 #define MALIDP_DE_LV_STRIDE0		0x18
 #define MALIDP550_DE_LS_R1_STRIDE	0x28

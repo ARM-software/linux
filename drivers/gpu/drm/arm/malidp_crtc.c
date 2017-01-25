@@ -91,10 +91,10 @@ static void malidp_crtc_atomic_disable(struct drm_crtc *crtc,
 	}
 }
 
-static const struct gamma_curve_segment {
+static const struct curve_segment {
 	u16 start;
 	u16 end;
-} segments[MALIDP_COEFFTAB_NUM_COEFFS] = {
+} gamma_segments[MALIDP_COEFFTAB_NUM_COEFFS] = {
 	/* sector 0 */
 	{    0,    0 }, {    1,    1 }, {    2,    2 }, {    3,    3 },
 	{    4,    4 }, {    5,    5 }, {    6,    6 }, {    7,    7 },
@@ -118,12 +118,31 @@ static const struct gamma_curve_segment {
 	{ 2560, 2687 }, { 2688, 2815 }, { 2816, 2943 }, { 2944, 3071 },
 	{ 3072, 3199 }, { 3200, 3327 }, { 3328, 3455 }, { 3456, 3583 },
 	{ 3584, 3711 }, { 3712, 3839 }, { 3840, 3967 }, { 3968, 4095 },
+}, igamma_segments[MALIDP_COEFFTAB_NUM_COEFFS] = {
+	/* The inverse-gamma segments are all of equal size (unlike gamma). */
+	{    0,   63 }, {   64,  127 }, {  128,  191 }, {  192,  255 },
+	{  256,  319 }, {  320,  383 }, {  384,  447 }, {  448,  511 },
+	{  512,  575 }, {  576,  639 }, {  640,  703 }, {  704,  767 },
+	{  768,  831 }, {  832,  895 }, {  896,  959 }, {  960, 1023 },
+	{ 1024, 1087 }, { 1088, 1151 }, { 1152, 1215 }, { 1216, 1279 },
+	{ 1280, 1343 }, { 1344, 1407 }, { 1408, 1471 }, { 1472, 1535 },
+	{ 1536, 1599 }, { 1600, 1663 }, { 1664, 1727 }, { 1728, 1791 },
+	{ 1792, 1855 }, { 1856, 1919 }, { 1920, 1983 }, { 1984, 2047 },
+	{ 2048, 2111 }, { 2112, 2175 }, { 2176, 2239 }, { 2240, 2303 },
+	{ 2304, 2367 }, { 2368, 2431 }, { 2432, 2495 }, { 2496, 2559 },
+	{ 2560, 2623 }, { 2624, 2687 }, { 2688, 2751 }, { 2752, 2815 },
+	{ 2816, 2879 }, { 2880, 2943 }, { 2944, 3007 }, { 3008, 3071 },
+	{ 3072, 3135 }, { 3136, 3199 }, { 3200, 3263 }, { 3264, 3327 },
+	{ 3328, 3391 }, { 3392, 3455 }, { 3456, 3519 }, { 3520, 3583 },
+	{ 3584, 3647 }, { 3648, 3711 }, { 3712, 3775 }, { 3776, 3839 },
+	{ 3840, 3903 }, { 3904, 3967 }, { 3968, 4031 }, { 4032, 4095 },
 };
 
 #define DE_COEFTAB_DATA(a, b) ((((a) & 0xfff) << 16) | (((b) & 0xfff)))
 
-static void malidp_generate_gamma_table(struct drm_property_blob *lut_blob,
-					u32 coeffs[MALIDP_COEFFTAB_NUM_COEFFS])
+static void malidp_generate_curve_coeffs(struct drm_property_blob *lut_blob,
+					 const struct curve_segment *segments,
+					 u32 coeffs[MALIDP_COEFFTAB_NUM_COEFFS])
 {
 	struct drm_color_lut *lut = (struct drm_color_lut *)lut_blob->data;
 	int i;
@@ -189,7 +208,8 @@ static int malidp_crtc_atomic_check_gamma(struct drm_crtc *crtc,
 			return ret;
 	}
 
-	malidp_generate_gamma_table(state->gamma_lut, mc->gamma_coeffs);
+	malidp_generate_curve_coeffs(state->gamma_lut, gamma_segments,
+				     mc->gamma_coeffs);
 	return 0;
 }
 
@@ -335,6 +355,205 @@ mclk_calc:
 	return 0;
 }
 
+static void malidp_match_igamma_curves(const int current_curves[MAX_IGAMMA_TABLES],
+				       int new_curves[MAX_IGAMMA_TABLES])
+{
+	int i, j;
+	bool matched[MAX_IGAMMA_TABLES] = { 0 };
+	int curves_union[2 * MAX_IGAMMA_TABLES] = { 0 };
+
+	/*
+	 * Generate the union of the two sets with an ordering preference for
+	 * the content of new_curves.
+	 */
+	j = 0;
+	for (i = 0; i < MAX_IGAMMA_TABLES; ++i) {
+		if (new_curves[i])
+			curves_union[j++] = new_curves[i];
+	}
+	for (i = 0; i < MAX_IGAMMA_TABLES; ++i) {
+		if (current_curves[i]) {
+			int k;
+
+			for (k = 0; k < j; ++k)
+				if (curves_union[k] == current_curves[i])
+					/* already exists, skip */
+					break;
+			if (k == j)
+				curves_union[j++] = current_curves[i];
+		}
+	}
+	memcpy(new_curves, curves_union, MAX_IGAMMA_TABLES * sizeof(*new_curves));
+
+	/*
+	 * Reorder new_curves so that is matches current_curves as closely as
+	 * possible.
+	 */
+	for (i = 0; i < MAX_IGAMMA_TABLES; ++i) {
+		if (current_curves[i] &&
+		    new_curves[i] == current_curves[i]) {
+			matched[i] = true;
+			continue;
+		}
+		for (j = 0; j < MAX_IGAMMA_TABLES; ++j) {
+			if (j == i || matched[j])
+				continue;
+			if (current_curves[i] &&
+			    new_curves[j] == current_curves[i]) {
+				int tmp = new_curves[i];
+
+				new_curves[i] = new_curves[j];
+				new_curves[j] = tmp;
+				matched[i] = true;
+				break;
+			}
+		}
+	}
+}
+
+static
+void malidp_update_plane_igamma_status(struct drm_crtc_state *state,
+				       const struct drm_plane_state *pstate)
+{
+	struct malidp_crtc_state *cs = to_malidp_crtc_state(state);
+	struct malidp_plane_state *ms = to_malidp_plane_state(pstate);
+	int i;
+
+	if (!pstate->degamma_lut) {
+		ms->igamma_status = -1;
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(cs->igamma_ids); ++i)
+		if (pstate->degamma_lut->base.id == cs->igamma_ids[i]) {
+			ms->igamma_status = i;
+			return;
+		}
+}
+
+/*
+ * Check if we can store all the requested inverse gamma curves. If we can,
+ * build a list of which curves we need to write and generate the data for the
+ * commit.
+ */
+static int malidp_crtc_atomic_check_igamma(struct drm_crtc *crtc,
+					   struct drm_crtc_state *state)
+{
+	struct drm_plane *plane;
+	const struct drm_plane_state *pstate;
+	struct malidp_drm *malidp = crtc_to_malidp_device(crtc);
+	struct malidp_crtc_state *cs = to_malidp_crtc_state(state);
+	struct malidp_hw_device *hwdev = malidp->dev;
+	struct malidp_hw *hw = hwdev->hw;
+	int max_igamma_curves = (hw->features & MALIDP_DEVICE_HAS_3_IGAMMA) ?
+				MALIDP_NUM_IGAMMA_DP550 : MALIDP_NUM_IGAMMA_DP500;
+	u32 required_curves[MAX_IGAMMA_TABLES] = { 0 };
+	int i = 0;
+
+	if (!state->color_mgmt_changed)
+		return 0;
+
+	drm_atomic_crtc_state_for_each_plane_state(plane, pstate, state) {
+		if (max_igamma_curves == MALIDP_NUM_IGAMMA_DP550) {
+			/* DP550/650: any plane can use any curve. */
+			u32 degamma_id;
+			int j;
+
+			if (!pstate->degamma_lut)
+				continue;
+
+			degamma_id = pstate->degamma_lut->base.id;
+			/* Check if we've seen that id before. */
+			for (j = 0; j < i; ++j)
+				if (required_curves[j] == degamma_id)
+					break;
+			if (j == i) {
+				if (i >= max_igamma_curves) {
+					DRM_DEBUG_KMS("Too many inverse gamma requested, max allowed = %d", max_igamma_curves);
+					return -EINVAL;
+				}
+				required_curves[i] = degamma_id;
+			}
+			i++;
+		} else {
+			/* DP500: strict 1:1 plane to curve correspondence. */
+			struct malidp_plane *mp = to_malidp_plane(plane);
+
+			if (mp->layer->id & DE_VIDEO1)
+				required_curves[0] = (pstate->degamma_lut) ?
+						pstate->degamma_lut->base.id :
+						0;
+			else if (mp->layer->id & DE_GRAPHICS1)
+				required_curves[1] = (pstate->degamma_lut) ?
+						pstate->degamma_lut->base.id :
+						0;
+			else
+				WARN_ON(pstate->degamma_lut);
+		}
+	}
+
+	if (max_igamma_curves == MALIDP_NUM_IGAMMA_DP550)
+		/*
+		 * Match to the existing IDs in hardware to minimise writes.
+		 * DP500's required_curves should stay in the same order.
+		 */
+		malidp_match_igamma_curves(cs->igamma_ids, required_curves);
+	memcpy(cs->igamma_ids, required_curves, sizeof(required_curves));
+
+	drm_atomic_crtc_state_for_each_plane_state(plane, pstate, state)
+		malidp_update_plane_igamma_status(state, pstate);
+
+	for (i = 0; i < ARRAY_SIZE(cs->igamma_ids); ++i) {
+		u32 blob_id = cs->igamma_ids[i];
+		struct malidp_crtc_state *old_state =
+					to_malidp_crtc_state(crtc->state);
+		struct drm_property_blob *lut_blob;
+		struct drm_color_lut *lut;
+		size_t lut_size;
+		int j;
+
+		if (!blob_id || old_state->igamma_ids[i] == blob_id)
+			continue;
+
+		if (!state->mode_changed) {
+			int ret;
+
+			state->mode_changed = true;
+			ret = drm_atomic_helper_check_modeset(crtc->dev,
+							      state->state);
+			if (ret)
+				return ret;
+		}
+
+		lut_blob = drm_property_lookup_blob(crtc->dev, blob_id);
+		if (!lut_blob)
+			return -EINVAL;
+
+		lut = (struct drm_color_lut *)lut_blob->data;
+
+		if (lut_blob->length % sizeof(struct drm_color_lut))
+			goto lut_fail;
+
+		lut_size = lut_blob->length / sizeof(struct drm_color_lut);
+		if (lut_size != 4096)
+			goto lut_fail;
+		for (j = 0; j < lut_size; ++j)
+			if (!((lut[j].red == lut[j].green) &&
+			      (lut[j].red == lut[j].blue)))
+				goto lut_fail;
+
+		malidp_generate_curve_coeffs(lut_blob, igamma_segments,
+					     cs->igamma_coeffs[i]);
+		drm_property_unreference_blob(lut_blob);
+		continue;
+lut_fail:
+		drm_property_unreference_blob(lut_blob);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int malidp_crtc_atomic_check(struct drm_crtc *crtc,
 				    struct drm_crtc_state *state)
 {
@@ -424,6 +643,7 @@ static int malidp_crtc_atomic_check(struct drm_crtc *crtc,
 	ret = malidp_crtc_atomic_check_gamma(crtc, state);
 	ret = ret ? ret : malidp_crtc_atomic_check_ctm(crtc, state);
 	ret = ret ? ret : malidp_crtc_atomic_check_scaling(crtc, state);
+	ret = ret ? ret : malidp_crtc_atomic_check_igamma(crtc, state);
 
 	return ret;
 }
@@ -450,6 +670,10 @@ static struct drm_crtc_state *malidp_crtc_duplicate_state(struct drm_crtc *crtc)
 	__drm_atomic_helper_crtc_duplicate_state(crtc, &state->base);
 	memcpy(state->gamma_coeffs, old_state->gamma_coeffs,
 	       sizeof(state->gamma_coeffs));
+	memcpy(state->igamma_coeffs, old_state->igamma_coeffs,
+	       sizeof(state->igamma_coeffs));
+	memcpy(state->igamma_ids, old_state->igamma_ids,
+	       sizeof(state->igamma_ids));
 	memcpy(state->coloradj_coeffs, old_state->coloradj_coeffs,
 	       sizeof(state->coloradj_coeffs));
 	memcpy(&state->scaler_config, &old_state->scaler_config,
