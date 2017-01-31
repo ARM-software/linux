@@ -44,7 +44,7 @@ initializing the TTM, allocating and freeing memory, waiting for command
 completion and fence synchronization, and memory migration.
 
 The :c:type:`struct drm_global_reference <drm_global_reference>` is made
-up of several fields:
+up of several fields, the more interesting ones being:
 
 .. code-block:: c
 
