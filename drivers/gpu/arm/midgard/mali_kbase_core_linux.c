@@ -3306,7 +3306,8 @@ if (kbdev->clock != NULL) {
 
 static void power_control_term(struct kbase_device *kbdev)
 {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)) \
+	|| defined(LSK_OPPV2_BACKPORT)
 	dev_pm_opp_of_remove_table(kbdev->dev);
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
 	of_free_opp_table(kbdev->dev);
