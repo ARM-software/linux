@@ -56,6 +56,52 @@
 			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(6) | IRQ_TYPE_LEVEL_LOW)>;
 	};
 
+	gpu_opp_table: opp_table0 {
+		compatible = "operating-points-v2", "operating-points-v2-mali";
+
+		opp@112500000 {
+			opp-hz = /bits/ 64 <112500000>;
+			opp-hz-real = /bits/ 64 <450000000>;
+			opp-microvolt = <820000>;
+			opp-core-mask = /bits/ 64 <0x1>;
+			opp-suspend;
+		};
+		opp@225000000 {
+			opp-hz = /bits/ 64 <225000000>;
+			opp-hz-real = /bits/ 64 <450000000>;
+			opp-microvolt = <820000>;
+			opp-core-mask = /bits/ 64 <0x3>;
+		};
+		opp@337500000 {
+			opp-hz = /bits/ 64 <337500000>;
+			opp-hz-real = /bits/ 64 <450000000>;
+			opp-microvolt = <820000>;
+			opp-core-mask = /bits/ 64 <0x7>;
+		};
+		opp@450000000 {
+			opp-hz = /bits/ 64 <450000000>;
+			opp-hz-real = /bits/ 64 <450000000>;
+			opp-microvolt = <820000>;
+			opp-core-mask = /bits/ 64 <0xf>;
+		};
+		opp@487500000 {
+			opp-hz = /bits/ 64 <487500000>;
+			opp-microvolt = <825000>;
+		};
+		opp@525000000 {
+			opp-hz = /bits/ 64 <525000000>;
+			opp-microvolt = <850000>;
+		};
+		opp@562500000 {
+			opp-hz = /bits/ 64 <562500000>;
+			opp-microvolt = <875000>;
+		};
+		opp@600000000 {
+			opp-hz = /bits/ 64 <600000000>;
+			opp-microvolt = <900000>;
+		};
+	};
+
 	sram: sram@2e000000 {
 		compatible = "arm,juno-sram-ns", "mmio-sram";
 		reg = <0x0 0x2e000000 0x0 0x8000>;

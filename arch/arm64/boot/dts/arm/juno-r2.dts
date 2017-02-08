@@ -24,14 +24,7 @@
 		clocks = <&scpi_dvfs 2>;
 		clock-names = "clk_mali";
 		secure-mode-switcher = <&gpu_secure_switch>;
-		operating-points = <
-			/* KHz uV */
-			450000 820000
-			487500 825000
-			525000 850000
-			562500 875000
-			600000 900000
-		>;
+		operating-points-v2 = <&gpu_opp_table>;
 		power_model {
 			compatible = "arm,mali-simple-power-model";
 			voltage = <800>;
