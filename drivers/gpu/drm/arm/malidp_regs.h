@@ -117,6 +117,40 @@
 #define MALIDP_MW_P2_PTR_LOW		0x0002c
 #define MALIDP_MW_P2_PTR_HIGH		0x00030
 
+/* Scaling engine registers and masks. */
+#define   MALIDP_SE_SCALING_EN			(1 << 0)
+#define   MALIDP_SE_ALPHA_EN			(1 << 1)
+#define   MALIDP_SE_RGBO_IF_EN			(1 << 4)
+#define   MALIDP550_SE_CTL_SEL_MASK		7
+#define   MALIDP550_SE_CTL_VCSEL(x) \
+		(((x) & MALIDP550_SE_CTL_SEL_MASK) << 20)
+#define   MALIDP550_SE_CTL_HCSEL(x) \
+		(((x) & MALIDP550_SE_CTL_SEL_MASK) << 16)
+
+/* Blocks with offsets from SE_CONTROL register. */
+#define MALIDP_SE_LAYER_CONTROL			0x14
+#define   MALIDP_SE_L0_IN_SIZE			0x00
+#define   MALIDP_SE_L0_OUT_SIZE			0x04
+#define   MALIDP_SE_SET_V_SIZE(x)		(((x) & 0x1fff) << 16)
+#define   MALIDP_SE_SET_H_SIZE(x)		(((x) & 0x1fff) << 0)
+#define MALIDP_SE_SCALING_CONTROL		0x24
+#define   MALIDP_SE_H_INIT_PH			0x00
+#define   MALIDP_SE_H_DELTA_PH			0x04
+#define   MALIDP_SE_V_INIT_PH			0x08
+#define   MALIDP_SE_V_DELTA_PH			0x0c
+#define   MALIDP_SE_COEFFTAB_ADDR		0x10
+#define     MALIDP_SE_COEFFTAB_ADDR_MASK	0x7f
+#define     MALIDP_SE_V_COEFFTAB		(1 << 8)
+#define     MALIDP_SE_H_COEFFTAB		(1 << 9)
+#define     MALIDP_SE_SET_V_COEFFTAB_ADDR(x) \
+		(MALIDP_SE_V_COEFFTAB | ((x) & MALIDP_SE_COEFFTAB_ADDR_MASK))
+#define     MALIDP_SE_SET_H_COEFFTAB_ADDR(x) \
+		(MALIDP_SE_H_COEFFTAB | ((x) & MALIDP_SE_COEFFTAB_ADDR_MASK))
+#define   MALIDP_SE_COEFFTAB_DATA		0x14
+#define     MALIDP_SE_COEFFTAB_DATA_MASK	0x3fff
+#define     MALIDP_SE_SET_COEFFTAB_DATA(x) \
+		((x) & MALIDP_SE_COEFFTAB_DATA_MASK)
+
 /* register offsets and bits specific to DP500 */
 #define MALIDP500_ADDR_SPACE_SIZE	0x01000
 #define MALIDP500_DC_BASE		0x00000
@@ -162,6 +196,7 @@
 #define MALIDP500_DE_LG2_BASE		0x00300
 #define MALIDP500_DE_LG2_PTR_BASE	0x0031c
 #define MALIDP500_SE_BASE		0x00c00
+#define MALIDP500_SE_CONTROL		0x00c0c
 #define MALIDP500_SE_PTR_BASE		0x00e0c
 #define MALIDP500_DC_IRQ_BASE		0x00f00
 #define MALIDP500_CONFIG_VALID		0x00f00
