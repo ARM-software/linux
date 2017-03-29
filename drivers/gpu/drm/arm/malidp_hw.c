@@ -20,6 +20,7 @@
 
 #include "malidp_drv.h"
 #include "malidp_hw.h"
+#include "malidp_mw.h"
 
 static const struct malidp_format_id malidp500_de_formats[] = {
 	/*    fourcc,   layers supporting the format,     internal id  */
@@ -549,6 +550,7 @@ const struct malidp_hw_device malidp_device[MALIDP_MAX_DEVICES] = {
 			.se_irq_map = {
 				.irq_mask = MALIDP550_SE_IRQ_EOW |
 					    MALIDP550_SE_IRQ_AXI_ERR,
+				.vsync_irq = MALIDP550_SE_IRQ_EOW,
 			},
 			.dc_irq_map = {
 				.irq_mask = MALIDP550_DC_IRQ_CONF_VALID |
@@ -691,6 +693,7 @@ static irqreturn_t malidp_se_irq(int irq, void *arg)
 	struct drm_device *drm = arg;
 	struct malidp_drm *malidp = drm->dev_private;
 	struct malidp_hw_device *hwdev = malidp->dev;
+	const struct malidp_irq_map *se = &hwdev->map.se_irq_map;
 	u32 status, mask;
 
 	status = malidp_hw_read(hwdev, hwdev->map.se_base + MALIDP_REG_STATUS);
@@ -700,7 +703,9 @@ static irqreturn_t malidp_se_irq(int irq, void *arg)
 	mask = malidp_hw_read(hwdev, hwdev->map.se_base + MALIDP_REG_MASKIRQ);
 	status = malidp_hw_read(hwdev, hwdev->map.se_base + MALIDP_REG_STATUS);
 	status &= mask;
-	/* ToDo: status decoding and firing up of VSYNC and page flip events */
+
+	if (status & se->vsync_irq)
+		drm_writeback_signal_completion(&malidp->mw_connector, 0);
 
 	malidp_hw_clear_irq(hwdev, MALIDP_SE_BLOCK, status);
 
