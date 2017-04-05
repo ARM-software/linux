@@ -382,6 +382,32 @@ static bool malidp_has_sufficient_address_space(const struct resource *res,
 	return true;
 }
 
+static ssize_t core_id_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct drm_device *drm = dev_get_drvdata(dev);
+	struct malidp_drm *malidp = drm->dev_private;
+
+	return snprintf(buf, PAGE_SIZE, "%08x\n", malidp->core_id);
+}
+
+DEVICE_ATTR_RO(core_id);
+
+static int malidp_init_sysfs(struct device *dev)
+{
+	int ret = device_create_file(dev, &dev_attr_core_id);
+
+	if (ret)
+		DRM_ERROR("failed to create device file for core_id\n");
+
+	return ret;
+}
+
+static void malidp_fini_sysfs(struct device *dev)
+{
+	device_remove_file(dev, &dev_attr_core_id);
+}
+
 #define MAX_OUTPUT_CHANNELS	3
 
 static int malidp_runtime_pm_suspend(struct device *dev)
@@ -515,6 +541,8 @@ static int malidp_bind(struct device *dev)
 	DRM_INFO("found ARM Mali-DP%3x version r%dp%d\n", version >> 16,
 		 (version >> 12) & 0xf, (version >> 8) & 0xf);
 
+	malidp->core_id = version;
+
 	/* set the number of lines used for output of RGB data */
 	ret = of_property_read_u8_array(dev->of_node,
 					"arm,malidp-output-port-lines",
@@ -533,11 +561,15 @@ static int malidp_bind(struct device *dev)
 	if (ret < 0)
 		goto query_hw_fail;
 
+	ret = malidp_init_sysfs(dev);
+	if (ret)
+		goto init_fail;
+
 	/* Set the CRTC's port so that the encoder component can find it */
 	ep = of_graph_get_next_endpoint(dev->of_node, NULL);
 	if (!ep) {
 		ret = -EINVAL;
-		goto port_fail;
+		goto init_fail;
 	}
 	malidp->crtc.port = of_get_next_parent(ep);
 
@@ -597,7 +629,8 @@ irq_init_fail:
 bind_fail:
 	of_node_put(malidp->crtc.port);
 	malidp->crtc.port = NULL;
-port_fail:
+init_fail:
+	malidp_fini_sysfs(dev);
 	malidp_fini(drm);
 query_hw_fail:
 	pm_runtime_put(dev);
@@ -632,6 +665,7 @@ static void malidp_unbind(struct device *dev)
 	component_unbind_all(dev, drm);
 	of_node_put(malidp->crtc.port);
 	malidp->crtc.port = NULL;
+	malidp_fini_sysfs(dev);
 	malidp_fini(drm);
 	pm_runtime_put(dev);
 	if (pm_runtime_enabled(dev))

@@ -30,6 +30,7 @@ struct malidp_drm {
 	atomic_t config_valid;
 	struct drm_atomic_state *pm_state;
 	struct drm_property *prop_yuv2rgb;
+	u32 core_id;
 };
 
 #define crtc_to_malidp_device(x) container_of(x, struct malidp_drm, crtc)
