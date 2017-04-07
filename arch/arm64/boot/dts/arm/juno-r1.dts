@@ -1,7 +1,7 @@
 /*
  * ARM Ltd. Juno Platform
  *
- * Copyright (c) 2015 ARM Ltd.
+ * Copyright (c) 2017 ARM Ltd.
  *
  * This file is licensed under a dual GPLv2 or BSD license.
  */
@@ -11,6 +11,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "juno-base.dtsi"
 #include "juno-cs-r1r2.dtsi"
+#include "juno-t62x.dtsi"
 
 / {
 	model = "ARM Juno development board (r1)";
@@ -308,4 +309,8 @@
 
 &cpu_debug5 {
 	cpu = <&A53_3>;
+};
+
+&gpu {
+	system-coherency = <0>;
 };

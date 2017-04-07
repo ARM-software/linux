@@ -1,0 +1,86 @@
+/*
+ * ARM Ltd. Juno Platform
+ *
+ * Copyright (c) 2017 ARM Ltd.
+ *
+ * This file is licensed under a dual GPLv2 or BSD license.
+ */
+
+/ {
+	gpu_secure_switch: secure-mode-switcher {
+		compatible = "arm,secure-mode-switcher";
+		arm,smc,secure_enable = <0xff06>;
+		arm,smc,secure_disable = <0xff07>;
+	};
+
+	gpu_opp_table: opp_table0 {
+		compatible = "operating-points-v2", "operating-points-v2-mali";
+
+		opp@112500000 {
+			opp-hz = /bits/ 64 <112500000>;
+			opp-hz-real = /bits/ 64 <450000000>;
+			opp-microvolt = <820000>;
+			opp-core-mask = /bits/ 64 <0x1>;
+			opp-suspend;
+		};
+		opp@225000000 {
+			opp-hz = /bits/ 64 <225000000>;
+			opp-hz-real = /bits/ 64 <450000000>;
+			opp-microvolt = <820000>;
+			opp-core-mask = /bits/ 64 <0x3>;
+		};
+		opp@337500000 {
+			opp-hz = /bits/ 64 <337500000>;
+			opp-hz-real = /bits/ 64 <450000000>;
+			opp-microvolt = <820000>;
+			opp-core-mask = /bits/ 64 <0x7>;
+		};
+		opp@450000000 {
+			opp-hz = /bits/ 64 <450000000>;
+			opp-hz-real = /bits/ 64 <450000000>;
+			opp-microvolt = <820000>;
+			opp-core-mask = /bits/ 64 <0xf>;
+		};
+		opp@487500000 {
+			opp-hz = /bits/ 64 <487500000>;
+			opp-microvolt = <825000>;
+		};
+		opp@525000000 {
+			opp-hz = /bits/ 64 <525000000>;
+			opp-microvolt = <850000>;
+		};
+		opp@562500000 {
+			opp-hz = /bits/ 64 <562500000>;
+			opp-microvolt = <875000>;
+		};
+		opp@600000000 {
+			opp-hz = /bits/ 64 <600000000>;
+			opp-microvolt = <900000>;
+		};
+	};
+
+	gpu: gpu@2d000000 {
+		compatible = "arm,mali-midgard";
+		#cooling-cells = <2>; /* min followed by max */
+		reg = <0x0 0x2d000000 0x0 0x4000>;
+		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
+		interrupt-names = "JOB", "MMU", "GPU";
+		clocks = <&scpi_dvfs 2>;
+		clock-names = "clk_mali";
+		secure-mode-switcher = <&gpu_secure_switch>;
+		operating-points-v2 = <&gpu_opp_table>;
+		power_model {
+			compatible = "arm,mali-simple-power-model";
+			ts = <20000 2000 (-20) 2>;
+			thermal-zone = "gpu";
+			/* Old Power Model */
+			voltage = <800>;
+			frequency = <500>;
+			static-power = <500>;
+			dynamic-power = <1500>;
+			/* New Power Model */
+			static-coefficient = <2427750>;
+			dynamic-coefficient = <4687>;
+		};
+	};
+};

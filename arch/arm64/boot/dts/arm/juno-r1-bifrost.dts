@@ -1,0 +1,10 @@
+/*
+ * ARM Ltd. Juno Platform
+ *
+ * Copyright (c) 2017 ARM Ltd.
+ *
+ * This file is licensed under a dual GPLv2 or BSD license.
+ */
+
+#include "juno-r1.dts"
+#include "juno-bifrost.dtsi"

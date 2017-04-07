@@ -1,0 +1,16 @@
+/*
+ * ARM Ltd. Juno Platform
+ *
+ * Copyright (c) 2017 ARM Ltd.
+ *
+ * This file is licensed under a dual GPLv2 or BSD license.
+ */
+
+#include "juno-r2.dts"
+#include "juno-bifrost.dtsi"
+
+&gpu_fpga {
+	system-coherency = <1>;
+	snoop_enable_smc=<0x8200ff04>;
+	snoop_disable_smc = <0x8200ff05>;
+};
