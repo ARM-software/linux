@@ -770,6 +770,26 @@
 		      <0x00000008 0x80000000 0x1 0x80000000>;
 	};
 
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		gpu_protected: gpu_protected@c0000000 {
+			compatible = "ion-reserved";
+			reg = <0x0 0xc0000000 0x0 0x10000000>;
+		};
+	};
+
+	ion {
+		compatible = "simple-bus";
+
+		protected {
+			compatible = "ion,carveout";
+			memory-region = <&gpu_protected>;
+		};
+	};
+
 	smb@8000000 {
 		compatible = "simple-bus";
 		#address-cells = <2>;
