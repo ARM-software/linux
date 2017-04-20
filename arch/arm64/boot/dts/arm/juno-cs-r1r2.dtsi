@@ -6,7 +6,7 @@
 
 		clocks = <&soc_smc50mhz>;
 		clock-names = "apb_pclk";
-		power-domains = <&scpi_devpd 0>;
+		power-domains = <&scmi_devpd 8>;
 		out-ports {
 			port {
 				csys1_funnel_out_port: endpoint {
@@ -29,7 +29,7 @@
 
 		clocks = <&soc_smc50mhz>;
 		clock-names = "apb_pclk";
-		power-domains = <&scpi_devpd 0>;
+		power-domains = <&scmi_devpd 8>;
 		in-ports {
 			port {
 				etf1_in_port: endpoint {
@@ -52,7 +52,7 @@
 
 		clocks = <&soc_smc50mhz>;
 		clock-names = "apb_pclk";
-		power-domains = <&scpi_devpd 0>;
+		power-domains = <&scmi_devpd 8>;
 		out-ports {
 			port {
 				csys2_funnel_out_port: endpoint {

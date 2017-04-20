@@ -96,7 +96,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <256>;
 			next-level-cache = <&A57_L2>;
-			clocks = <&scpi_dvfs 0>;
+			clocks = <&scmi_dvfs 0>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 			capacity-dmips-mhz = <1024>;
 		};
@@ -113,7 +113,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <256>;
 			next-level-cache = <&A57_L2>;
-			clocks = <&scpi_dvfs 0>;
+			clocks = <&scmi_dvfs 0>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 			capacity-dmips-mhz = <1024>;
 		};
@@ -130,7 +130,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&A53_L2>;
-			clocks = <&scpi_dvfs 1>;
+			clocks = <&scmi_dvfs 1>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 			capacity-dmips-mhz = <578>;
 		};
@@ -147,7 +147,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&A53_L2>;
-			clocks = <&scpi_dvfs 1>;
+			clocks = <&scmi_dvfs 1>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 			capacity-dmips-mhz = <578>;
 		};
@@ -164,7 +164,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&A53_L2>;
-			clocks = <&scpi_dvfs 1>;
+			clocks = <&scmi_dvfs 1>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 			capacity-dmips-mhz = <578>;
 		};
@@ -181,7 +181,7 @@
 			d-cache-line-size = <64>;
 			d-cache-sets = <128>;
 			next-level-cache = <&A53_L2>;
-			clocks = <&scpi_dvfs 1>;
+			clocks = <&scmi_dvfs 1>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
 			capacity-dmips-mhz = <578>;
 		};
