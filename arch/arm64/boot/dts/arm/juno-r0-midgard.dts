@@ -7,6 +7,7 @@
  */
 
 #include "juno-r0.dtsi"
+#include "juno-fpga.dtsi"
 
 / {
 	gpu: gpu@0x6f010000 {

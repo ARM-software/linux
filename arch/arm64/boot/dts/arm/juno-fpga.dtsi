@@ -1,0 +1,16 @@
+/*
+ * ARM Ltd. Juno Platform
+ *
+ * Copyright (c) 2017 ARM Ltd.
+ *
+ * This file is licensed under a dual GPLv2 or BSD license.
+ */
+
+/ {
+	fpga_ram@0x60000000 {
+		compatible = "ion,dma_heap";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		reg = <0x0 0x60000000 0x0 0x08000000>;
+	};
+};
