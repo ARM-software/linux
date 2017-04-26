@@ -22,6 +22,9 @@
 #include <linux/memblock.h>
 #include <linux/sizes.h>
 #include <linux/io.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
+#include <linux/dma-mapping.h>
 #include "ion.h"
 #include "ion_priv.h"
 
@@ -74,6 +77,58 @@ static struct ion_platform_data dummy_ion_pdata = {
 	.heaps = dummy_heaps,
 };
 
+static void ion_dummy_parse_heap(const char *compatible, int heap)
+{
+	struct device_node *np;
+	struct resource heap_res_dt;
+	int index;
+
+	np = of_find_compatible_node(NULL, NULL, compatible);
+	if (!np) {
+		pr_debug("ion_dummy: Failed to find node - %s", compatible);
+		return;
+	}
+
+	if (of_address_to_resource(np, 0, &heap_res_dt)) {
+		pr_warn("ion_dummy: Failed to get %s resource", compatible);
+		return;
+	}
+
+	if (heap_res_dt.end <= heap_res_dt.start) {
+		pr_warn("ion_dummy: Invalid %s heap size", compatible);
+		return;
+	}
+
+	for (index = 0; index < dummy_ion_pdata.nr; index++) {
+		if (dummy_ion_pdata.heaps[index].id == heap) {
+			dummy_ion_pdata.heaps[index].size =
+						resource_size(&heap_res_dt);
+			dummy_ion_pdata.heaps[index].base = heap_res_dt.start;
+			return;
+		}
+	}
+
+	pr_warn("ion_dummy: No %s entry found in the table", compatible);
+}
+
+static int ion_dummy_declare_coherent_memory(struct ion_platform_heap *heap)
+{
+	struct device *dev = &dummy_device_ion.dev;
+
+	if (!heap->size)
+		return 0;
+
+	pr_info("ion_dummy: Declare DMA coherent memory, @%lx, size: %lx\n",
+		heap->base, heap->size);
+	/*
+	 * The coherent memory is declared as DMA_MEMORY_EXCLUSIVE. It means
+	 * that if the DMA coherent memory is full, the allocation will fail
+	 * instead of falling back to ARM DMA ops.
+	 */
+	return dma_declare_coherent_memory(dev, heap->base, heap->base,
+			heap->size, DMA_MEMORY_MAP | DMA_MEMORY_EXCLUSIVE);
+}
+
 static int __init ion_dummy_init(void)
 {
 	int i, err;
@@ -81,6 +136,10 @@ static int __init ion_dummy_init(void)
 	idev = ion_device_create(NULL);
 	if (IS_ERR(idev))
 		return PTR_ERR(idev);
+
+	/* Read reserved memory from device tree */
+	ion_dummy_parse_heap("ion,dma_heap", ION_HEAP_TYPE_DMA);
+
 	heaps = kcalloc(dummy_ion_pdata.nr, sizeof(struct ion_heap *),
 			GFP_KERNEL);
 	if (!heaps)
@@ -116,6 +175,11 @@ static int __init ion_dummy_init(void)
 		if (heap_data->type == ION_HEAP_TYPE_CHUNK && !heap_data->base)
 			continue;
 
+		if (heap_data->type == ION_HEAP_TYPE_DMA) {
+			if (ion_dummy_declare_coherent_memory(heap_data) < 0)
+				pr_err("ion_dummy: Failed to declare DMA coherent memory\n");
+		}
+
 		heaps[i] = ion_heap_create(heap_data);
 		if (IS_ERR_OR_NULL(heaps[i])) {
 			err = PTR_ERR(heaps[i]);
@@ -141,6 +205,9 @@ err:
 				 dummy_heaps[ION_HEAP_TYPE_CHUNK].size);
 		chunk_ptr = NULL;
 	}
+
+	dma_release_declared_memory(&dummy_device_ion.dev);
+
 	return err;
 }
 device_initcall(ion_dummy_init);
@@ -165,5 +232,7 @@ static void __exit ion_dummy_exit(void)
 				 dummy_heaps[ION_HEAP_TYPE_CHUNK].size);
 		chunk_ptr = NULL;
 	}
+
+	dma_release_declared_memory(&dummy_device_ion.dev);
 }
 __exitcall(ion_dummy_exit);
