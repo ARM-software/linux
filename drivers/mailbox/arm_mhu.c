@@ -76,33 +76,16 @@ static int mhu_startup(struct mbox_chan *chan)
 {
 	struct mhu_link *mlink = chan->con_priv;
 	u32 val;
-	int ret;
 
 	val = readl_relaxed(mlink->tx_reg + INTR_STAT_OFS);
 	writel_relaxed(val, mlink->tx_reg + INTR_CLR_OFS);
 
-	ret = request_irq(mlink->irq, mhu_rx_interrupt,
-			  IRQF_SHARED, "mhu_link", chan);
-	if (ret) {
-		dev_err(chan->mbox->dev,
-			"Unable to acquire IRQ %d\n", mlink->irq);
-		return ret;
-	}
-
 	return 0;
-}
-
-static void mhu_shutdown(struct mbox_chan *chan)
-{
-	struct mhu_link *mlink = chan->con_priv;
-
-	free_irq(mlink->irq, chan);
 }
 
 static const struct mbox_chan_ops mhu_ops = {
 	.send_data = mhu_send_data,
 	.startup = mhu_startup,
-	.shutdown = mhu_shutdown,
 	.last_tx_done = mhu_last_tx_done,
 };
 
@@ -124,13 +107,6 @@ static int mhu_probe(struct amba_device *adev, const struct amba_id *id)
 		return PTR_ERR(mhu->base);
 	}
 
-	for (i = 0; i < MHU_CHANS; i++) {
-		mhu->chan[i].con_priv = &mhu->mlink[i];
-		mhu->mlink[i].irq = adev->irq[i];
-		mhu->mlink[i].rx_reg = mhu->base + mhu_reg[i];
-		mhu->mlink[i].tx_reg = mhu->mlink[i].rx_reg + TX_REG_OFFSET;
-	}
-
 	mhu->mbox.dev = dev;
 	mhu->mbox.chans = &mhu->chan[0];
 	mhu->mbox.num_chans = MHU_CHANS;
@@ -145,6 +121,28 @@ static int mhu_probe(struct amba_device *adev, const struct amba_id *id)
 	if (err) {
 		dev_err(dev, "Failed to register mailboxes %d\n", err);
 		return err;
+	}
+
+	for (i = 0; i < MHU_CHANS; i++) {
+		int irq = mhu->mlink[i].irq = adev->irq[i];
+
+		if (irq <= 0) {
+			dev_dbg(dev, "No IRQ found for Channel %d\n", i);
+			continue;
+		}
+
+		mhu->chan[i].con_priv = &mhu->mlink[i];
+		mhu->mlink[i].rx_reg = mhu->base + mhu_reg[i];
+		mhu->mlink[i].tx_reg = mhu->mlink[i].rx_reg + TX_REG_OFFSET;
+
+		err = devm_request_threaded_irq(dev, irq, NULL,
+						mhu_rx_interrupt, IRQF_ONESHOT,
+						"mhu_link", &mhu->chan[i]);
+		if (err) {
+			dev_err(dev, "Can't claim IRQ %d\n", irq);
+			mbox_controller_unregister(&mhu->mbox);
+			return err;
+		}
 	}
 
 	dev_info(dev, "ARM MHU Mailbox registered\n");
