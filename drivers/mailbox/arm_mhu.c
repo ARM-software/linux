@@ -39,6 +39,7 @@ struct arm_mhu {
 	struct mhu_link mlink[MHU_NUM_PCHANS];
 	struct mbox_controller mbox;
 	struct device *dev;
+	const char *name;
 };
 
 /**
@@ -249,8 +250,8 @@ static struct mbox_chan *mhu_mbox_xlate(struct mbox_controller *mbox,
 
 	chan->con_priv = chan_info;
 
-	dev_dbg(mbox->dev, "mbox: created channel phys: %d doorbell: %d\n",
-		pchan, doorbell);
+	dev_dbg(mbox->dev, "mbox: %s, created channel phys: %d doorbell: %d\n",
+		mhu->name, pchan, doorbell);
 
 	return chan;
 }
@@ -380,6 +381,10 @@ static int mhu_probe(struct amba_device *adev, const struct amba_id *id)
 		return PTR_ERR(mhu->base);
 	}
 
+	err = of_property_read_string(np, "mbox-name", &mhu->name);
+	if (err)
+		mhu->name = np->full_name;
+
 	chans = devm_kcalloc(dev, max_chans, sizeof(*chans), GFP_KERNEL);
 	if (!chans)
 		return -ENOMEM;
@@ -431,7 +436,7 @@ static int mhu_probe(struct amba_device *adev, const struct amba_id *id)
 		}
 	}
 
-	dev_info(dev, "ARM MHU Mailbox registered\n");
+	dev_info(dev, "%s mailbox registered\n", mhu->name);
 	return 0;
 }
 
