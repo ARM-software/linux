@@ -10,6 +10,7 @@
 #include <linux/err.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/kernel.h>
 #include <linux/mailbox_controller.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -86,6 +87,14 @@ mhu_mbox_to_channel(struct mbox_controller *mbox,
 	return NULL;
 }
 
+static void mhu_mbox_clear_irq(struct mbox_chan *chan)
+{
+	struct mhu_channel *chan_info = chan->con_priv;
+	void __iomem *base = chan_info->mhu->mlink[chan_info->pchan].rx_reg;
+
+	writel_relaxed(BIT(chan_info->doorbell), base + INTR_CLR_OFS);
+}
+
 static unsigned int mhu_mbox_irq_to_pchan_num(struct arm_mhu *mhu, int irq)
 {
 	unsigned int pchan;
@@ -95,6 +104,95 @@ static unsigned int mhu_mbox_irq_to_pchan_num(struct arm_mhu *mhu, int irq)
 		if (mhu->mlink[pchan].irq == irq)
 			break;
 	return pchan;
+}
+
+static struct mbox_chan *mhu_mbox_irq_to_channel(struct arm_mhu *mhu,
+						 unsigned int pchan)
+{
+	unsigned long bits;
+	unsigned int doorbell;
+	struct mbox_chan *chan = NULL;
+	struct mbox_controller *mbox = &mhu->mbox;
+	void __iomem *base = mhu->mlink[pchan].rx_reg;
+
+	bits = readl_relaxed(base + INTR_STAT_OFS);
+	if (!bits)
+		/* No IRQs fired in specified physical channel */
+		return NULL;
+
+	/* An IRQ has fired, find the associated channel */
+	for (doorbell = 0; bits; doorbell++) {
+		if (!test_and_clear_bit(doorbell, &bits))
+			continue;
+
+		chan = mhu_mbox_to_channel(mbox, pchan, doorbell);
+		if (chan)
+			break;
+	}
+
+	return chan;
+}
+
+static irqreturn_t mhu_mbox_thread_handler(int irq, void *data)
+{
+	struct mbox_chan *chan;
+	struct arm_mhu *mhu = data;
+	unsigned int pchan = mhu_mbox_irq_to_pchan_num(mhu, irq);
+
+	while (NULL != (chan = mhu_mbox_irq_to_channel(mhu, pchan))) {
+		mbox_chan_received_data(chan, NULL);
+		mhu_mbox_clear_irq(chan);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static bool mhu_doorbell_last_tx_done(struct mbox_chan *chan)
+{
+	struct mhu_channel *chan_info = chan->con_priv;
+	void __iomem *base = chan_info->mhu->mlink[chan_info->pchan].tx_reg;
+
+	if (readl_relaxed(base + INTR_STAT_OFS) & BIT(chan_info->doorbell))
+		return false;
+
+	return true;
+}
+
+static int mhu_doorbell_send_signal(struct mbox_chan *chan)
+{
+	struct mhu_channel *chan_info = chan->con_priv;
+	void __iomem *base = chan_info->mhu->mlink[chan_info->pchan].tx_reg;
+
+	/* Send event to co-processor */
+	writel_relaxed(BIT(chan_info->doorbell), base + INTR_SET_OFS);
+
+	return 0;
+}
+
+static int mhu_doorbell_startup(struct mbox_chan *chan)
+{
+	mhu_mbox_clear_irq(chan);
+	return 0;
+}
+
+static void mhu_doorbell_shutdown(struct mbox_chan *chan)
+{
+	struct mhu_channel *chan_info = chan->con_priv;
+	struct mbox_controller *mbox = &chan_info->mhu->mbox;
+	int i;
+
+	for (i = 0; i < mbox->num_chans; i++)
+		if (chan == &mbox->chans[i])
+			break;
+
+	if (mbox->num_chans == i) {
+		dev_warn(mbox->dev, "Request to free non-existent channel\n");
+		return;
+	}
+
+	/* Reset channel */
+	mhu_mbox_clear_irq(chan);
+	chan->con_priv = NULL;
 }
 
 static struct mbox_chan *mhu_mbox_xlate(struct mbox_controller *mbox,
@@ -214,16 +312,30 @@ static const struct mbox_chan_ops mhu_ops = {
 	.last_tx_done = mhu_last_tx_done,
 };
 
+static const struct mbox_chan_ops mhu_doorbell_ops = {
+	.send_signal = mhu_doorbell_send_signal,
+	.startup = mhu_doorbell_startup,
+	.shutdown = mhu_doorbell_shutdown,
+	.last_tx_done = mhu_doorbell_last_tx_done,
+};
+
 static const struct mhu_mbox_pdata arm_mhu_pdata = {
 	.num_pchans = 3,
 	.num_doorbells = 1,
 	.support_doorbells = false,
 };
 
+static const struct mhu_mbox_pdata arm_mhu_doorbell_pdata = {
+	.num_pchans = 2,	/* Secure can't be used */
+	.num_doorbells = 32,
+	.support_doorbells = true,
+};
+
 static int mhu_probe(struct amba_device *adev, const struct amba_id *id)
 {
 	u32 cell_count;
 	int i, err, max_chans;
+	irq_handler_t handler;
 	struct arm_mhu *mhu;
 	struct mbox_chan *chans;
 	struct mhu_mbox_pdata *pdata;
@@ -243,6 +355,9 @@ static int mhu_probe(struct amba_device *adev, const struct amba_id *id)
 	if (cell_count == 1) {
 		max_chans = MHU_NUM_PCHANS;
 		pdata = (struct mhu_mbox_pdata *)&arm_mhu_pdata;
+	} else if (cell_count == 2) {
+		max_chans = MHU_CHAN_MAX;
+		pdata = (struct mhu_mbox_pdata *)&arm_mhu_doorbell_pdata;
 	} else {
 		dev_err(dev, "incorrect value of #mbox-cells in %s\n",
 			np->full_name);
@@ -275,13 +390,20 @@ static int mhu_probe(struct amba_device *adev, const struct amba_id *id)
 	mhu->mbox.dev = dev;
 	mhu->mbox.chans = chans;
 	mhu->mbox.num_chans = max_chans;
-	mhu->mbox.ops = &mhu_ops;
 	mhu->mbox.txdone_irq = false;
 	mhu->mbox.txdone_poll = true;
 	mhu->mbox.txpoll_period = 1;
 
 	mhu->mbox.of_xlate = mhu_mbox_xlate;
 	amba_set_drvdata(adev, mhu);
+
+	if (pdata->support_doorbells) {
+		mhu->mbox.ops = &mhu_doorbell_ops;
+		handler = mhu_mbox_thread_handler;
+	} else {
+		mhu->mbox.ops = &mhu_ops;
+		handler = mhu_rx_interrupt;
+	}
 
 	err = devm_mbox_controller_register(dev, &mhu->mbox);
 	if (err) {
@@ -300,9 +422,8 @@ static int mhu_probe(struct amba_device *adev, const struct amba_id *id)
 		mhu->mlink[i].rx_reg = mhu->base + mhu_reg[i];
 		mhu->mlink[i].tx_reg = mhu->mlink[i].rx_reg + TX_REG_OFFSET;
 
-		err = devm_request_threaded_irq(dev, irq, NULL,
-						mhu_rx_interrupt, IRQF_ONESHOT,
-						"mhu_link", mhu);
+		err = devm_request_threaded_irq(dev, irq, NULL, handler,
+						IRQF_ONESHOT, "mhu_link", mhu);
 		if (err) {
 			dev_err(dev, "Can't claim IRQ %d\n", irq);
 			mbox_controller_unregister(&mhu->mbox);
