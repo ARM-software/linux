@@ -27,6 +27,7 @@
 #include <linux/module.h>
 
 #define DEFAULT_FBDEFIO_DELAY_MS 50
+#define FB_FIX_SCREENINFO_ID_MAX 16
 
 struct drm_fb_cma {
 	struct drm_framebuffer		fb;
@@ -444,6 +445,7 @@ int drm_fbdev_cma_create_with_funcs(struct drm_fb_helper *helper,
 	fbi->fix.smem_start = (unsigned long)(obj->paddr + offset);
 	fbi->screen_size = size;
 	fbi->fix.smem_len = size;
+	strncpy(fbi->fix.id, dev->driver->desc, FB_FIX_SCREENINFO_ID_MAX);
 
 	if (funcs->dirty) {
 		ret = drm_fbdev_cma_defio_init(fbi, obj);
