@@ -1625,6 +1625,10 @@ int drm_add_override_edid_modes(struct drm_connector *connector)
 }
 EXPORT_SYMBOL(drm_add_override_edid_modes);
 
+static int edid_retry = CONFIG_DRM_EDID_RETRY;
+module_param_named(edid_retry, edid_retry, int, 0600);
+MODULE_PARM_DESC(edid_retry, "Maximum number of EDID query retries");
+
 /**
  * drm_do_get_edid - get EDID data using a custom EDID block read function
  * @connector: connector we're probing
@@ -1652,12 +1656,14 @@ struct edid *drm_do_get_edid(struct drm_connector *connector,
 {
 	int i, j = 0, valid_extensions = 0;
 	u8 *edid, *new;
+	int retry = edid_retry;
 	struct edid *override;
 
 	override = drm_get_override_edid(connector);
 	if (override)
 		return override;
 
+retry:
 	if ((edid = kmalloc(EDID_LENGTH, GFP_KERNEL)) == NULL)
 		return NULL;
 
@@ -1734,6 +1740,13 @@ carp:
 	connector_bad_edid(connector, edid, 1);
 out:
 	kfree(edid);
+
+	if (retry--) {
+		dev_warn(connector->dev->dev, "%s: EDID retry\n",
+			 connector->name);
+		goto retry;
+	}
+
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(drm_do_get_edid);
