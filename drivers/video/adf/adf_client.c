@@ -54,7 +54,7 @@ int adf_interface_blank(struct adf_interface *intf, u8 state)
 
 	mutex_lock(&dev->client_lock);
 	if (state != DRM_MODE_DPMS_ON)
-		flush_kthread_worker(&dev->post_worker);
+		kthread_flush_worker(&dev->post_worker);
 	mutex_lock(&intf->base.event_lock);
 
 	vsync_refcount = adf_obj_find_event_refcount(&intf->base,
@@ -185,7 +185,7 @@ int adf_interface_set_mode(struct adf_interface *intf,
 		return -EOPNOTSUPP;
 
 	mutex_lock(&dev->client_lock);
-	flush_kthread_worker(&dev->post_worker);
+	kthread_flush_worker(&dev->post_worker);
 
 	ret = intf->ops->modeset(intf, mode);
 	if (ret < 0)
@@ -496,7 +496,7 @@ struct sync_fence *adf_device_post_nocopy(struct adf_device *dev,
 		goto err_fence;
 
 	list_add_tail(&cfg->head, &dev->post_list);
-	queue_kthread_work(&dev->post_worker, &dev->post_work);
+	kthread_queue_work(&dev->post_worker, &dev->post_work);
 	mutex_unlock(&dev->post_lock);
 	mutex_unlock(&dev->client_lock);
 	kfree(intfs);
