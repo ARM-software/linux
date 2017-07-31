@@ -91,15 +91,28 @@ typedef struct siginfo {
 #ifdef __ARCH_SI_TRAPNO
 			int _trapno;	/* TRAP # which caused the signal */
 #endif
-			short _addr_lsb; /* LSB of the reported address */
+#ifdef __ia64__
+			int _imm;		/* immediate value for "break" */
+			unsigned int _flags;	/* see ia64 si_flags */
+			unsigned long _isr;	/* isr */
+#endif
 			union {
+				/*
+				 * used when si_code=BUS_MCEERR_AR or
+				 * used when si_code=BUS_MCEERR_AO
+				 */
+				short _addr_lsb; /* LSB of the reported address */
 				/* used when si_code=SEGV_BNDERR */
 				struct {
+					short _dummy_bnd;
 					void __user *_lower;
 					void __user *_upper;
 				} _addr_bnd;
 				/* used when si_code=SEGV_PKUERR */
-				__u32 _pkey;
+				struct {
+					short _dummy_pkey;
+					__u32 _pkey;
+				} _addr_pkey;
 			};
 		} _sigfault;
 
@@ -143,7 +156,7 @@ typedef struct siginfo {
 #define si_addr_lsb	_sifields._sigfault._addr_lsb
 #define si_lower	_sifields._sigfault._addr_bnd._lower
 #define si_upper	_sifields._sigfault._addr_bnd._upper
-#define si_pkey		_sifields._sigfault._pkey
+#define si_pkey		_sifields._sigfault._addr_pkey._pkey
 #define si_band		_sifields._sigpoll._band
 #define si_fd		_sifields._sigpoll._fd
 #ifdef __ARCH_SIGSYS
