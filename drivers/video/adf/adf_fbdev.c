@@ -18,7 +18,7 @@
 #include <video/adf_client.h>
 #include <video/adf_fbdev.h>
 #include <video/adf_format.h>
-
+#include <video/adf_sync.h>
 #include "adf.h"
 
 struct adf_fbdev_format {

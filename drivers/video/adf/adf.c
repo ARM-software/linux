@@ -23,11 +23,9 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-
+#include <video/adf.h>
 #include <video/adf_format.h>
-
-#include "sw_sync.h"
-#include "sync.h"
+#include <video/adf_sync.h>
 
 #include "adf.h"
 #include "adf_fops.h"
@@ -106,11 +104,7 @@ void adf_post_cleanup(struct adf_device *dev, struct adf_pending_post *post)
 
 static void adf_sw_advance_timeline(struct adf_device *dev)
 {
-#ifdef CONFIG_SW_SYNC
 	sw_sync_timeline_inc(dev->timeline, 1);
-#else
-	BUG();
-#endif
 }
 
 static void adf_post_work_func(struct kthread_work *work)
@@ -529,13 +523,7 @@ int adf_device_init(struct adf_device *dev, struct device *parent,
 		return -EINVAL;
 	}
 
-	if (!ops->complete_fence && !ops->advance_timeline) {
-		if (!IS_ENABLED(CONFIG_SW_SYNC)) {
-			pr_err("%s: device requires sw_sync but it is not enabled in the kernel\n",
-					__func__);
-			return -EINVAL;
-		}
-	} else if (!(ops->complete_fence && ops->advance_timeline)) {
+	if (!(ops->complete_fence && ops->advance_timeline)) {
 		pr_err("%s: device must implement both complete_fence and advance_timeline, or implement neither\n",
 				__func__);
 		return -EINVAL;
