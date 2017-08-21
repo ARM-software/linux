@@ -223,6 +223,11 @@
 					};
 				};
 
+				v2m_sysreg: sysreg@010000 {
+					compatible = "arm,vexpress-sysreg";
+					reg = <0x010000 0x1000>;
+				};
+
 				mmci@050000 {
 					compatible = "arm,pl180", "arm,primecell";
 					reg = <0x050000 0x1000>;
