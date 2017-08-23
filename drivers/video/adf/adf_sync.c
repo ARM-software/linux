@@ -271,7 +271,12 @@ EXPORT_SYMBOL(sync_fence_put);
 
 int sync_fence_wait(struct sync_fence *fence, long timeout)
 {
-        return fence_wait(fence->file.fence, true);
+        long ret;
+
+	ret = fence_wait_timeout(fence->file.fence, false, timeout);
+	if (ret < 0)
+		return ret;
+	return (ret == 0) ? -ETIME : 0;
 }
 EXPORT_SYMBOL(sync_fence_wait);
 
