@@ -966,10 +966,11 @@ static int ipmmu_probe(struct platform_device *pdev)
 		return ret;
 
 	/*
-	 * We can't create the ARM mapping here as it requires the bus to have
-	 * an IOMMU, which only happens when bus_set_iommu() is called in
-	 * ipmmu_init() after the probe function returns.
+	 * Now that we have validated the presence of the hardware, set
+	 * the bus IOMMU ops to enable future domain and device setup.
 	 */
+	if (!iommu_present(&platform_bus_type))
+		bus_set_iommu(&platform_bus_type, &ipmmu_ops);
 
 	platform_set_drvdata(pdev, mmu);
 
@@ -1006,27 +1007,7 @@ static struct platform_driver ipmmu_driver = {
 	.remove	= ipmmu_remove,
 };
 
-static int __init ipmmu_init(void)
-{
-	int ret;
-
-	ret = platform_driver_register(&ipmmu_driver);
-	if (ret < 0)
-		return ret;
-
-	if (!iommu_present(&platform_bus_type))
-		bus_set_iommu(&platform_bus_type, &ipmmu_ops);
-
-	return 0;
-}
-
-static void __exit ipmmu_exit(void)
-{
-	return platform_driver_unregister(&ipmmu_driver);
-}
-
-subsys_initcall(ipmmu_init);
-module_exit(ipmmu_exit);
+module_platform_driver(ipmmu_driver);
 
 MODULE_DESCRIPTION("IOMMU API for Renesas VMSA-compatible IPMMU");
 MODULE_AUTHOR("Laurent Pinchart <laurent.pinchart@ideasonboard.com>");
