@@ -178,6 +178,9 @@ static int __init ion_dummy_init(void)
 		if (heap_data->type == ION_HEAP_TYPE_DMA) {
 			if (ion_dummy_declare_coherent_memory(heap_data) < 0)
 				pr_err("ion_dummy: Failed to declare DMA coherent memory\n");
+
+			arch_setup_dma_ops(&dummy_device_ion.dev,
+				heap_data->base, heap_data->size, NULL, true);
 		}
 
 		heaps[i] = ion_heap_create(heap_data);
