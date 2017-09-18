@@ -5,6 +5,7 @@
  */
 
 #include "juno-r0.dts"
+#include "juno-fpga.dtsi"
 
 / {
 	aliases {

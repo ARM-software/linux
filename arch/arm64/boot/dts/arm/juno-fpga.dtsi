@@ -1,0 +1,30 @@
+/*
+ * ARM Ltd. Juno Platform
+ *
+ * Copyright (c) 2017 ARM Ltd.
+ *
+ * This file is licensed under a dual GPLv2 or BSD license.
+ */
+
+/ {
+	buslogger@0x6f020000 {
+		compatible = "arm,buslogger";
+		reg = <0x0 0x6f020000 0x0 0x1000>,<0x0 0x60000000 0x0 0x8000000>,<0x0 0x0 0x0 0xFFF00000>;
+		reg-names = "REGISTER", "APERTURE", "MEMORY";
+		arm,axi-max-outstanding = <16>;
+		arm,axi-burst-length = <16>;
+		arm,pager-module = <1>;
+	};
+
+	fpga_sysctl@0x6f020000 {
+		compatible = "arm,mali_fpga_sysctl";
+		reg = <0x0 0x6f020000 0x0 0x000000CC>;
+	};
+
+	fpga_ram@0x60000000 {
+		compatible = "ion,dma_heap";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		reg = <0x0 0x60000000 0x0 0x08000000>;
+	};
+};
