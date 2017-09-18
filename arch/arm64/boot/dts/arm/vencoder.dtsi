@@ -1,11 +1,14 @@
+
 /*
  * arm Ltd. Virtual encoder (2018)
  */
 
 	vencoder {
 		compatible = "drm,virtual-encoder";
+	/*	command_mode="true"; */
+		status = "okay";
 		display-timings {
-			native-mode = <&timing1>;
+			native-mode = <&timing0>;
 			timing0: timing@0 {
 				/* 640x480 framebuffer */
 				clock-frequency = <23750000>;
@@ -18,6 +21,7 @@
 				vback-porch = <9>;
 				vsync-len = <3>;
 			};
+
 			timing1: timing@1 {
 				/* 1280x720 framebuffer */
 				clock-frequency = <74440000>;
