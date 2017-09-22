@@ -7,11 +7,11 @@
 		interrupt-names = "DPU";
 		clocks = <&dpu_mclk>, <&dpu_aclk>;
 		clock-names = "mclk", "pclk";
+
 		pl0: pipeline@0 {
 			clocks = <&fpgaosc2>, <&dpu_aclk>;
 			clock-names = "pxclk", "aclk";
 			reg = <0>;
-			pl_id = <0>;
 
 			ports {
 				#address-cells = <1>;
@@ -29,7 +29,6 @@
 			clocks = <&fpgaosc2>, <&dpu_aclk>;
 			clock-names = "pxclk", "aclk";
 			reg = <1>;
-			pl_id = <1>;
 
 			ports {
 				#address-cells = <1>;
