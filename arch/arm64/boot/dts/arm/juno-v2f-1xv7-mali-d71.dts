@@ -63,7 +63,7 @@
 			 <0x0c000000 0x0f000000 0x0a0000>;
 
 		/include/ "v2f-1xv7-malidp-framework.dtsi"
-		/include/ "v2f-1xv7-malidp-cetus.dtsi"
+		/include/ "v2f-1xv7-malidp-d71.dtsi"
 	};
 };
 
