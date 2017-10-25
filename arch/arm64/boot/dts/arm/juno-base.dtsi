@@ -839,13 +839,29 @@
 		};
 	};
 
+	smmu_dp0: iommu@6f300000 {
+		compatible = "arm,mmu-500";
+		reg = <0 0x6f300000 0 0x10000>;
+		#global-interrupts = <1>;
+		interrupts = <GIC_SPI 168 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 168 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 168 IRQ_TYPE_LEVEL_HIGH>;
+		#iommu-cells = <1>;
+		status = "okay";
+	};
+
 	dp0: malidp@6f200000 {
 		compatible = "arm,mali-dp650";
 		reg = <0 0x6f200000 0 0x20000>;
-		memory-region = <&display_reserved>;
+		/* memory-region = <&display_reserved>; */
 		interrupts = <0 168 IRQ_TYPE_LEVEL_HIGH>,
 			     <0 168 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-names = "DE", "SE";
+		iommus = <&smmu_dp0 0>,
+			 <&smmu_dp0 0x0400>,
+			 <&smmu_dp0 0x0800>,
+			 <&smmu_dp0 0x0c00>,
+			 <&smmu_dp0 0x1000>;
 		clocks = <&oscclk2>, <&fpgaosc0>, <&fpgaosc1>, <&fpgaosc1>;
 		clock-names = "pxlclk", "mclk", "aclk", "pclk";
 		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
