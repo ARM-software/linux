@@ -308,3 +308,7 @@
 &dp0 {
 	status = "okay";
 };
+
+&smmu_hdlcd0 {
+	status = "okay";
+};
