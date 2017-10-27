@@ -43,3 +43,11 @@
 			};
 		};
 	};
+	adu: adu@c20000 {
+			compatible = "arm,mali-adu";
+			reg = <0xc20000 0x20000>;
+			interrupts = <0 168 4>;
+			interrupt-names = "ADU";
+			clocks = <&dpu_aclk>;
+			clock-names = "aclk";
+	};

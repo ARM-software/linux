@@ -7,6 +7,11 @@ config VIDEO_V4L2
 	tristate
 	depends on (I2C || I2C=n) && VIDEO_DEV
 	default (I2C || I2C=n) && VIDEO_DEV
+	select VIDEOBUF2_CORE
+	select V4L2_MEM2MEM_DEV
+	select VIDEOBUF2_VMALLOC
+	select VIDEOBUF2_DMA_CONTIG
+	select VIDEOBUF2_DMA_SG
 
 config VIDEO_ADV_DEBUG
 	bool "Enable advanced debug functionality on V4L2 drivers"
