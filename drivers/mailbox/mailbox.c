@@ -74,7 +74,10 @@ static void msg_submit(struct mbox_chan *chan)
 	if (chan->cl->tx_prepare)
 		chan->cl->tx_prepare(chan->cl, data);
 	/* Try to submit a message to the MBOX controller */
-	err = chan->mbox->ops->send_data(chan, data);
+	if (chan->mbox->ops->send_data)
+		err = chan->mbox->ops->send_data(chan, data);
+	else
+		err = chan->mbox->ops->send_signal(chan);
 	if (!err) {
 		chan->active_req = data;
 		chan->msg_count--;
@@ -479,6 +482,12 @@ int mbox_controller_register(struct mbox_controller *mbox)
 
 	/* Sanity check */
 	if (!mbox || !mbox->dev || !mbox->ops || !mbox->num_chans)
+		return -EINVAL;
+	/*
+	 * A controller can support either doorbell mode or normal message
+	 * transmission mode but not both
+	 */
+	if (mbox->ops->send_data && mbox->ops->send_signal)
 		return -EINVAL;
 
 	if (mbox->txdone_irq)

@@ -20,6 +20,16 @@ struct mbox_chan;
  *		transmission of data is reported by the controller via
  *		mbox_chan_txdone (if it has some TX ACK irq). It must not
  *		sleep.
+ * @send_signal: The API asks the MBOX controller driver, in atomic
+ *		 context try to transmit a signal on the bus. Returns 0 if
+ *		 data is accepted for transmission, -EBUSY while rejecting
+ *		 if the remote hasn't yet absorbed the last signal sent. Actual
+ *		 transmission of data must be handled by the client and  is
+ *		 reported by the controller via mbox_chan_txdone (if it has
+ *		 some TX ACK irq). It must not sleep. Unlike send_data,
+ *		 send_signal doesn't handle any messages/data. It just sends
+ *		 notification signal(doorbell) and client needs to prepare all
+ *		 the data.
  * @flush:	Called when a client requests transmissions to be blocking but
  *		the context doesn't allow sleeping. Typically the controller
  *		will implement a busy loop waiting for the data to flush out.
@@ -45,6 +55,7 @@ struct mbox_chan;
  */
 struct mbox_chan_ops {
 	int (*send_data)(struct mbox_chan *chan, void *data);
+	int (*send_signal)(struct mbox_chan *chan);
 	int (*flush)(struct mbox_chan *chan, unsigned long timeout);
 	int (*startup)(struct mbox_chan *chan);
 	void (*shutdown)(struct mbox_chan *chan);
