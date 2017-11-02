@@ -21,6 +21,7 @@
 
 #include "malidp_drv.h"
 #include "malidp_hw.h"
+#include "malidp_mw.h"
 
 enum {
 	MW_NOT_ENABLED = 0,	/* SE writeback not enabled */
@@ -831,6 +832,7 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 			},
 			.se_irq_map = {
 				.irq_mask = MALIDP550_SE_IRQ_EOW,
+				.vsync_irq = MALIDP550_SE_IRQ_EOW,
 				.err_mask = MALIDP550_SE_IRQ_AXI_ERR |
 					    MALIDP550_SE_IRQ_OVR |
 					    MALIDP550_SE_IRQ_IBSY,
@@ -1027,6 +1029,7 @@ static irqreturn_t malidp_se_irq(int irq, void *arg)
 		switch (hwdev->mw_state) {
 		case MW_STOP:
 		case MW_ONESHOT:
+			drm_writeback_signal_completion(&malidp->mw_connector, 0);
 			hwdev->mw_state = MW_NOT_ENABLED;
 			break;
 		case MW_START:
