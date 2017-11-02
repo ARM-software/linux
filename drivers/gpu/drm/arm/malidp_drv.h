@@ -13,6 +13,8 @@
 #ifndef __MALIDP_DRV_H__
 #define __MALIDP_DRV_H__
 
+#include <drm/drm_writeback.h>
+#include <drm/drm_encoder.h>
 #include <linux/mutex.h>
 #include <linux/wait.h>
 #include <drm/drmP.h>
@@ -22,6 +24,7 @@ struct malidp_drm {
 	struct malidp_hw_device *dev;
 	struct drm_fbdev_cma *fbdev;
 	struct drm_crtc crtc;
+	struct drm_writeback_connector mw_connector;
 	wait_queue_head_t wq;
 	atomic_t config_valid;
 	struct drm_atomic_state *pm_state;
