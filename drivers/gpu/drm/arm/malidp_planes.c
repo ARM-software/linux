@@ -261,6 +261,51 @@ static void malidp_de_set_plane_pitches(struct malidp_plane *mp,
 				mp->layer->stride_offset + i * 4);
 }
 
+static const s32
+malidp_yuv2rgb_coeffs[][DRM_COLOR_RANGE_MAX][MALIDP_COLORADJ_NUM_COEFFS] = {
+	[DRM_COLOR_YCBCR_BT601][DRM_COLOR_YCBCR_LIMITED_RANGE] = {
+		1192,    0, 1634,
+		1192, -401, -832,
+		1192, 2066,    0,
+		  64,  512,  512,
+	},
+	[DRM_COLOR_YCBCR_BT601][DRM_COLOR_YCBCR_FULL_RANGE] = {
+		1024,    0, 1436,
+		1024, -352, -731,
+		1024, 1815,    0,
+		   0,  512,  512,
+	},
+	[DRM_COLOR_YCBCR_BT709][DRM_COLOR_YCBCR_LIMITED_RANGE] = {
+		1192,    0, 1836,
+		1192, -218, -546,
+		1192, 2163,    0,
+		  64,  512,  512,
+	},
+	[DRM_COLOR_YCBCR_BT709][DRM_COLOR_YCBCR_FULL_RANGE] = {
+		1024,    0, 1613,
+		1024, -192, -479,
+		1024, 1900,    0,
+		   0,  512,  512,
+	}
+};
+
+static void malidp_de_set_color_encoding(struct malidp_plane *plane,
+					 struct drm_plane_state *old_state)
+{
+	unsigned int i;
+	enum drm_color_encoding enc = plane->base.state->color_encoding;
+	enum drm_color_range range = plane->base.state->color_range;
+
+	if ((enc == old_state->color_encoding) &&
+	    (range == old_state->color_range))
+		return;
+
+	for (i = 0; i < MALIDP_COLORADJ_NUM_COEFFS; i++)
+		malidp_hw_write(plane->hwdev, malidp_yuv2rgb_coeffs[enc][range][i],
+				plane->layer->base + plane->layer->yuv2rgb_offset +
+				i * 4);
+}
+
 static void malidp_de_plane_update(struct drm_plane *plane,
 				   struct drm_plane_state *old_state)
 {
@@ -290,6 +335,8 @@ static void malidp_de_plane_update(struct drm_plane *plane,
 	}
 	malidp_de_set_plane_pitches(mp, ms->n_planes,
 				    plane->state->fb->pitches);
+
+	malidp_de_set_color_encoding(mp, old_state);
 
 	malidp_hw_write(mp->hwdev, LAYER_H_VAL(src_w) | LAYER_V_VAL(src_h),
 			mp->layer->base + MALIDP_LAYER_SIZE);
@@ -419,6 +466,31 @@ int malidp_de_planes_init(struct drm_device *drm)
 		drm_plane_create_rotation_property(&plane->base, DRM_MODE_ROTATE_0, flags);
 		malidp_hw_write(malidp->dev, MALIDP_ALPHA_LUT,
 				plane->layer->base + MALIDP_LAYER_COMPOSE);
+
+		/* Attach the YUV->RGB property only to video layers */
+		if (id & (DE_VIDEO1 | DE_VIDEO2)) {
+			/* default encoding for YUV->RGB is BT601 NARROW */
+			enum drm_color_encoding enc = DRM_COLOR_YCBCR_BT601;
+			enum drm_color_range range = DRM_COLOR_YCBCR_LIMITED_RANGE;
+
+			ret = drm_plane_create_color_properties(&plane->base,
+					BIT(DRM_COLOR_YCBCR_BT601) | BIT(DRM_COLOR_YCBCR_BT709),
+					BIT(DRM_COLOR_YCBCR_LIMITED_RANGE) | BIT(DRM_COLOR_YCBCR_FULL_RANGE),
+					enc, range);
+			if (!ret) {
+				/* program the HW registers */
+				unsigned int i;
+
+				for (i = 0; i < MALIDP_COLORADJ_NUM_COEFFS; i++)
+					malidp_hw_write(plane->hwdev,
+							malidp_yuv2rgb_coeffs[enc][range][i],
+							plane->layer->base +
+							plane->layer->yuv2rgb_offset +
+							i * 4);
+
+			} else
+				DRM_WARN("Failed to create video layer %d color properties\n", id);
+		}
 	}
 
 	kfree(formats);
