@@ -848,6 +848,11 @@ static inline int phy_read_status(struct phy_device *phydev)
 	return phydev->drv->read_status(phydev);
 }
 
+static inline void phy_device_reset(struct phy_device *phydev, int value)
+{
+	mdio_device_reset(&phydev->mdio, value);
+}
+
 #define phydev_err(_phydev, format, args...)	\
 	dev_err(&_phydev->mdio.dev, format, ##args)
 
