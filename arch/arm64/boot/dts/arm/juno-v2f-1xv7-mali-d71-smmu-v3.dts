@@ -85,6 +85,11 @@
 	status = "okay";
 };
 
+&aeu {
+	iommus = <&smmu 10>, <&smmu 11>;
+	status = "okay";
+};
+
 &dp0_pl0_out {
 	remote-endpoint = <&vtx0_in>;
 };
