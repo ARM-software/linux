@@ -52,9 +52,9 @@
 		status = "disabled";
 	};
 
-	dp_reset: malidp_reset@c000058 {
+	dp_reset: malidp_reset@c020058 {
 		compatible = "arm,malidp-reset";
-		reg = <0xc000058 0x4>;
+		reg = <0xc020058 0x4>;
 		mask = <0x7>;
 	};
 
