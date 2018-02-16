@@ -674,12 +674,14 @@ static int malidp550_enable_memwrite(struct malidp_hw_device *hwdev,
 	malidp_hw_setbits(hwdev, MALIDP550_SE_MEMWRITE_ONESHOT | MALIDP_SE_MEMWRITE_EN,
 			  MALIDP550_SE_CONTROL);
 
+	malidp_se_irq_hw_init(hwdev);
 	return 0;
 }
 
 static void malidp550_disable_memwrite(struct malidp_hw_device *hwdev)
 {
 	u32 base = malidp_get_block_base(hwdev, MALIDP_DE_BLOCK);
+	malidp_se_irq_fini(hwdev);
 	malidp_hw_clearbits(hwdev, MALIDP550_SE_MEMWRITE_ONESHOT | MALIDP_SE_MEMWRITE_EN,
 			    MALIDP550_SE_CONTROL);
 	malidp_hw_clearbits(hwdev, MALIDP_SCALE_ENGINE_EN, base + MALIDP_DE_DISPLAY_FUNC);
