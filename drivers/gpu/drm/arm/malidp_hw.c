@@ -170,6 +170,7 @@ static const u16 dp500_se_scaling_coeffs[][SE_N_SCALING_COEFFS] = {
 };
 
 #define MALIDP_DE_DEFAULT_PREFETCH_START	5
+static void malidp_se_irq_hw_init(struct malidp_hw_device *hwdev);
 
 static int malidp500_query_hw(struct malidp_hw_device *hwdev)
 {
@@ -1053,6 +1054,16 @@ static irqreturn_t malidp_se_irq(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
+static void malidp_se_irq_hw_init(struct malidp_hw_device *hwdev)
+{
+	/* ensure interrupts are disabled */
+	malidp_hw_disable_irq(hwdev, MALIDP_SE_BLOCK, 0xffffffff);
+	malidp_hw_clear_irq(hwdev, MALIDP_SE_BLOCK, 0xffffffff);
+
+	malidp_hw_enable_irq(hwdev, MALIDP_SE_BLOCK,
+			     hwdev->hw->map.se_irq_map.irq_mask);
+}
+
 static irqreturn_t malidp_se_irq_thread_handler(int irq, void *arg)
 {
 	return IRQ_HANDLED;
@@ -1077,8 +1088,7 @@ int malidp_se_irq_init(struct drm_device *drm, int irq)
 	}
 
 	hwdev->mw_state = MW_NOT_ENABLED;
-	malidp_hw_enable_irq(hwdev, MALIDP_SE_BLOCK,
-			     hwdev->hw->map.se_irq_map.irq_mask);
+	malidp_se_irq_hw_init(hwdev);
 
 	return 0;
 }
