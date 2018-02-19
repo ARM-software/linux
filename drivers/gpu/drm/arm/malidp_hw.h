@@ -229,6 +229,7 @@ struct malidp_hw_device {
 
 	u8 min_line_size;
 	u16 max_line_size;
+	u32 output_color_depth;
 
 	/* track the device PM state */
 	bool pm_suspended;
