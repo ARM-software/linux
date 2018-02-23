@@ -40,3 +40,13 @@ config DRM_MALI_DISPLAY
 	  of the hardware.
 
 	  If compiled as a module it will be called mali-dp.
+
+config DRM_MALI_DISPLAY_DEBUG
+	bool "Enable Mali DP debugging"
+	default n
+	depends on DRM_MALI_DISPLAY
+	select FTRACE
+	help
+	  Enable this option to log internal errors that happened during
+	  processing of a frame. Errors will be reported in
+	  /sys/kernel/debug/tracing/trace.

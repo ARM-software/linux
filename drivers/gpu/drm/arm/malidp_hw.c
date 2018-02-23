@@ -632,10 +632,16 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 					    MALIDP500_DE_IRQ_VSYNC |
 					    MALIDP500_DE_IRQ_GLOBAL,
 				.vsync_irq = MALIDP500_DE_IRQ_VSYNC,
+				.err_mask = MALIDP_DE_IRQ_UNDERRUN |
+					    MALIDP500_DE_IRQ_AXI_ERR |
+					    MALIDP500_DE_IRQ_SATURATION,
 			},
 			.se_irq_map = {
 				.irq_mask = MALIDP500_SE_IRQ_CONF_MODE,
 				.vsync_irq = 0,
+				.err_mask = MALIDP500_SE_IRQ_INIT_BUSY |
+					    MALIDP500_SE_IRQ_AXI_ERROR |
+					    MALIDP500_SE_IRQ_OVERRUN,
 			},
 			.dc_irq_map = {
 				.irq_mask = MALIDP500_DE_IRQ_CONF_VALID,
@@ -669,10 +675,15 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 				.irq_mask = MALIDP_DE_IRQ_UNDERRUN |
 					    MALIDP550_DE_IRQ_VSYNC,
 				.vsync_irq = MALIDP550_DE_IRQ_VSYNC,
+				.err_mask = MALIDP_DE_IRQ_UNDERRUN |
+					    MALIDP550_DE_IRQ_SATURATION |
+					    MALIDP550_DE_IRQ_AXI_ERR,
 			},
 			.se_irq_map = {
-				.irq_mask = MALIDP550_SE_IRQ_EOW |
-					    MALIDP550_SE_IRQ_AXI_ERR,
+				.irq_mask = MALIDP550_SE_IRQ_EOW,
+				.err_mask  = MALIDP550_SE_IRQ_AXI_ERR |
+					     MALIDP550_SE_IRQ_OVR |
+					     MALIDP550_SE_IRQ_IBSY,
 			},
 			.dc_irq_map = {
 				.irq_mask = MALIDP550_DC_IRQ_CONF_VALID,
@@ -707,10 +718,20 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 					    MALIDP650_DE_IRQ_DRIFT |
 					    MALIDP550_DE_IRQ_VSYNC,
 				.vsync_irq = MALIDP550_DE_IRQ_VSYNC,
+				.err_mask = MALIDP_DE_IRQ_UNDERRUN |
+					    MALIDP650_DE_IRQ_DRIFT |
+					    MALIDP550_DE_IRQ_SATURATION |
+					    MALIDP550_DE_IRQ_AXI_ERR |
+					    MALIDP650_DE_IRQ_ACEV1 |
+					    MALIDP650_DE_IRQ_ACEV2 |
+					    MALIDP650_DE_IRQ_ACEG |
+					    MALIDP650_DE_IRQ_AXIEP,
 			},
 			.se_irq_map = {
-				.irq_mask = MALIDP550_SE_IRQ_EOW |
-					    MALIDP550_SE_IRQ_AXI_ERR,
+				.irq_mask = MALIDP550_SE_IRQ_EOW,
+				.err_mask = MALIDP550_SE_IRQ_AXI_ERR |
+					    MALIDP550_SE_IRQ_OVR |
+					    MALIDP550_SE_IRQ_IBSY,
 			},
 			.dc_irq_map = {
 				.irq_mask = MALIDP550_DC_IRQ_CONF_VALID,
@@ -799,9 +820,16 @@ static irqreturn_t malidp_de_irq(int irq, void *arg)
 		return ret;
 
 	mask = malidp_hw_read(hwdev, MALIDP_REG_MASKIRQ);
-	status &= mask;
+	/* keep the status of the enabled interrupts, plus the error bits */
+	status &= (mask | de->err_mask);
 	if ((status & de->vsync_irq) && malidp->crtc.enabled)
 		drm_crtc_handle_vblank(&malidp->crtc);
+
+#ifdef CONFIG_DRM_MALI_DISPLAY_DEBUG
+	if (status & de->err_mask)
+		trace_printk("error occurred at vblank %llu DE_STATUS is 0x%08X\n",
+			     drm_crtc_vblank_count(&malidp->crtc), status);
+#endif
 
 	malidp_hw_clear_irq(hwdev, MALIDP_DE_BLOCK, status);
 
@@ -878,11 +906,16 @@ static irqreturn_t malidp_se_irq(int irq, void *arg)
 		return IRQ_NONE;
 
 	status = malidp_hw_read(hwdev, hw->map.se_base + MALIDP_REG_STATUS);
-	if (!(status & se->irq_mask))
+	if (!(status & (se->irq_mask | se->err_mask)))
 		return IRQ_NONE;
 
+#ifdef CONFIG_DRM_MALI_DISPLAY_DEBUG
+	if (status & se->err_mask)
+		trace_printk("error occurred at vblank %llu SE_STATUS is 0x%08X\n",
+			     drm_crtc_vblank_count(&malidp->crtc), status);
+#endif
+
 	mask = malidp_hw_read(hwdev, hw->map.se_base + MALIDP_REG_MASKIRQ);
-	status = malidp_hw_read(hwdev, hw->map.se_base + MALIDP_REG_STATUS);
 	status &= mask;
 	/* ToDo: status decoding and firing up of VSYNC and page flip events */
 
