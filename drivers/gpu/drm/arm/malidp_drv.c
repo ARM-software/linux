@@ -18,6 +18,9 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/pm_runtime.h>
 #include <linux/debugfs.h>
+#ifdef CONFIG_PM
+#include <linux/suspend.h>
+#endif /* CONFIG_PM */
 
 #include <drm/drmP.h>
 #include <drm/drm_atomic.h>
@@ -265,6 +268,26 @@ static const struct drm_mode_config_funcs malidp_mode_config_funcs = {
 	.atomic_commit = drm_atomic_helper_commit,
 };
 
+#ifdef CONFIG_PM
+static int malidp_pm_notifier(struct notifier_block *this, unsigned long event,
+               void *ptr)
+{
+	switch (event) {
+		case PM_POST_SUSPEND:
+			DRM_DEBUG("%s:PM_POST_SUSPEND\n",__func__);
+			break;
+		case PM_SUSPEND_PREPARE:
+			DRM_DEBUG("%s:PM_SUSPEND_PREPARE\n",__func__);
+			break;
+	}
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block malidp_power_notifier = {
+    .notifier_call = malidp_pm_notifier,
+};
+#endif /* CONFIG_PM */
+
 static int malidp_init(struct drm_device *drm)
 {
 	int ret;
@@ -288,6 +311,11 @@ static int malidp_init(struct drm_device *drm)
 	if (ret)
 		goto crtc_fail;
 
+#if CONFIG_PM
+	ret = register_pm_notifier(&malidp_power_notifier);
+	if (ret)
+		return ret;
+#endif /* CONFIG_PM */
 	return 0;
 
 crtc_fail:
@@ -297,6 +325,9 @@ crtc_fail:
 
 static void malidp_fini(struct drm_device *drm)
 {
+#if CONFIG_PM
+	unregister_pm_notifier(&malidp_power_notifier);
+#endif /* CONFIG_PM */
 	drm_mode_config_cleanup(drm);
 }
 
@@ -871,6 +902,7 @@ static int __maybe_unused malidp_pm_suspend(struct device *dev)
 {
 	struct drm_device *drm = dev_get_drvdata(dev);
 
+	DRM_DEBUG("malidp_sys_pm_suspend\n");
 	return drm_mode_config_helper_suspend(drm);
 }
 
@@ -878,6 +910,7 @@ static int __maybe_unused malidp_pm_resume(struct device *dev)
 {
 	struct drm_device *drm = dev_get_drvdata(dev);
 
+	DRM_DEBUG("malidp_sys_pm_complete\n");
 	drm_mode_config_helper_resume(drm);
 
 	return 0;
@@ -885,6 +918,7 @@ static int __maybe_unused malidp_pm_resume(struct device *dev)
 
 static int __maybe_unused malidp_pm_suspend_late(struct device *dev)
 {
+	DRM_DEBUG("malidp_sys_pm_suspend_late\n");
 	if (!pm_runtime_status_suspended(dev)) {
 		malidp_runtime_pm_suspend(dev);
 		pm_runtime_set_suspended(dev);
@@ -894,6 +928,7 @@ static int __maybe_unused malidp_pm_suspend_late(struct device *dev)
 
 static int __maybe_unused malidp_pm_resume_early(struct device *dev)
 {
+	DRM_DEBUG("malidp_sys_pm_resume_early\n");
 	malidp_runtime_pm_resume(dev);
 	pm_runtime_set_active(dev);
 	return 0;
