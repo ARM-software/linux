@@ -538,6 +538,12 @@ Plane Color Management Properties
 .. kernel-doc:: drivers/gpu/drm/drm_plane.c
    :doc: ctm_property
 
+.. kernel-doc:: drivers/gpu/drm/drm_plane.c
+   :doc: gamma_lut_property
+
+.. kernel-doc:: drivers/gpu/drm/drm_plane.c
+   :doc: gamma_lut_size_property
+
 Tile Group Property
 -------------------
 

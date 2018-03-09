@@ -3602,6 +3602,8 @@ void __drm_atomic_helper_plane_duplicate_state(struct drm_plane *plane,
 		drm_property_reference_blob(state->degamma_lut);
 	if (state->ctm)
 		drm_property_reference_blob(state->ctm);
+	if (state->gamma_lut)
+		drm_property_reference_blob(state->gamma_lut);
 	state->color_mgmt_changed = false;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_duplicate_state);
@@ -3650,6 +3652,7 @@ void __drm_atomic_helper_plane_destroy_state(struct drm_plane_state *state)
 
 	drm_property_unreference_blob(state->degamma_lut);
 	drm_property_unreference_blob(state->ctm);
+	drm_property_unreference_blob(state->gamma_lut);
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_destroy_state);
 
