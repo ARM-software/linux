@@ -430,6 +430,25 @@ void drm_plane_force_disable(struct drm_plane *plane)
 }
 EXPORT_SYMBOL(drm_plane_force_disable);
 
+/*
+ * Added to accommodate enhanced LUT precision.
+ * Max LUT precision is 32 bits.
+ */
+uint32_t drm_color_lut_extract_ext(uint32_t user_input, uint32_t bit_precision)
+{
+	uint32_t val = user_input;
+	uint32_t max = 0xffffffff >> (32 - bit_precision);
+
+	/* Round only if we're not using full precision. */
+	if (bit_precision < 32) {
+		val += 1UL << (32 - bit_precision - 1);
+		val >>= 32 - bit_precision;
+	}
+
+	return clamp_val(val, 0, max);
+}
+EXPORT_SYMBOL(drm_color_lut_extract_ext);
+
 /**
  * drm_mode_plane_set_obj_prop - set the value of a property
  * @plane: drm plane object to set property value for
