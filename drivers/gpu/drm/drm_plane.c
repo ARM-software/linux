@@ -470,6 +470,11 @@ EXPORT_SYMBOL(drm_mode_plane_set_obj_prop);
  *
  * degamma_lut_size_property:
  *	Range Property to indicate size of the plane degamma LUT.
+ *
+ * ctm_property:
+ *	Blob property which allows a userspace to provide CTM coefficients
+ *	to do color space conversion or any other enhancement by doing a
+ *	matrix multiplication using the h/w CTM processing engine
  */
 int drm_plane_color_create_prop(struct drm_device *dev,
 				struct drm_plane *plane)
@@ -489,6 +494,13 @@ int drm_plane_color_create_prop(struct drm_device *dev,
 	if (!prop)
 		return -ENOMEM;
 	plane->degamma_lut_size_property = prop;
+
+	prop = drm_property_create(dev,
+			DRM_MODE_PROP_BLOB,
+			"PLANE_CTM", 0);
+	if (!prop)
+		return -ENOMEM;
+	plane->ctm_property = prop;
 
 	return 0;
 }

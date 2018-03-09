@@ -203,6 +203,14 @@ struct drm_plane_state {
 	struct drm_property_blob *degamma_lut;
 
 	/**
+	 * @ctm:
+	 *
+	 * Color transformation matrix. See drm_plane_enable_color_mgmt(). The
+	 * blob (if not NULL) is a &struct drm_color_ctm.
+	 */
+	struct drm_property_blob *ctm;
+
+	/**
 	 * @commit: Tracks the pending commit to prevent use-after-free conditions,
 	 * and for async plane updates.
 	 *
@@ -577,6 +585,7 @@ enum drm_plane_type {
  * @helper_private: mid-layer private data
  * @degamma_lut_property: Property for plane degamma LUT
  * @degamma_lut_size_property: Property for size of plane degamma LUT
+ * @ctm_property: Property for plane CTM matrix
  */
 struct drm_plane {
 	/** @dev: DRM device this plane belongs to */
@@ -735,6 +744,13 @@ struct drm_plane {
 	 * size of the degamma LUT as supported by the driver (read-only).
 	 */
 	struct drm_property *degamma_lut_size_property;
+
+	/**
+	 * @plane_ctm_property: Optional Plane property to set the
+	 * matrix used to convert colors after the lookup in the
+	 * degamma LUT.
+	 */
+	struct drm_property *ctm_property;
 };
 
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
