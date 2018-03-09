@@ -194,6 +194,14 @@ struct drm_plane_state {
 	 */
 	bool visible;
 
+	/* @degamma_lut:
+	 *
+	 * Lookup table for converting framebuffer pixel data before apply the
+	 * color conversion matrix @ctm. See drm_plane_enable_color_mgmt(). The
+	 * blob (if not NULL) is an array of &struct drm_color_lut_ext.
+	 */
+	struct drm_property_blob *degamma_lut;
+
 	/**
 	 * @commit: Tracks the pending commit to prevent use-after-free conditions,
 	 * and for async plane updates.
@@ -204,6 +212,8 @@ struct drm_plane_state {
 
 	/** @state: backpointer to global drm_atomic_state */
 	struct drm_atomic_state *state;
+
+	bool color_mgmt_changed : 1;
 };
 
 static inline struct drm_rect
@@ -565,6 +575,8 @@ enum drm_plane_type {
  * @rotation_property: rotation property for this plane
  * @blend_mode_property: blend mode property for this plane
  * @helper_private: mid-layer private data
+ * @degamma_lut_property: Property for plane degamma LUT
+ * @degamma_lut_size_property: Property for size of plane degamma LUT
  */
 struct drm_plane {
 	/** @dev: DRM device this plane belongs to */
@@ -711,6 +723,18 @@ struct drm_plane {
 	 * See drm_plane_create_color_properties().
 	 */
 	struct drm_property *color_range_property;
+
+	/**
+	 * @degamma_lut_property: Optional Plane property to set the LUT
+	 * used to convert the framebuffer's colors to linear gamma.
+	 */
+	struct drm_property *degamma_lut_property;
+
+	/**
+	 * @degamma_lut_size_property: Optional Plane property for the
+	 * size of the degamma LUT as supported by the driver (read-only).
+	 */
+	struct drm_property *degamma_lut_size_property;
 };
 
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
@@ -760,6 +784,8 @@ void drm_plane_force_disable(struct drm_plane *plane);
 int drm_mode_plane_set_obj_prop(struct drm_plane *plane,
 				       struct drm_property *property,
 				       uint64_t value);
+int drm_plane_color_create_prop(struct drm_device *dev,
+				struct drm_plane *plane);
 
 /**
  * drm_plane_find - find a &drm_plane

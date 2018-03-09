@@ -459,6 +459,41 @@ int drm_mode_plane_set_obj_prop(struct drm_plane *plane,
 }
 EXPORT_SYMBOL(drm_mode_plane_set_obj_prop);
 
+/**
+ * DOC: degamma_lut_property
+ *
+ * degamma_lut_property:
+ *	Blob property which allows a userspace to provide LUT values
+ *	to apply degamma curve using the h/w plane degamma processing
+ *	engine, thereby making the content as linear for further color
+ *	processing.
+ *
+ * degamma_lut_size_property:
+ *	Range Property to indicate size of the plane degamma LUT.
+ */
+int drm_plane_color_create_prop(struct drm_device *dev,
+				struct drm_plane *plane)
+{
+	struct drm_property *prop;
+
+	prop = drm_property_create(dev,
+			DRM_MODE_PROP_BLOB,
+			"PLANE_DEGAMMA_LUT", 0);
+	if (!prop)
+		return -ENOMEM;
+	plane->degamma_lut_property = prop;
+
+	prop = drm_property_create_range(dev,
+			DRM_MODE_PROP_IMMUTABLE,
+			"PLANE_DEGAMMA_LUT_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+	plane->degamma_lut_size_property = prop;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_plane_color_create_prop);
+
 int drm_mode_getplane_res(struct drm_device *dev, void *data,
 			  struct drm_file *file_priv)
 {
