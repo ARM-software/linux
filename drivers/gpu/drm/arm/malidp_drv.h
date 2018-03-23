@@ -45,6 +45,7 @@ struct malidp_drm {
 	/* Protects errors stats */
 	spinlock_t errors_lock;
 #endif
+	struct drm_property *prop_clk_ratio;
 };
 
 #define crtc_to_malidp_device(x) container_of(x, struct malidp_drm, crtc)

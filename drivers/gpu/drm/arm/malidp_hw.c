@@ -893,6 +893,23 @@ u8 malidp_hw_get_format_id(const struct malidp_hw_regmap *map,
 	return MALIDP_INVALID_FORMAT_ID;
 }
 
+u32 malidp_hw_get_clock_ratio(struct malidp_hw_device *hwdev)
+{
+	u64 current_mclk;
+	u32 clock_r;
+
+	if (hwdev->mclk == hwdev->pxlclk)
+		return 1 << 16;
+
+	current_mclk = (clk_get_rate(hwdev->mclk) / 1000) << 16;
+	clock_r = clk_get_rate(hwdev->pxlclk) / 1000;
+
+	do_div(current_mclk, clock_r);
+	clock_r = current_mclk;
+
+	return clock_r;
+}
+
 static void malidp_hw_clear_irq(struct malidp_hw_device *hwdev, u8 block, u32 irq)
 {
 	u32 base = malidp_get_block_base(hwdev, block);

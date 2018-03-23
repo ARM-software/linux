@@ -288,6 +288,21 @@ static struct notifier_block malidp_power_notifier = {
 };
 #endif /* CONFIG_PM */
 
+static int malidp_create_properties(struct drm_device *drm)
+{
+	struct malidp_drm *malidp = drm->dev_private;
+	struct drm_property *prop;
+
+	prop = drm_property_create_range(drm, DRM_MODE_PROP_ATOMIC,
+				"CLOCK_RATIO", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+
+	malidp->prop_clk_ratio = prop;
+
+	return 0;
+}
+
 static int malidp_init(struct drm_device *drm)
 {
 	int ret;
@@ -302,6 +317,8 @@ static int malidp_init(struct drm_device *drm)
 	drm->mode_config.max_height = hwdev->max_line_size;
 	drm->mode_config.funcs = &malidp_mode_config_funcs;
 	drm->mode_config.helper_private = &malidp_mode_config_helpers;
+
+	malidp_create_properties(drm);
 
 	ret = malidp_crtc_init(drm);
 	if (ret)

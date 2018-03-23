@@ -518,12 +518,14 @@ static const struct drm_crtc_funcs malidp_crtc_funcs = {
 	.atomic_destroy_state = malidp_crtc_destroy_state,
 	.enable_vblank = malidp_crtc_enable_vblank,
 	.disable_vblank = malidp_crtc_disable_vblank,
+	.atomic_get_property = malidp_crtc_atomic_get_property,
 };
 
 int malidp_crtc_init(struct drm_device *drm)
 {
 	struct malidp_drm *malidp = drm->dev_private;
 	struct drm_plane *primary = NULL, *plane;
+	struct drm_crtc *crtc = &malidp->crtc;
 	int ret;
 
 	ret = malidp_de_planes_init(drm);
@@ -544,17 +546,21 @@ int malidp_crtc_init(struct drm_device *drm)
 		return -EINVAL;
 	}
 
-	ret = drm_crtc_init_with_planes(drm, &malidp->crtc, primary, NULL,
+	ret = drm_crtc_init_with_planes(drm, crtc, primary, NULL,
 					&malidp_crtc_funcs, NULL);
 	if (ret)
 		return ret;
 
-	drm_crtc_helper_add(&malidp->crtc, &malidp_crtc_helper_funcs);
-	drm_mode_crtc_set_gamma_size(&malidp->crtc, MALIDP_GAMMA_LUT_SIZE);
+	drm_crtc_helper_add(crtc, &malidp_crtc_helper_funcs);
+	drm_mode_crtc_set_gamma_size(crtc, MALIDP_GAMMA_LUT_SIZE);
 	/* No inverse-gamma: it is per-plane. */
-	drm_crtc_enable_color_mgmt(&malidp->crtc, 0, true, MALIDP_GAMMA_LUT_SIZE);
+	drm_crtc_enable_color_mgmt(crtc, 0, true, MALIDP_GAMMA_LUT_SIZE);
 
 	malidp_se_set_enh_coeffs(malidp->dev);
+
+	if (malidp->prop_clk_ratio)
+		drm_object_attach_property(&crtc->base, malidp->prop_clk_ratio,
+					   0);
 
 	return 0;
 }
