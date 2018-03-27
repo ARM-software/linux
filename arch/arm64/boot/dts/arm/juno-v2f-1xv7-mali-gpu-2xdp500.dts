@@ -39,8 +39,9 @@
 	/include/ "v2c-hdmi.dtsi"
 };
 
+
 &gpu_fpga {
-	status = "okay";
+	status = "disabled";
 };
 
 /* Configure DP0 with daughterboard transmitter */
@@ -58,7 +59,7 @@
 
 /* Configure DP1 with daughterboard transmitter */
 &dp1 {
-	status = "okay";
+	status = "disabled";
 };
 
 &dp1_out {
@@ -69,13 +70,11 @@
 	remote-endpoint = <&dp1_out>;
 };
 
-/* Enable both DP500 MMUs */
+/* Enable DP500 MMUs */
 &smmu_fpga0 {
 	status = "okay";
-	mmu-masters = <&dp0 0>;
 };
 
 &smmu_fpga1 {
-	status = "okay";
-	mmu-masters = <&dp1 0>;
+	status = "disabled";
 };
