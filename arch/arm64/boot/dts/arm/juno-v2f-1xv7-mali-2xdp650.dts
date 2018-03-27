@@ -58,7 +58,7 @@
 
 /* Configure DP1 with daughterboard transmitter */
 &dp1 {
-	status = "okay";
+	status = "disabled";
 };
 
 &dp1_out {

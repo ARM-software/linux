@@ -2,17 +2,16 @@
 		compatible = "arm,mali-dp550";
 		reg = <0x200000 0x20000>;
 		memory-region = <&display_reserved>;
-		interrupts = <3>, <3>;
+		interrupts = <168>, <168>;
 		interrupt-names = "DE", "SE";
 		iommus = <&smmu_fpga0 0x8>,
-				 <&smmu_fpga0 0x9>,
-				 <&smmu_fpga0 0xa>,
-				 <&smmu_fpga0 0xb>,
-				 <&smmu_fpga0 0xc>;
+			 <&smmu_fpga0 0x9>,
+			 <&smmu_fpga0 0xa>,
+			 <&smmu_fpga0 0xb>,
+			 <&smmu_fpga0 0xc>;
 		clocks = <&fpgaosc2>, <&dpu_mclk>, <&dpu_aclk>, <&dpu_aclk>;
 		clock-names = "pxlclk", "mclk", "aclk", "pclk";
 		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
-		#stream-id-cells = <5>;
 		status = "disabled";
 		port {
 			dp0_out: endpoint {
@@ -25,32 +24,20 @@
 		compatible = "arm,mali-dp550";
 		reg = <0x220000 0x20000>;
 		memory-region = <&display_reserved>;
-		interrupts = <3>, <3>;
+		interrupts = <168>, <168>;
 		interrupt-names = "DE", "SE";
-		iommus = <&smmu_fpga1 0x8>,
-				 <&smmu_fpga1 0x9>,
-				 <&smmu_fpga1 0xa>,
-				 <&smmu_fpga1 0xb>,
-				 <&smmu_fpga1 0xc>;
+		iommus = <&smmu_fpga1 0x408>,
+			 <&smmu_fpga1 0x409>,
+			 <&smmu_fpga1 0x40a>,
+			 <&smmu_fpga1 0x40b>,
+			 <&smmu_fpga1 0x40c>;
 		clocks = <&fpgaosc2>, <&dpu_mclk>, <&dpu_aclk>, <&dpu_aclk>;
 		clock-names = "pxlclk", "mclk", "aclk", "pclk";
 		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
-		#stream-id-cells = <5>;
 		status = "disabled";
 		port {
 			dp1_out: endpoint {
 
 			};
 		};
-	};
-
-	/* The MMU-500 is used (with two TBUs) for some DP550 bitfiles */
-	smmu_dp: smmu@300000 {
-		compatible = "arm,mmu-500";
-		reg = <0x300000 0x10000>;
-		#global-interrupts = <1>;
-		interrupts = <3>, <3>, <3>;
-		mmu-masters = <&dp0 0x008 0x009 0x00a 0x00b 0x00c>,
-			      <&dp1 0x408 0x409 0x40a 0x40b 0x40c>;
-		status = "disabled";
 	};
