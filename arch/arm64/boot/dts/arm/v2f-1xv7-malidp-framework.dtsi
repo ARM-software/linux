@@ -69,18 +69,19 @@
 	};
 
 	smmu_fpga0: smmu@c070000 {
-		compatible = "arm,mmu-400";
+		compatible = "arm,mmu-400", "arm,smmu-v1";
 		reg = <0xc070000 0x10000>;
 		#global-interrupts = <1>;
 		interrupts = <3>, <3>;
+		#iommu-cells = <1>;
 		status = "disabled";
 	};
 
 	smmu_fpga1: smmu@c080000 {
-		compatible = "arm,mmu-400";
+		compatible = "arm,mmu-400", "arm,smmu-v1";
 		reg = <0xc080000 0x10000>;
 		#global-interrupts = <1>;
 		interrupts = <3>, <3>;
 		status = "disabled";
-		#iommu-cells = <0x1>;
+		#iommu-cells = <1>;
 	};

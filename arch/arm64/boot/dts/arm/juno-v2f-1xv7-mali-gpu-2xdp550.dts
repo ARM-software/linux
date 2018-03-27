@@ -57,13 +57,12 @@
 };
 
 &smmu_fpga0 {
-	mmu-masters = <&dp0 0x8 0x9 0xa 0xb 0xc>;
 	status = "okay";
 };
 
 /* Configure DP1 with daughterboard transmitter and MMU-400 */
 &dp1 {
-	status = "okay";
+	status = "disabled";
 };
 
 &dp1_out {
@@ -75,6 +74,5 @@
 };
 
 &smmu_fpga1 {
-	mmu-masters = <&dp1 0x8 0x9 0xa 0xb 0xc>;
-	status = "okay";
+	status = "disabled";
 };

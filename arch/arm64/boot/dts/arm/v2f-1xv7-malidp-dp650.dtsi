@@ -1,12 +1,17 @@
 	dp0: display@200000 {
 		compatible = "arm,mali-dp650";
 		reg = <0x200000 0x20000>;
-		interrupts = <3>, <3>;
+		/* memory-region = <&display_reserved>; */
+		interrupts = <168>, <168>;
 		interrupt-names = "DE", "SE";
+		iommus = <&smmu_dp0 0>,
+			 <&smmu_dp0 0x0400>,
+			 <&smmu_dp0 0x0800>,
+			 <&smmu_dp0 0x0c00>,
+			 <&smmu_dp0 0x1000>;
 		clocks = <&fpgaosc2>, <&dpu_mclk>, <&dpu_aclk>, <&dpu_aclk>;
 		clock-names = "pxlclk", "mclk", "aclk", "pclk";
 		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
-		#stream-id-cells = <5>;
 		status = "disabled";
 		port {
 			dp0_out: endpoint {
@@ -18,12 +23,16 @@
 	dp1: display@220000 {
 		compatible = "arm,mali-dp650";
 		reg = <0x220000 0x20000>;
-		interrupts = <3>, <3>;
+		interrupts = <168>, <168>;
 		interrupt-names = "DE", "SE";
+		iommus = <&smmu_dp1 0>,
+			 <&smmu_dp1 0x0400>,
+			 <&smmu_dp1 0x0800>,
+			 <&smmu_dp1 0x0c00>,
+			 <&smmu_dp1 0x1000>;
 		clocks = <&fpgaosc2>, <&dpu_mclk>, <&dpu_aclk>, <&dpu_aclk>;
 		clock-names = "pxlclk", "mclk", "aclk", "pclk";
 		arm,malidp-output-port-lines = /bits/ 8 <8 8 8>;
-		#stream-id-cells = <5>;
 		status = "disabled";
 		port {
 			dp1_out: endpoint {
@@ -37,7 +46,7 @@
 		reg = <0x300000 0x10000>;
 		#global-interrupts = <1>;
 		interrupts = <3>, <3>, <3>;
-		mmu-masters = <&dp0 0x000 0x400 0x800 0xc00 0x1000>;
+		#iommu-cells = <1>;
 		status = "disabled";
 	};
 
@@ -46,6 +55,6 @@
 		reg = <0x400000 0x10000>;
 		#global-interrupts = <1>;
 		interrupts = <3>, <3>, <3>;
-		mmu-masters = <&dp1 0x000 0x400 0x800 0xc00 0x1000>;
+		#iommu-cells = <1>;
 		status = "disabled";
 	};
