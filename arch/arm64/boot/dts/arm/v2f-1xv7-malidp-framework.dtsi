@@ -15,10 +15,10 @@
 	};
 
 	dpu_mclk: dpu_mclk {
-		/* 67.5 MHz derived from 24 MHz reference clock */
+		/* 77.1 MHz derived from 24 MHz reference clock */
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
-		clock-frequency = <67500000>;
+		clock-frequency = <77100000>;
 		clock-output-names = "fpga:dpu_mclk";
 	};
 
