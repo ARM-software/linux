@@ -469,7 +469,8 @@ retry:
 
 	dev->mode_config.poll_running = drm_kms_helper_poll;
 
-	if (connector->status == connector_status_disconnected) {
+	if (connector->status == connector_status_disconnected &&
+			connector->connector_type != DRM_MODE_CONNECTOR_WRITEBACK) {
 		DRM_DEBUG_KMS("[CONNECTOR:%d:%s] disconnected\n",
 			connector->base.id, connector->name);
 		drm_connector_update_edid_property(connector, NULL);
