@@ -287,7 +287,6 @@ crtc_fail:
 
 static void malidp_fini(struct drm_device *drm)
 {
-	drm_atomic_helper_shutdown(drm);
 	drm_mode_config_cleanup(drm);
 }
 
@@ -660,6 +659,7 @@ vblank_fail:
 	malidp_de_irq_fini(hwdev);
 	drm->irq_enabled = false;
 irq_init_fail:
+	drm_atomic_helper_shutdown(drm);
 	component_unbind_all(dev, drm);
 bind_fail:
 	of_node_put(malidp->crtc.port);
@@ -696,6 +696,7 @@ static void malidp_unbind(struct device *dev)
 	malidp_se_irq_fini(hwdev);
 	malidp_de_irq_fini(hwdev);
 	drm->irq_enabled = false;
+	drm_atomic_helper_shutdown(drm);
 	component_unbind_all(dev, drm);
 	of_node_put(malidp->crtc.port);
 	malidp->crtc.port = NULL;
