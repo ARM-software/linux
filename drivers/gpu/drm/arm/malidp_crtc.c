@@ -508,6 +508,36 @@ static void malidp_crtc_disable_vblank(struct drm_crtc *crtc)
 			      hwdev->hw->map.de_irq_map.vsync_irq);
 }
 
+static int malidp_crtc_atomic_get_property(struct drm_crtc *crtc,
+		const struct drm_crtc_state *state,
+		struct drm_property *property, uint64_t *val)
+{
+	struct drm_device *dev = crtc->dev;
+	struct malidp_drm *malidp = dev->dev_private;
+
+	if (property == malidp->prop_clk_ratio) {
+		uint64_t clk_ratio;
+
+		if (!crtc->state->enable) {
+			DRM_DEBUG_DRIVER("CRTC not enabled.\n");
+			return 0;
+		}
+
+		clk_ratio = malidp_hw_get_clock_ratio(malidp->dev);
+		if (clk_ratio == 0) {
+			DRM_ERROR("Got clock_ratio failed.\n");
+			return -EINVAL;
+		}
+
+		*val = clk_ratio;
+	} else {
+		DRM_DEBUG_DRIVER("Unknown property %s\n", property->name);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct drm_crtc_funcs malidp_crtc_funcs = {
 	.gamma_set = drm_atomic_helper_legacy_gamma_set,
 	.destroy = drm_crtc_cleanup,

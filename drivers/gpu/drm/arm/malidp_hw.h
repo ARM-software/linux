@@ -311,7 +311,7 @@ void malidp_se_irq_fini(struct malidp_hw_device *hwdev);
 
 u8 malidp_hw_get_format_id(const struct malidp_hw_regmap *map,
 			   u8 layer_id, u32 format);
-u32 malidp_hw_get_clock_ratio(struct malidp_hw_device *hwdev);
+u64 malidp_hw_get_clock_ratio(struct malidp_hw_device *hwdev);
 
 static inline u8 malidp_hw_get_pitch_align(struct malidp_hw_device *hwdev, bool rotated)
 {
