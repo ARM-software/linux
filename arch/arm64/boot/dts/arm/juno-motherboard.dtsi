@@ -64,42 +64,42 @@
 					wakeup-source;
 					linux,code = <116>;
 					label = "POWER";
-					gpios = <&iofpga_gpio0 0 0x4>;
+					gpios = <&iofpga_gpio0 0 0x1>;
 				};
 				home-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <102>;
 					label = "HOME";
-					gpios = <&iofpga_gpio0 1 0x4>;
+					gpios = <&iofpga_gpio0 1 0x1>;
 				};
 				rlock-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <152>;
 					label = "RLOCK";
-					gpios = <&iofpga_gpio0 2 0x4>;
+					gpios = <&iofpga_gpio0 2 0x1>;
 				};
 				vol-up-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <115>;
 					label = "VOL+";
-					gpios = <&iofpga_gpio0 3 0x4>;
+					gpios = <&iofpga_gpio0 3 0x1>;
 				};
 				vol-down-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <114>;
 					label = "VOL-";
-					gpios = <&iofpga_gpio0 4 0x4>;
+					gpios = <&iofpga_gpio0 4 0x1>;
 				};
 				nmi-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <99>;
 					label = "NMI";
-					gpios = <&iofpga_gpio0 5 0x4>;
+					gpios = <&iofpga_gpio0 5 0x1>;
 				};
 			};
 
