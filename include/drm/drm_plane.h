@@ -34,12 +34,31 @@ struct drm_modeset_acquire_ctx;
 
 /**
  * struct drm_plane_state - mutable plane state
- *
- * Please not that the destination coordinates @crtc_x, @crtc_y, @crtc_h and
- * @crtc_w and the source coordinates @src_x, @src_y, @src_h and @src_w are the
- * raw coordinates provided by userspace. Drivers should use
- * drm_atomic_helper_check_plane_state() and only use the derived rectangles in
- * @src and @dst to program the hardware.
+ * @plane: backpointer to the plane
+ * @crtc_w: width of visible portion of plane on crtc
+ * @crtc_h: height of visible portion of plane on crtc
+ * @src_x: left position of visible portion of plane within
+ *	plane (in 16.16)
+ * @src_y: upper position of visible portion of plane within
+ *	plane (in 16.16)
+ * @src_w: width of visible portion of plane (in 16.16)
+ * @src_h: height of visible portion of plane (in 16.16)
+ * @alpha: opacity of the plane
+ * @pixel_blend_mode: how the plane's framebuffer alpha channel is used when
+ *	blending with the background colour.
+ * @rotation: rotation of the plane
+ * @zpos: priority of the given plane on crtc (optional)
+ *	Note that multiple active planes on the same crtc can have an identical
+ *	zpos value. The rule to solving the conflict is to compare the plane
+ *	object IDs; the plane with a higher ID must be stacked on top of a
+ *	plane with a lower ID.
+ * @normalized_zpos: normalized value of zpos: unique, range from 0 to N-1
+ *	where N is the number of active planes for given crtc. Note that
+ *	the driver must set drm_mode_config.normalize_zpos or call
+ *	drm_atomic_normalize_zpos() to update this before it can be trusted.
+ * @src: clipped source coordinates of the plane (in 16.16)
+ * @dst: clipped destination coordinates of the plane
+ * @state: backpointer to global drm_atomic_state
  */
 struct drm_plane_state {
 	/** @plane: backpointer to the plane */
@@ -117,6 +136,7 @@ struct drm_plane_state {
 	 * details.
 	 */
 	u16 alpha;
+	uint16_t pixel_blend_mode;
 
 	/**
 	 * @rotation:
@@ -525,12 +545,26 @@ enum drm_plane_type {
 
 /**
  * struct drm_plane - central DRM plane control structure
- *
- * Planes represent the scanout hardware of a display block. They receive their
- * input data from a &drm_framebuffer and feed it to a &drm_crtc. Planes control
- * the color conversion, see `Plane Composition Properties`_ for more details,
- * and are also involved in the color conversion of input pixels, see `Color
- * Management Properties`_ for details on that.
+ * @dev: DRM device this plane belongs to
+ * @head: for list management
+ * @name: human readable name, can be overwritten by the driver
+ * @base: base mode object
+ * @possible_crtcs: pipes this plane can be bound to
+ * @format_types: array of formats supported by this plane
+ * @format_count: number of formats supported
+ * @format_default: driver hasn't supplied supported formats for the plane
+ * @modifiers: array of modifiers supported by this plane
+ * @modifier_count: number of modifiers supported
+ * @old_fb: Temporary tracking of the old fb while a modeset is ongoing. Used by
+ * 	drm_mode_set_config_internal() to implement correct refcounting.
+ * @funcs: helper functions
+ * @properties: property tracking for this plane
+ * @type: type of plane (overlay, primary, cursor)
+ * @alpha_property: alpha property for this plane
+ * @zpos_property: zpos property for this plane
+ * @rotation_property: rotation property for this plane
+ * @blend_mode_property: blend mode property for this plane
+ * @helper_private: mid-layer private data
  */
 struct drm_plane {
 	/** @dev: DRM device this plane belongs to */
@@ -659,6 +693,7 @@ struct drm_plane {
 	 * drm_plane_create_rotation_property().
 	 */
 	struct drm_property *rotation_property;
+	struct drm_property *blend_mode_property;
 
 	/**
 	 * @color_encoding_property:
