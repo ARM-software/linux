@@ -318,7 +318,7 @@ static int host1x_device_match(struct device *dev, struct device_driver *drv)
 
 static int host1x_dma_configure(struct device *dev)
 {
-	return of_dma_configure(dev, dev->of_node);
+	return of_dma_configure(dev, dev->of_node, true);
 }
 
 static const struct dev_pm_ops host1x_device_pm_ops = {
