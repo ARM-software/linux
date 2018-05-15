@@ -130,6 +130,35 @@ static void malidp_plane_atomic_print_state(struct drm_printer *p,
 	drm_printf(p, "\tigamma_status=%d\n", ms->igamma_status);
 }
 
+static bool malidp_format_mod_supported(struct drm_plane *plane,
+					u32 format, u64 modifier)
+{
+	if (WARN_ON(modifier == DRM_FORMAT_MOD_INVALID))
+		return false;
+
+	/* All the pixel formats are supported without any modifier */
+	if (modifier == DRM_FORMAT_MOD_LINEAR)
+		return true;
+
+	if ((modifier >> 56) != DRM_FORMAT_MOD_VENDOR_ARM)
+		return false;
+
+	if (modifier &
+	    ~DRM_FORMAT_MOD_ARM_AFBC(AFBC_MOD_VALID_BITS)) {
+		DRM_DEBUG_KMS("Unsupported modifiers\n");
+		return false;
+	}
+
+	switch (modifier) {
+	case DRM_FORMAT_MOD_ARM_AFBC(AFBC_FORMAT_MOD_BLOCK_SIZE_16x16 |
+				AFBC_FORMAT_MOD_YTR |
+				AFBC_FORMAT_MOD_SPARSE):
+		if (format == DRM_FORMAT_BGR888)
+			return true;
+	}
+	return false;
+}
+
 static const struct drm_plane_funcs malidp_de_plane_funcs = {
 	.update_plane = drm_atomic_helper_update_plane,
 	.disable_plane = drm_atomic_helper_disable_plane,
@@ -138,6 +167,7 @@ static const struct drm_plane_funcs malidp_de_plane_funcs = {
 	.atomic_duplicate_state = malidp_duplicate_plane_state,
 	.atomic_destroy_state = malidp_destroy_plane_state,
 	.atomic_print_state = malidp_plane_atomic_print_state,
+	.format_mod_supported = malidp_format_mod_supported,
 };
 
 static int malidp_se_check_scaling(struct malidp_plane *mp,
@@ -516,6 +546,13 @@ int malidp_de_planes_init(struct drm_device *drm)
 	u32 *formats;
 	int ret, i, j, n;
 
+	static const u64 modifiers[] = {
+		DRM_FORMAT_MOD_ARM_AFBC(AFBC_FORMAT_MOD_BLOCK_SIZE_16x16 |
+			AFBC_FORMAT_MOD_YTR | AFBC_FORMAT_MOD_SPARSE),
+		DRM_FORMAT_MOD_LINEAR,
+		DRM_FORMAT_MOD_INVALID
+	};
+
 	formats = kcalloc(map->n_pixel_formats, sizeof(*formats), GFP_KERNEL);
 	if (!formats) {
 		ret = -ENOMEM;
@@ -539,9 +576,14 @@ int malidp_de_planes_init(struct drm_device *drm)
 
 		plane_type = (i == 0) ? DRM_PLANE_TYPE_PRIMARY :
 					DRM_PLANE_TYPE_OVERLAY;
+
+		/*
+		 * All the layers except smart layer supports AFBC modifiers.
+		 */
 		ret = drm_universal_plane_init(drm, &plane->base, crtcs,
-					       &malidp_de_plane_funcs, formats,
-					       n, NULL, plane_type, NULL);
+				&malidp_de_plane_funcs, formats, n,
+				(id == DE_SMART) ? NULL : modifiers, plane_type, NULL);
+
 		if (ret < 0)
 			goto cleanup;
 

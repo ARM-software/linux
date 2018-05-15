@@ -615,7 +615,6 @@ static int malidp_crtc_atomic_check(struct drm_crtc *crtc,
 		struct drm_framebuffer *fb = ms->base.fb;
 
 		if ((pstate->rotation & MALIDP_ROTATED_MASK) || fb->modifier) {
-
 			/* process current plane */
 			rotated_planes--;
 
