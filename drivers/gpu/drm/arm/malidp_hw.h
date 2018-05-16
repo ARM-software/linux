@@ -69,6 +69,8 @@ struct malidp_layer {
 	u16 stride_offset;	/* offset to the first stride register. */
 	s16 yuv2rgb_offset;	/* offset to the YUV->RGB matrix entries */
 	enum rotation_features rot;    /* type of rotation supported */
+	/* address offset for the AFBC decoder registers */
+	u16 afbc_decoder_offset;
 };
 
 enum malidp_scaling_coeff_set {
