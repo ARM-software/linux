@@ -9,6 +9,7 @@
 		compatible = "nxp,tda998x";
 		reg = <0x70>;
 		status = "okay";
+		video-ports = <0x234501>;
 		port {
 			db_dvi0_in: endpoint {
 
@@ -20,6 +21,7 @@
 		compatible = "nxp,tda998x";
 		reg = <0x71>;
 		status = "okay";
+		video-ports = <0x234501>;
 		port {
 			db_dvi1_in: endpoint {
 
