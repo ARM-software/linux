@@ -56,12 +56,19 @@ struct malidp_irq_map {
 	u32 err_mask;		/* mask of bits that represent errors */
 };
 
+enum rotation_features {
+	ROTATE_ANY,	        /* supports rotation on any buffers */
+	ROTATE_COMPRESSED,	/* supports rotation only on compressed buffers */
+	ROTATE_NONE,        /* does not support rotation at all */
+};
+
 struct malidp_layer {
 	u16 id;			/* layer ID */
 	u16 base;		/* address offset for the register bank */
 	u16 ptr;		/* address offset for the pointer register */
 	u16 stride_offset;	/* offset to the first stride register. */
 	s16 yuv2rgb_offset;	/* offset to the YUV->RGB matrix entries */
+	enum rotation_features rot;    /* type of rotation supported */
 };
 
 enum malidp_scaling_coeff_set {
@@ -173,7 +180,8 @@ struct malidp_hw {
 	 * Calculate the required rotation memory given the active area
 	 * and the buffer format.
 	 */
-	int (*rotmem_required)(struct malidp_hw_device *hwdev, u16 w, u16 h, u32 fmt);
+	int (*rotmem_required)(struct malidp_hw_device *hwdev, u16 w, u16 h,
+			       u32 fmt, bool has_modifier);
 
 	int (*se_set_scaling_coeffs)(struct malidp_hw_device *hwdev,
 				     struct malidp_se_config *se_config,

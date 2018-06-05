@@ -233,12 +233,19 @@ static int malidp_de_plane_check(struct drm_plane *plane,
 
 	ms->n_planes = fb->format->num_planes;
 	for (i = 0; i < ms->n_planes; i++) {
+		struct drm_gem_cma_object *obj;
+
 		u8 alignment = malidp_hw_get_pitch_align(mp->hwdev, rotated);
 		if (fb->pitches[i] & (alignment - 1)) {
 			DRM_DEBUG_KMS("Invalid pitch %u for plane %d\n",
 				      fb->pitches[i], i);
 			return -EINVAL;
 		}
+
+		obj = drm_fb_cma_get_gem_obj(fb, i);
+
+		if (WARN_ON(!obj))
+			return -EINVAL;
 	}
 
 	if ((state->crtc_w > mp->hwdev->max_line_size) ||
@@ -261,19 +268,22 @@ static int malidp_de_plane_check(struct drm_plane *plane,
 	if (ret)
 		return ret;
 
-	/* packed RGB888 / BGR888 can't be rotated or flipped */
-	if (state->rotation != DRM_MODE_ROTATE_0 &&
-	    (fb->format->format == DRM_FORMAT_RGB888 ||
-	     fb->format->format == DRM_FORMAT_BGR888))
-		return -EINVAL;
+	/* validate the rotation constraints for each layer */
+	if (state->rotation != DRM_MODE_ROTATE_0) {
+		if (mp->layer->rot == ROTATE_NONE)
+			return -EINVAL;
+		else if ((mp->layer->rot == ROTATE_COMPRESSED) && (!fb->modifier))
+			return -EINVAL;
+	}
 
 	ms->rotmem_size = 0;
-	if (state->rotation & MALIDP_ROTATED_MASK) {
+	if (state->rotation != DRM_MODE_ROTATE_0 || fb->modifier) {
 		int val;
 
-		val = mp->hwdev->hw->rotmem_required(mp->hwdev, state->crtc_w,
-						     state->crtc_h,
-						     fb->format->format);
+		val = mp->hwdev->hw->rotmem_required(mp->hwdev, state->crtc_h,
+						     state->crtc_w,
+						     fb->format->format,
+						     !!(fb->modifier));
 		if (val < 0)
 			return val;
 

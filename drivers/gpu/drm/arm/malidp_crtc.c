@@ -567,19 +567,20 @@ static int malidp_crtc_atomic_check(struct drm_crtc *crtc,
 
 	/*
 	 * check if there is enough rotation memory available for planes
-	 * that need 90° and 270° rotation. Each plane has set its required
-	 * memory size in the ->plane_check() callback, here we only make
-	 * sure that the sums are less that the total usable memory.
+	 * that need 90° and 270° rotion or planes that are compressed.
+	 * Each plane has set its required memory size in the ->plane_check()
+	 * callback, here we only make sure that the sums are less that the
+	 * total usable memory.
 	 *
 	 * The rotation memory allocation algorithm (for each plane):
-	 *  a. If no more rotated planes exist, all remaining rotate
-	 *     memory in the bank is available for use by the plane.
-	 *  b. If other rotated planes exist, and plane's layer ID is
-	 *     DE_VIDEO1, it can use all the memory from first bank if
-	 *     secondary rotation memory bank is available, otherwise it can
+	 *  a. If no more rotated or compressed planes exist, all remaining
+	 *     rotate memory in the bank is available for use by the plane.
+	 *  b. If other rotated or compressed planes exist, and plane's
+	 *     layer ID is DE_VIDEO1, it can use all the memory from first bank
+	 *     if secondary rotation memory bank is available, otherwise it can
 	 *     use up to half the bank's memory.
-	 *  c. If other rotated planes exist, and plane's layer ID is not
-	 *     DE_VIDEO1, it can use half of the available memory
+	 *  c. If other rotated or compressed planes exist, and plane's layer ID
+	 *     is not DE_VIDEO1, it can use half of the available memory.
 	 *
 	 * Note: this algorithm assumes that the order in which the planes are
 	 * checked always has DE_VIDEO1 plane first in the list if it is
@@ -587,11 +588,15 @@ static int malidp_crtc_atomic_check(struct drm_crtc *crtc,
 	 * place, under current DRM version things work, but if ever the order
 	 * in which drm_atomic_crtc_state_for_each_plane() iterates over planes
 	 * changes, we need to pre-sort the planes before validation.
+	 *
 	 */
 
 	/* first count the number of rotated planes */
 	drm_atomic_crtc_state_for_each_plane_state(plane, pstate, state) {
-		if (pstate->rotation & MALIDP_ROTATED_MASK)
+		struct malidp_plane_state *ms = to_malidp_plane_state(pstate);
+		struct drm_framebuffer *fb = ms->base.fb;
+
+		if ((pstate->rotation & MALIDP_ROTATED_MASK) || fb->modifier)
 			rotated_planes++;
 	}
 
@@ -607,8 +612,10 @@ static int malidp_crtc_atomic_check(struct drm_crtc *crtc,
 	drm_atomic_crtc_state_for_each_plane_state(plane, pstate, state) {
 		struct malidp_plane *mp = to_malidp_plane(plane);
 		struct malidp_plane_state *ms = to_malidp_plane_state(pstate);
+		struct drm_framebuffer *fb = ms->base.fb;
 
-		if (pstate->rotation & MALIDP_ROTATED_MASK) {
+		if ((pstate->rotation & MALIDP_ROTATED_MASK) || fb->modifier) {
+
 			/* process current plane */
 			rotated_planes--;
 
