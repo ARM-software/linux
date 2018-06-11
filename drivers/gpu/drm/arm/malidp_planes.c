@@ -1003,6 +1003,9 @@ int malidp_de_planes_init(struct drm_device *drm)
 		drm_plane_create_alpha_property(&plane->base);
 		drm_plane_create_blend_mode_property(&plane->base, blend_caps);
 
+		drm_plane_create_alpha_property(&plane->base);
+		drm_plane_create_blend_mode_property(&plane->base, blend_caps);
+
 		if (id == DE_SMART) {
 			/* Skip the features which the SMART layer doesn't have. */
 			continue;
