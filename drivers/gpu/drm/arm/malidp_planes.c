@@ -492,6 +492,9 @@ int malidp_de_planes_init(struct drm_device *drm)
 		plane->hwdev = malidp->dev;
 		plane->layer = &map->layers[i];
 
+		drm_plane_create_alpha_property(&plane->base);
+		drm_plane_create_blend_mode_property(&plane->base, blend_caps);
+
 		if (id == DE_SMART) {
 			/*
 			 * Enable the first rectangle in the SMART layer to be
@@ -506,9 +509,6 @@ int malidp_de_planes_init(struct drm_device *drm)
 		drm_plane_create_rotation_property(&plane->base, DRM_MODE_ROTATE_0, flags);
 		malidp_hw_write(malidp->dev, MALIDP_ALPHA_LUT,
 				plane->layer->base + MALIDP_LAYER_COMPOSE);
-
-		drm_plane_create_alpha_property(&plane->base);
-		drm_plane_create_blend_mode_property(&plane->base, blend_caps);
 
 		/* Attach the YUV->RGB property only to video layers */
 		if (id & (DE_VIDEO1 | DE_VIDEO2)) {
