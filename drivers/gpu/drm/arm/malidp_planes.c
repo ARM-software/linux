@@ -310,8 +310,8 @@ static int malidp_de_plane_check(struct drm_plane *plane,
 	if (state->rotation != DRM_MODE_ROTATE_0 || fb->modifier) {
 		int val;
 
-		val = mp->hwdev->hw->rotmem_required(mp->hwdev, state->crtc_h,
-						     state->crtc_w,
+		val = mp->hwdev->hw->rotmem_required(mp->hwdev, state->crtc_w,
+						     state->crtc_h,
 						     fb->format->format,
 						     !!(fb->modifier));
 		if (val < 0)
