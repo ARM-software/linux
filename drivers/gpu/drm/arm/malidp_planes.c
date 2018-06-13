@@ -81,6 +81,7 @@ static void malidp_plane_reset(struct drm_plane *plane)
 	if (state) {
 		state->base.plane = plane;
 		state->base.rotation = DRM_MODE_ROTATE_0;
+		state->base.pixel_blend_mode = DRM_MODE_BLEND_PREMULTI;
 		plane->state = &state->base;
 	}
 }
