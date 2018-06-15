@@ -246,7 +246,8 @@ static int malidp_de_plane_check(struct drm_plane *plane,
 
 	/* HW can't support plane + pixel blending */
 	if ((state->alpha != DRM_BLEND_ALPHA_OPAQUE) &&
-	    (pixel_alpha != DRM_MODE_BLEND_PIXEL_NONE))
+	    (pixel_alpha != DRM_MODE_BLEND_PIXEL_NONE) &&
+	    state->fb->format->has_alpha)
 		return -EINVAL;
 
 	return 0;
