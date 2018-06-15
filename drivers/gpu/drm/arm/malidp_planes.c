@@ -292,7 +292,8 @@ static int malidp_de_plane_check(struct drm_plane *plane,
 
 	/* HW can't support plane + pixel blending */
 	if ((state->alpha != DRM_BLEND_ALPHA_OPAQUE) &&
-	    (pixel_alpha != DRM_MODE_BLEND_PIXEL_NONE))
+	    (pixel_alpha != DRM_MODE_BLEND_PIXEL_NONE) &&
+	    state->fb->format->has_alpha)
 		return -EINVAL;
 
 	ret = malidp_plane_atomic_check_igamma(plane, state);
@@ -441,10 +442,10 @@ static void malidp_de_plane_update(struct drm_plane *plane,
 	if (state->rotation & DRM_MODE_REFLECT_Y)
 		val |= LAYER_V_FLIP;
 
-	val &= ~(LAYER_COMP_MASK | LAYER_PMUL_ENABLE);
+	val &= ~(LAYER_COMP_MASK | LAYER_PMUL_ENABLE | LAYER_ALPHA(0xff));
 
 	if (state->alpha != DRM_BLEND_ALPHA_OPAQUE) {
-		val |= LAYER_COMP_PLANE | LAYER_ALPHA(plane_alpha);
+		val |= LAYER_COMP_PLANE;
 	} else if (state->fb->format->has_alpha) {
 		/* We only care about blend mode if the format has alpha */
 		switch (pixel_alpha) {
@@ -455,8 +456,8 @@ static void malidp_de_plane_update(struct drm_plane *plane,
 			val |= LAYER_COMP_PIXEL;
 			break;
 		}
-		val |= LAYER_ALPHA(0xff);
 	}
+	val |= LAYER_ALPHA(plane_alpha);
 
 	val &= ~LAYER_FLOWCFG(LAYER_FLOWCFG_MASK);
 	if (state->crtc) {
