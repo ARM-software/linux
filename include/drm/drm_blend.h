@@ -27,9 +27,9 @@
 #include <linux/ctype.h>
 #include <drm/drm_mode.h>
 
-#define DRM_MODE_BLEND_PIXEL_NONE	0
-#define DRM_MODE_BLEND_PREMULTI		1
-#define DRM_MODE_BLEND_COVERAGE		2
+#define DRM_MODE_BLEND_PREMULTI		0
+#define DRM_MODE_BLEND_COVERAGE		1
+#define DRM_MODE_BLEND_PIXEL_NONE	2
 
 struct drm_device;
 struct drm_atomic_state;
