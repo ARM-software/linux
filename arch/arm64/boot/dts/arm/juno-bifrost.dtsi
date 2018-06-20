@@ -11,7 +11,7 @@
 / {
 	gpu_fpga: gpu@0x6e000000 {
 		compatible = "arm,mali-midgard";
-		reg = <0x0 0x6e000000 0x0 0x4000>;
+		reg = <0x0 0x6e000000 0x0 0x200000>;
 		interrupts = <0 168 4>, <0 168 4>, <0 168 4>;
 		interrupt-names = "JOB", "MMU", "GPU";
 		clocks = <&scpi_dvfs 2>;
