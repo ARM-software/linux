@@ -537,7 +537,7 @@ int drm_plane_create_blend_mode_property(struct drm_plane *plane,
 	unsigned int valid_mode_mask = BIT(DRM_MODE_BLEND_PIXEL_NONE) |
 				       BIT(DRM_MODE_BLEND_PREMULTI)   |
 				       BIT(DRM_MODE_BLEND_COVERAGE);
-	int i, j = 0;
+	int i;
 
 	if (WARN_ON((supported_modes & ~valid_mode_mask) ||
 		    ((supported_modes & BIT(DRM_MODE_BLEND_PREMULTI)) == 0)))
@@ -555,7 +555,7 @@ int drm_plane_create_blend_mode_property(struct drm_plane *plane,
 		if (!(BIT(props[i].type) & supported_modes))
 			continue;
 
-		ret = drm_property_add_enum(prop, j++, props[i].type,
+		ret = drm_property_add_enum(prop, props[i].type,
 					    props[i].name);
 
 		if (ret) {
