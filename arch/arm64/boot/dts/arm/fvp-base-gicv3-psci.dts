@@ -32,6 +32,8 @@
 
 /memreserve/ 0x80000000 0x00010000;
 
+#include "rtsm_ve-motherboard.dtsi"
+
 / {
 };
 
@@ -386,7 +388,6 @@
 				<0 0 41 &gic 0 0 0 41 4>,
 				<0 0 42 &gic 0 0 0 42 4>;
 
-		/include/ "rtsm_ve-motherboard.dtsi"
 	};
 
 	panels {
