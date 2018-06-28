@@ -544,10 +544,10 @@ static int malidp_crtc_atomic_check_igamma(struct drm_crtc *crtc,
 
 		malidp_generate_curve_coeffs(lut_blob, igamma_segments,
 					     cs->igamma_coeffs[i]);
-		drm_property_unreference_blob(lut_blob);
+		drm_property_blob_put(lut_blob);
 		continue;
 lut_fail:
-		drm_property_unreference_blob(lut_blob);
+		drm_property_blob_put(lut_blob);
 		return -EINVAL;
 	}
 
