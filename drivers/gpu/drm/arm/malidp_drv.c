@@ -293,8 +293,8 @@ malidp_fb_verify_afbc_framebuffer_caps(struct drm_device *dev,
 		return false;
 	}
 
-	switch (mode_cmd->modifier[0] & AFBC_FORMAT_MOD_BLOCK_SIZE_MASK) {
-	case AFBC_FORMAT_MOD_BLOCK_SIZE_16x16:
+	switch (mode_cmd->modifier[0] & AFBC_SIZE_MASK) {
+	case AFBC_SIZE_16X16:
 		if ((mode_cmd->width % 16) || (mode_cmd->height % 16)) {
 			DRM_ERROR("AFBC buffers must be aligned to 16 pixels\n");
 			return false;
@@ -319,8 +319,8 @@ malidp_fb_verify_afbc_framebuffer_size(struct drm_device *dev,
 	u32 afbc_superblock_size = 0, afbc_superblock_height = 0;
 	u32 afbc_superblock_width = 0, afbc_size = 0;
 
-	switch (mode_cmd->modifier[0] & AFBC_FORMAT_MOD_BLOCK_SIZE_MASK) {
-	case AFBC_FORMAT_MOD_BLOCK_SIZE_16x16:
+	switch (mode_cmd->modifier[0] & AFBC_SIZE_MASK) {
+	case AFBC_SIZE_16X16:
 		afbc_superblock_height = 16;
 		afbc_superblock_width = 16;
 		break;

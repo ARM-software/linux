@@ -119,6 +119,33 @@ static const struct malidp_layer malidp650_layers[] = {
 		MALIDP550_DE_LS_R1_STRIDE, 0, ROTATE_NONE, 0 },
 };
 
+const u64 malidp_format_modifiers[] = {
+
+	/* All RGB formats (except XRGB, RGBX, XBGR, BGRX) */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_YTR | AFBC_SPARSE),
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_YTR),
+
+	/* All RGB formats > 16bpp (except XRGB, RGBX, XBGR, BGRX) */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_YTR | AFBC_SPARSE | AFBC_SPLIT),
+
+	/* All 8 or 10 bit YUV 444 formats. */
+	/* In DP550, 10 bit YUV 420 format also supported */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_SPARSE | AFBC_SPLIT),
+
+	/* YUV 420, 422 P1 8 bit and YUV 444 8 bit/10 bit formats */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_SPARSE),
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16),
+
+	/* YUV 420, 422 P1 8, 10 bit formats */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_CBR | AFBC_SPARSE),
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_CBR),
+
+	/* All formats */
+	DRM_FORMAT_MOD_LINEAR,
+
+	DRM_FORMAT_MOD_INVALID
+};
+
 #define SE_N_SCALING_COEFFS	96
 static const u16 dp500_se_scaling_coeffs[][SE_N_SCALING_COEFFS] = {
 	[MALIDP_UPSCALING_COEFFS - 1] = {
@@ -810,7 +837,7 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 			.se_base = MALIDP550_SE_BASE,
 			.dc_base = MALIDP550_DC_BASE,
 			.out_depth_base = MALIDP550_DE_OUTPUT_DEPTH,
-			.features = MALIDP_REGMAP_HAS_CLEARIRQ,
+			.features = MALIDP_REGMAP_HAS_CLEARIRQ | MALIDP_DEVICE_AFBC_SUPPORT_SPLIT | AFBC_SUPPORT_SPLIT_WITH_YUV_420_10,
 			.n_layers = ARRAY_SIZE(malidp550_layers),
 			.layers = malidp550_layers,
 			.de_irq_map = {
@@ -856,7 +883,7 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 			.se_base = MALIDP550_SE_BASE,
 			.dc_base = MALIDP550_DC_BASE,
 			.out_depth_base = MALIDP550_DE_OUTPUT_DEPTH,
-			.features = MALIDP_REGMAP_HAS_CLEARIRQ,
+			.features = MALIDP_REGMAP_HAS_CLEARIRQ | MALIDP_DEVICE_AFBC_SUPPORT_SPLIT,
 			.n_layers = ARRAY_SIZE(malidp650_layers),
 			.layers = malidp650_layers,
 			.de_irq_map = {

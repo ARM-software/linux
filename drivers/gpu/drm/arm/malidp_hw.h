@@ -94,7 +94,9 @@ struct malidp_se_config {
 };
 
 /* regmap features */
-#define MALIDP_REGMAP_HAS_CLEARIRQ	(1 << 0)
+#define MALIDP_REGMAP_HAS_CLEARIRQ				BIT(0)
+#define MALIDP_DEVICE_AFBC_SUPPORT_SPLIT			BIT(1)
+#define AFBC_SUPPORT_SPLIT_WITH_YUV_420_10			BIT(2)
 
 struct malidp_hw_regmap {
 	/* address offset of the DE register bank */
@@ -389,9 +391,17 @@ static inline void malidp_se_set_enh_coeffs(struct malidp_hw_device *hwdev)
 
 #define MALIDP_GAMMA_LUT_SIZE		4096
 
-#define AFBC_MOD_VALID_BITS (AFBC_FORMAT_MOD_BLOCK_SIZE_MASK | \
-			AFBC_FORMAT_MOD_YTR | AFBC_FORMAT_MOD_SPLIT | \
-			AFBC_FORMAT_MOD_SPARSE | AFBC_FORMAT_MOD_CBR | \
-			AFBC_FORMAT_MOD_TILED | AFBC_FORMAT_MOD_SC)
+#define AFBC_SIZE_MASK		AFBC_FORMAT_MOD_BLOCK_SIZE_MASK
+#define AFBC_SIZE_16X16		AFBC_FORMAT_MOD_BLOCK_SIZE_16x16
+#define AFBC_YTR		AFBC_FORMAT_MOD_YTR
+#define AFBC_SPARSE		AFBC_FORMAT_MOD_SPARSE
+#define AFBC_CBR		AFBC_FORMAT_MOD_CBR
+#define AFBC_SPLIT		AFBC_FORMAT_MOD_SPLIT
+#define AFBC_TILED		AFBC_FORMAT_MOD_TILED
+#define AFBC_SC			AFBC_FORMAT_MOD_SC
+
+#define AFBC_MOD_VALID_BITS (AFBC_SIZE_MASK | AFBC_YTR | AFBC_SPLIT | AFBC_SPARSE | AFBC_CBR | AFBC_TILED | AFBC_SC)
+
+extern const u64 malidp_format_modifiers[];
 
 #endif  /* __MALIDP_HW_H__ */
