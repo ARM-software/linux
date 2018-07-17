@@ -105,13 +105,31 @@ extern "C" {
 #define DRM_FORMAT_RGBA1010102	fourcc_code('R', 'A', '3', '0') /* [31:0] R:G:B:A 10:10:10:2 little endian */
 #define DRM_FORMAT_BGRA1010102	fourcc_code('B', 'A', '3', '0') /* [31:0] B:G:R:A 10:10:10:2 little endian */
 
-/* packed YCbCr */
+/* packed YCbCr422 */
 #define DRM_FORMAT_YUYV		fourcc_code('Y', 'U', 'Y', 'V') /* [31:0] Cr0:Y1:Cb0:Y0 8:8:8:8 little endian */
 #define DRM_FORMAT_YVYU		fourcc_code('Y', 'V', 'Y', 'U') /* [31:0] Cb0:Y1:Cr0:Y0 8:8:8:8 little endian */
 #define DRM_FORMAT_UYVY		fourcc_code('U', 'Y', 'V', 'Y') /* [31:0] Y1:Cr0:Y0:Cb0 8:8:8:8 little endian */
 #define DRM_FORMAT_VYUY		fourcc_code('V', 'Y', 'U', 'Y') /* [31:0] Y1:Cb0:Y0:Cr0 8:8:8:8 little endian */
 
+/* packed YCbCr444 */
 #define DRM_FORMAT_AYUV		fourcc_code('A', 'Y', 'U', 'V') /* [31:0] A:Y:Cb:Cr 8:8:8:8 little endian */
+#define DRM_FORMAT_XYUV8888	fourcc_code('X', 'Y', 'U', 'V') /* [31:0] X:Y:Cb:Cr 8:8:8:8 little endian */
+#define DRM_FORMAT_XVYU2101010	fourcc_code('V', 'U', '3', '0') /* [31:0] X:Cr:Y:Cb 2:10:10:10 little endian */
+
+/*
+ * packed YCbCr420 2x2 tiled formats
+ * first 64 bits will contain Y,Cb,Cr components for a 2x2 tile
+ */
+
+/* [63:0]   A3:A2:Y3:0:Cr0:0:Y2:0:A1:A0:Y1:0:Cb0:0:Y0:0  1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian */
+#define DRM_FORMAT_Y0L0		fourcc_code('Y', '0', 'L', '0')
+/* [63:0]   X3:X2:Y3:0:Cr0:0:Y2:0:X1:X0:Y1:0:Cb0:0:Y0:0  1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian */
+#define DRM_FORMAT_X0L0		fourcc_code('X', '0', 'L', '0')
+
+/* [63:0]   A3:A2:Y3:Cr0:Y2:A1:A0:Y1:Cb0:Y0  1:1:10:10:10:1:1:10:10:10 little endian */
+#define DRM_FORMAT_Y0L2		fourcc_code('Y', '0', 'L', '2')
+/* [63:0]   X3:X2:Y3:Cr0:Y2:X1:X0:Y1:Cb0:Y0  1:1:10:10:10:1:1:10:10:10 little endian */
+#define DRM_FORMAT_X0L2		fourcc_code('X', '0', 'L', '2')
 
 /*
  * 2 plane RGB + A
@@ -140,6 +158,13 @@ extern "C" {
 #define DRM_FORMAT_NV61		fourcc_code('N', 'V', '6', '1') /* 2x1 subsampled Cb:Cr plane */
 #define DRM_FORMAT_NV24		fourcc_code('N', 'V', '2', '4') /* non-subsampled Cr:Cb plane */
 #define DRM_FORMAT_NV42		fourcc_code('N', 'V', '4', '2') /* non-subsampled Cb:Cr plane */
+
+/*
+ * Each sample packed into the top 10 bits of a 16-bit word.
+ * Y plane: [63:0] Y3:0:Y2:0:Y1:0:Y0:0, 10:6:10:6:10:6:10:6
+ * CrCb plane: [63:0] Cr2:0:Cb2:0:Cr0:0:Cb0:0, 10:6:10:6:10:6:10:6
+ */
+#define DRM_FORMAT_P010		fourcc_code('P', '0', '1', '0') /* 2x2 subsampled Cr:Cb plane */
 
 /*
  * 3 plane YCbCr
