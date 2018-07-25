@@ -57,7 +57,7 @@ struct drm_gem_object *drm_gem_fb_get_obj(struct drm_framebuffer *fb,
 }
 EXPORT_SYMBOL_GPL(drm_gem_fb_get_obj);
 
-static struct drm_framebuffer *
+struct drm_framebuffer *
 drm_gem_fb_alloc(struct drm_device *dev,
 		 const struct drm_mode_fb_cmd2 *mode_cmd,
 		 struct drm_gem_object **obj, unsigned int num_planes,
@@ -85,6 +85,7 @@ drm_gem_fb_alloc(struct drm_device *dev,
 
 	return fb;
 }
+EXPORT_SYMBOL_GPL(drm_gem_fb_alloc);
 
 /**
  * drm_gem_fb_destroy - Free GEM backed framebuffer
