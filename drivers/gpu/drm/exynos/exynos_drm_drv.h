@@ -136,6 +136,9 @@ struct exynos_drm_crtc_ops {
 	u32 (*get_vblank_counter)(struct exynos_drm_crtc *crtc);
 	enum drm_mode_status (*mode_valid)(struct exynos_drm_crtc *crtc,
 		const struct drm_display_mode *mode);
+	bool (*mode_fixup)(struct exynos_drm_crtc *crtc,
+			   const struct drm_display_mode *mode,
+			   struct drm_display_mode *adjusted_mode);
 	int (*atomic_check)(struct exynos_drm_crtc *crtc,
 			    struct drm_crtc_state *state);
 	void (*atomic_begin)(struct exynos_drm_crtc *crtc);
@@ -185,17 +188,11 @@ struct exynos_drm_g2d_private {
 
 struct drm_exynos_file_private {
 	struct exynos_drm_g2d_private	*g2d_priv;
-	struct device			*ipp_dev;
 };
 
 /*
  * Exynos drm private structure.
  *
- * @da_start: start address to device address space.
- *	with iommu, device address space starts from this address
- *	otherwise default one.
- * @da_space_size: size of device address space.
- *	if 0 then default value is used for it.
  * @pending: the crtcs that have pending updates to finish
  * @lock: protect access to @pending
  * @wait: wait an atomic commit to finish
@@ -276,9 +273,17 @@ static inline int exynos_dpi_bind(struct drm_device *dev,
 }
 #endif
 
+#ifdef CONFIG_DRM_EXYNOS_FIMC
+int exynos_drm_check_fimc_device(struct device *dev);
+#else
+static inline int exynos_drm_check_fimc_device(struct device *dev)
+{
+	return 0;
+}
+#endif
+
 int exynos_atomic_commit(struct drm_device *dev, struct drm_atomic_state *state,
 			 bool nonblock);
-int exynos_atomic_check(struct drm_device *dev, struct drm_atomic_state *state);
 
 
 extern struct platform_driver fimd_driver;
@@ -292,7 +297,7 @@ extern struct platform_driver vidi_driver;
 extern struct platform_driver g2d_driver;
 extern struct platform_driver fimc_driver;
 extern struct platform_driver rotator_driver;
+extern struct platform_driver scaler_driver;
 extern struct platform_driver gsc_driver;
-extern struct platform_driver ipp_driver;
 extern struct platform_driver mic_driver;
 #endif

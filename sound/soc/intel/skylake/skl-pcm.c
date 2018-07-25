@@ -268,15 +268,31 @@ static int skl_pcm_prepare(struct snd_pcm_substream *substream,
 {
 	struct skl *skl = get_skl_ctx(dai->dev);
 	struct skl_module_cfg *mconfig;
+	int ret;
 
 	dev_dbg(dai->dev, "%s: %s\n", __func__, dai->name);
 
 	mconfig = skl_tplg_fe_get_cpr_module(dai, substream->stream);
 
-	/* In case of XRUN recovery, reset the FW pipe to clean state */
-	if (mconfig && (substream->runtime->status->state ==
-					SNDRV_PCM_STATE_XRUN))
-		skl_reset_pipe(skl->skl_sst, mconfig->pipe);
+	/*
+	 * In case of XRUN recovery or in the case when the application
+	 * calls prepare another time, reset the FW pipe to clean state
+	 */
+	if (mconfig &&
+		(substream->runtime->status->state == SNDRV_PCM_STATE_XRUN ||
+		 mconfig->pipe->state == SKL_PIPE_CREATED ||
+		 mconfig->pipe->state == SKL_PIPE_PAUSED)) {
+
+		ret = skl_reset_pipe(skl->skl_sst, mconfig->pipe);
+
+		if (ret < 0)
+			return ret;
+
+		ret = skl_pcm_host_dma_prepare(dai->dev,
+					mconfig->pipe->p_params);
+		if (ret < 0)
+			return ret;
+	}
 
 	return 0;
 }
@@ -355,7 +371,8 @@ static void skl_pcm_close(struct snd_pcm_substream *substream,
 	}
 
 	mconfig = skl_tplg_fe_get_cpr_module(dai, substream->stream);
-	skl_tplg_d0i3_put(skl, mconfig->d0i3_caps);
+	if (mconfig)
+		skl_tplg_d0i3_put(skl, mconfig->d0i3_caps);
 
 	kfree(dma_params);
 }
@@ -365,8 +382,20 @@ static int skl_pcm_hw_free(struct snd_pcm_substream *substream,
 {
 	struct hdac_ext_bus *ebus = dev_get_drvdata(dai->dev);
 	struct hdac_ext_stream *stream = get_hdac_ext_stream(substream);
+	struct skl *skl = get_skl_ctx(dai->dev);
+	struct skl_module_cfg *mconfig;
+	int ret;
 
 	dev_dbg(dai->dev, "%s: %s\n", __func__, dai->name);
+
+	mconfig = skl_tplg_fe_get_cpr_module(dai, substream->stream);
+
+	if (mconfig) {
+		ret = skl_reset_pipe(skl->skl_sst, mconfig->pipe);
+		if (ret < 0)
+			dev_err(dai->dev, "%s:Reset failed ret =%d",
+						__func__, ret);
+	}
 
 	snd_hdac_stream_cleanup(hdac_stream(stream));
 	hdac_stream(stream)->prepared = 0;
@@ -536,7 +565,7 @@ static int skl_link_hw_params(struct snd_pcm_substream *substream,
 
 	snd_soc_dai_set_dma_data(dai, substream, (void *)link_dev);
 
-	link = snd_hdac_ext_bus_get_link(ebus, rtd->codec->component.name);
+	link = snd_hdac_ext_bus_get_link(ebus, codec_dai->component->name);
 	if (!link)
 		return -EINVAL;
 
@@ -619,7 +648,7 @@ static int skl_link_hw_free(struct snd_pcm_substream *substream,
 
 	link_dev->link_prepared = 0;
 
-	link = snd_hdac_ext_bus_get_link(ebus, rtd->codec->component.name);
+	link = snd_hdac_ext_bus_get_link(ebus, rtd->codec_dai->component->name);
 	if (!link)
 		return -EINVAL;
 
@@ -652,7 +681,7 @@ static const struct snd_soc_dai_ops skl_link_dai_ops = {
 	.trigger = skl_link_pcm_trigger,
 };
 
-static struct snd_soc_dai_driver skl_platform_dai[] = {
+static struct snd_soc_dai_driver skl_fe_dai[] = {
 {
 	.name = "System Pin",
 	.ops = &skl_pcm_dai_ops,
@@ -796,8 +825,10 @@ static struct snd_soc_dai_driver skl_platform_dai[] = {
 		.sig_bits = 32,
 	},
 },
+};
 
 /* BE CPU  Dais */
+static struct snd_soc_dai_driver skl_platform_dai[] = {
 {
 	.name = "SSP0 Pin",
 	.ops = &skl_be_ssp_dai_ops,
@@ -956,6 +987,17 @@ static struct snd_soc_dai_driver skl_platform_dai[] = {
 	},
 },
 {
+	.name = "DMIC16k Pin",
+	.ops = &skl_dmic_dai_ops,
+	.capture = {
+		.stream_name = "DMIC16k Rx",
+		.channels_min = HDA_MONO,
+		.channels_max = HDA_QUAD,
+		.rates = SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+	},
+},
+{
 	.name = "HD-Codec Pin",
 	.ops = &skl_link_dai_ops,
 	.playback = {
@@ -974,6 +1016,14 @@ static struct snd_soc_dai_driver skl_platform_dai[] = {
 	},
 },
 };
+
+int skl_dai_load(struct snd_soc_component *cmp,
+		 struct snd_soc_dai_driver *pcm_dai)
+{
+	pcm_dai->ops = &skl_pcm_dai_ops;
+
+	return 0;
+}
 
 static int skl_platform_open(struct snd_pcm_substream *substream)
 {
@@ -1296,29 +1346,31 @@ static int skl_populate_modules(struct skl *skl)
 					"query module info failed\n");
 				return ret;
 			}
+
+			skl_tplg_add_moduleid_in_bind_params(skl, w);
 		}
 	}
 
 	return ret;
 }
 
-static int skl_platform_soc_probe(struct snd_soc_platform *platform)
+static int skl_platform_soc_probe(struct snd_soc_component *component)
 {
-	struct hdac_ext_bus *ebus = dev_get_drvdata(platform->dev);
+	struct hdac_ext_bus *ebus = dev_get_drvdata(component->dev);
 	struct skl *skl = ebus_to_skl(ebus);
 	const struct skl_dsp_ops *ops;
 	int ret;
 
-	pm_runtime_get_sync(platform->dev);
+	pm_runtime_get_sync(component->dev);
 	if ((ebus_to_hbus(ebus))->ppcap) {
-		skl->platform = platform;
+		skl->component = component;
 
 		/* init debugfs */
 		skl->debugfs = skl_debugfs_init(skl);
 
-		ret = skl_tplg_init(platform, ebus);
+		ret = skl_tplg_init(component, ebus);
 		if (ret < 0) {
-			dev_err(platform->dev, "Failed to init topology!\n");
+			dev_err(component->dev, "Failed to init topology!\n");
 			return ret;
 		}
 
@@ -1328,37 +1380,46 @@ static int skl_platform_soc_probe(struct snd_soc_platform *platform)
 			return -EIO;
 
 		if (skl->skl_sst->is_first_boot == false) {
-			dev_err(platform->dev, "DSP reports first boot done!!!\n");
+			dev_err(component->dev, "DSP reports first boot done!!!\n");
 			return -EIO;
 		}
 
-		/* disable dynamic clock gating during fw and lib download */
-		skl->skl_sst->enable_miscbdcge(platform->dev, false);
+		/*
+		 * Disable dynamic clock and power gating during firmware
+		 * and library download
+		 */
+		skl->skl_sst->enable_miscbdcge(component->dev, false);
+		skl->skl_sst->clock_power_gating(component->dev, false);
 
-		ret = ops->init_fw(platform->dev, skl->skl_sst);
-		skl->skl_sst->enable_miscbdcge(platform->dev, true);
+		ret = ops->init_fw(component->dev, skl->skl_sst);
+		skl->skl_sst->enable_miscbdcge(component->dev, true);
+		skl->skl_sst->clock_power_gating(component->dev, true);
 		if (ret < 0) {
-			dev_err(platform->dev, "Failed to boot first fw: %d\n", ret);
+			dev_err(component->dev, "Failed to boot first fw: %d\n", ret);
 			return ret;
 		}
 		skl_populate_modules(skl);
 		skl->skl_sst->update_d0i3c = skl_update_d0i3c;
 		skl_dsp_enable_notification(skl->skl_sst, false);
+
+		if (skl->cfg.astate_cfg != NULL) {
+			skl_dsp_set_astate_cfg(skl->skl_sst,
+					skl->cfg.astate_cfg->count,
+					skl->cfg.astate_cfg);
+		}
 	}
-	pm_runtime_mark_last_busy(platform->dev);
-	pm_runtime_put_autosuspend(platform->dev);
+	pm_runtime_mark_last_busy(component->dev);
+	pm_runtime_put_autosuspend(component->dev);
 
 	return 0;
 }
-static const struct snd_soc_platform_driver skl_platform_drv  = {
+
+static const struct snd_soc_component_driver skl_component  = {
+	.name		= "pcm",
 	.probe		= skl_platform_soc_probe,
 	.ops		= &skl_platform_ops,
 	.pcm_new	= skl_pcm_new,
 	.pcm_free	= skl_pcm_free,
-};
-
-static const struct snd_soc_component_driver skl_component = {
-	.name           = "pcm",
 };
 
 int skl_platform_register(struct device *dev)
@@ -1366,25 +1427,39 @@ int skl_platform_register(struct device *dev)
 	int ret;
 	struct hdac_ext_bus *ebus = dev_get_drvdata(dev);
 	struct skl *skl = ebus_to_skl(ebus);
+	struct snd_soc_dai_driver *dais;
+	int num_dais = ARRAY_SIZE(skl_platform_dai);
 
 	INIT_LIST_HEAD(&skl->ppl_list);
 	INIT_LIST_HEAD(&skl->bind_list);
 
-	ret = snd_soc_register_platform(dev, &skl_platform_drv);
-	if (ret) {
-		dev_err(dev, "soc platform registration failed %d\n", ret);
-		return ret;
+	skl->dais = kmemdup(skl_platform_dai, sizeof(skl_platform_dai),
+			    GFP_KERNEL);
+	if (!skl->dais) {
+		ret = -ENOMEM;
+		goto err;
 	}
-	ret = snd_soc_register_component(dev, &skl_component,
-				skl_platform_dai,
-				ARRAY_SIZE(skl_platform_dai));
-	if (ret) {
+
+	if (!skl->use_tplg_pcm) {
+		dais = krealloc(skl->dais, sizeof(skl_fe_dai) +
+				sizeof(skl_platform_dai), GFP_KERNEL);
+		if (!dais) {
+			ret = -ENOMEM;
+			goto err;
+		}
+
+		skl->dais = dais;
+		memcpy(&skl->dais[ARRAY_SIZE(skl_platform_dai)], skl_fe_dai,
+		       sizeof(skl_fe_dai));
+		num_dais += ARRAY_SIZE(skl_fe_dai);
+	}
+
+	ret = devm_snd_soc_register_component(dev, &skl_component,
+					 skl->dais, num_dais);
+	if (ret)
 		dev_err(dev, "soc component registration failed %d\n", ret);
-		snd_soc_unregister_platform(dev);
-	}
-
+err:
 	return ret;
-
 }
 
 int skl_platform_unregister(struct device *dev)
@@ -1400,7 +1475,7 @@ int skl_platform_unregister(struct device *dev)
 		}
 	}
 
-	snd_soc_unregister_component(dev);
-	snd_soc_unregister_platform(dev);
+	kfree(skl->dais);
+
 	return 0;
 }

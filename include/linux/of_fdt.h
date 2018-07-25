@@ -44,6 +44,12 @@ extern void *initial_boot_params;
 extern char __dtb_start[];
 extern char __dtb_end[];
 
+/* Other Prototypes */
+extern u64 of_flat_dt_translate_address(unsigned long node);
+extern void of_fdt_limit_memory(int limit);
+#endif /* CONFIG_OF_FLATTREE */
+
+#ifdef CONFIG_OF_EARLY_FLATTREE
 /* For scanning the flat device-tree at boot time */
 extern int of_scan_flat_dt(int (*it)(unsigned long node, const char *uname,
 				     int depth, void *data),
@@ -63,27 +69,6 @@ extern unsigned long of_get_flat_dt_root(void);
 extern int of_get_flat_dt_size(void);
 extern uint32_t of_get_flat_dt_phandle(unsigned long node);
 
-/*
- * early_init_dt_scan_chosen - scan the device tree for ramdisk and bootargs
- *
- * The boot arguments will be placed into the memory pointed to by @data.
- * That memory should be COMMAND_LINE_SIZE big and initialized to be a valid
- * (possibly empty) string.  Logic for what will be in @data after this
- * function finishes:
- *
- * - CONFIG_CMDLINE_FORCE=true
- *     CONFIG_CMDLINE
- * - CONFIG_CMDLINE_EXTEND=true, @data is non-empty string
- *     @data + dt bootargs (even if dt bootargs are empty)
- * - CONFIG_CMDLINE_EXTEND=true, @data is empty string
- *     CONFIG_CMDLINE + dt bootargs (even if dt bootargs are empty)
- * - CMDLINE_FROM_BOOTLOADER=true, dt bootargs=non-empty:
- *     dt bootargs
- * - CMDLINE_FROM_BOOTLOADER=true, dt bootargs=empty, @data is non-empty string
- *     @data is left unchanged
- * - CMDLINE_FROM_BOOTLOADER=true, dt bootargs=empty, @data is empty string
- *     CONFIG_CMDLINE (or "" if that's not defined)
- */
 extern int early_init_dt_scan_chosen(unsigned long node, const char *uname,
 				     int depth, void *data);
 extern int early_init_dt_scan_memory(unsigned long node, const char *uname,
@@ -95,7 +80,6 @@ extern void early_init_dt_add_memory_arch(u64 base, u64 size);
 extern int early_init_dt_mark_hotplug_memory_arch(u64 base, u64 size);
 extern int early_init_dt_reserve_memory_arch(phys_addr_t base, phys_addr_t size,
 					     bool no_map);
-extern void * early_init_dt_alloc_memory_arch(u64 size, u64 align);
 extern u64 dt_mem_next_cell(int s, const __be32 **cellp);
 
 /* Early flat tree scan hooks */
@@ -115,16 +99,14 @@ extern void unflatten_device_tree(void);
 extern void unflatten_and_copy_device_tree(void);
 extern void early_init_devtree(void *);
 extern void early_get_first_memblock_info(void *, phys_addr_t *);
-extern u64 of_flat_dt_translate_address(unsigned long node);
-extern void of_fdt_limit_memory(int limit);
-#else /* CONFIG_OF_FLATTREE */
+#else /* CONFIG_OF_EARLY_FLATTREE */
 static inline int early_init_dt_scan_chosen_stdout(void) { return -ENODEV; }
 static inline void early_init_fdt_scan_reserved_mem(void) {}
 static inline void early_init_fdt_reserve_self(void) {}
 static inline const char *of_flat_dt_get_machine_name(void) { return NULL; }
 static inline void unflatten_device_tree(void) {}
 static inline void unflatten_and_copy_device_tree(void) {}
-#endif /* CONFIG_OF_FLATTREE */
+#endif /* CONFIG_OF_EARLY_FLATTREE */
 
 #endif /* __ASSEMBLY__ */
 #endif /* _LINUX_OF_FDT_H */

@@ -129,6 +129,12 @@ static inline void fbcon_map_override(void)
 }
 #endif /* CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY */
 
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
+static bool deferred_takeover = true;
+#else
+#define deferred_takeover false
+#endif
+
 /* font data */
 static char fontname[40];
 
@@ -395,10 +401,10 @@ static void fb_flashcursor(struct work_struct *work)
 	console_unlock();
 }
 
-static void cursor_timer_handler(unsigned long dev_addr)
+static void cursor_timer_handler(struct timer_list *t)
 {
-	struct fb_info *info = (struct fb_info *) dev_addr;
-	struct fbcon_ops *ops = info->fbcon_par;
+	struct fbcon_ops *ops = from_timer(ops, t, cursor_timer);
+	struct fb_info *info = ops->info;
 
 	queue_work(system_power_efficient_wq, &info->queue);
 	mod_timer(&ops->cursor_timer, jiffies + ops->cur_blink_jiffies);
@@ -414,8 +420,7 @@ static void fbcon_add_cursor_timer(struct fb_info *info)
 		if (!info->queue.func)
 			INIT_WORK(&info->queue, fb_flashcursor);
 
-		setup_timer(&ops->cursor_timer, cursor_timer_handler,
-			    (unsigned long) info);
+		timer_setup(&ops->cursor_timer, cursor_timer_handler, 0);
 		mod_timer(&ops->cursor_timer, jiffies + ops->cur_blink_jiffies);
 		ops->flags |= FBCON_FLAGS_CURSOR_TIMER;
 	}
@@ -500,6 +505,12 @@ static int __init fb_console_setup(char *this_opt)
 				margin_color = simple_strtoul(options, &options, 0);
 			continue;
 		}
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
+		if (!strcmp(options, "nodefer")) {
+			deferred_takeover = false;
+			continue;
+		}
+#endif
 	}
 	return 1;
 }
@@ -592,7 +603,8 @@ static void fbcon_prepare_logo(struct vc_data *vc, struct fb_info *info,
 		if (scr_readw(r) != vc->vc_video_erase_char)
 			break;
 	if (r != q && new_rows >= rows + logo_lines) {
-		save = kmalloc(logo_lines * new_cols * 2, GFP_KERNEL);
+		save = kmalloc(array3_size(logo_lines, new_cols, 2),
+			       GFP_KERNEL);
 		if (save) {
 			int i = cols < new_cols ? cols : new_cols;
 			scr_memsetw(save, erase, logo_lines * new_cols * 2);
@@ -714,6 +726,7 @@ static int con2fb_acquire_newinfo(struct vc_data *vc, struct fb_info *info,
 
 	if (!err) {
 		ops->cur_blink_jiffies = HZ / 5;
+		ops->info = info;
 		info->fbcon_par = ops;
 
 		if (vc)
@@ -826,6 +839,8 @@ static int set_con2fb_map(int unit, int newidx, int user)
 	struct fb_info *info = registered_fb[newidx];
 	struct fb_info *oldinfo = NULL;
  	int found, err = 0;
+
+	WARN_CONSOLE_UNLOCKED();
 
 	if (oldidx == newidx)
 		return 0;
@@ -962,13 +977,14 @@ static const char *fbcon_startup(void)
 	ops->graphics = 1;
 	ops->cur_rotate = -1;
 	ops->cur_blink_jiffies = HZ / 5;
+	ops->info = info;
 	info->fbcon_par = ops;
 
 	p->con_rotate = initial_rotation;
 	if (p->con_rotate == -1)
 		p->con_rotate = info->fbcon_rotate_hint;
 	if (p->con_rotate == -1)
-		p->con_rotate = fbcon_platform_get_rotate(info);
+		p->con_rotate = FB_ROTATE_UR;
 
 	set_blitting_type(vc, info);
 
@@ -1111,7 +1127,7 @@ static void fbcon_init(struct vc_data *vc, int init)
 	if (p->con_rotate == -1)
 		p->con_rotate = info->fbcon_rotate_hint;
 	if (p->con_rotate == -1)
-		p->con_rotate = fbcon_platform_get_rotate(info);
+		p->con_rotate = FB_ROTATE_UR;
 
 	set_blitting_type(vc, info);
 
@@ -3042,6 +3058,8 @@ static int fbcon_fb_unbind(int idx)
 {
 	int i, new_idx = -1, ret = 0;
 
+	WARN_CONSOLE_UNLOCKED();
+
 	if (!fbcon_has_console_bind)
 		return 0;
 
@@ -3092,6 +3110,11 @@ static int fbcon_fb_unregistered(struct fb_info *info)
 {
 	int i, idx;
 
+	WARN_CONSOLE_UNLOCKED();
+
+	if (deferred_takeover)
+		return 0;
+
 	idx = info->node;
 	for (i = first_fb_vc; i <= last_fb_vc; i++) {
 		if (con2fb_map[i] == idx)
@@ -3129,6 +3152,16 @@ static int fbcon_fb_unregistered(struct fb_info *info)
 static void fbcon_remap_all(int idx)
 {
 	int i;
+
+	WARN_CONSOLE_UNLOCKED();
+
+	if (deferred_takeover) {
+		for (i = first_fb_vc; i <= last_fb_vc; i++)
+			con2fb_map_boot[i] = idx;
+		fbcon_map_override();
+		return;
+	}
+
 	for (i = first_fb_vc; i <= last_fb_vc; i++)
 		set_con2fb_map(i, idx, 0);
 
@@ -3175,8 +3208,15 @@ static int fbcon_fb_registered(struct fb_info *info)
 {
 	int ret = 0, i, idx;
 
+	WARN_CONSOLE_UNLOCKED();
+
 	idx = info->node;
 	fbcon_select_primary(info);
+
+	if (deferred_takeover) {
+		pr_info("fbcon: Deferring console take-over\n");
+		return 0;
+	}
 
 	if (info_idx == -1) {
 		for (i = first_fb_vc; i <= last_fb_vc; i++) {
@@ -3553,8 +3593,46 @@ static int fbcon_init_device(void)
 	return 0;
 }
 
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
+static struct notifier_block fbcon_output_nb;
+
+static int fbcon_output_notifier(struct notifier_block *nb,
+				 unsigned long action, void *data)
+{
+	int i;
+
+	WARN_CONSOLE_UNLOCKED();
+
+	pr_info("fbcon: Taking over console\n");
+
+	dummycon_unregister_output_notifier(&fbcon_output_nb);
+	deferred_takeover = false;
+	logo_shown = FBCON_LOGO_DONTSHOW;
+
+	for (i = 0; i < FB_MAX; i++) {
+		if (registered_fb[i])
+			fbcon_fb_registered(registered_fb[i]);
+	}
+
+	return NOTIFY_OK;
+}
+
+static void fbcon_register_output_notifier(void)
+{
+	fbcon_output_nb.notifier_call = fbcon_output_notifier;
+	dummycon_register_output_notifier(&fbcon_output_nb);
+}
+#else
+static inline void fbcon_register_output_notifier(void) {}
+#endif
+
 static void fbcon_start(void)
 {
+	if (deferred_takeover) {
+		fbcon_register_output_notifier();
+		return;
+	}
+
 	if (num_registered_fb) {
 		int i;
 
@@ -3580,6 +3658,13 @@ static void fbcon_exit(void)
 
 	if (fbcon_has_exited)
 		return;
+
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
+	if (deferred_takeover) {
+		dummycon_unregister_output_notifier(&fbcon_output_nb);
+		deferred_takeover = false;
+	}
+#endif
 
 	kfree((void *)softback_buf);
 	softback_buf = 0UL;

@@ -29,26 +29,23 @@
  * - 1.0.0 - initial interface
  * - 1.1.0 - adds madvise, and support for submits with > 4 cmd buffers
  * - 1.2.0 - adds explicit fence support for submit ioctl
+ * - 1.3.0 - adds GMEM_BASE + NR_RINGS params, SUBMITQUEUE_NEW +
+ *           SUBMITQUEUE_CLOSE ioctls, and MSM_INFO_IOVA flag for
+ *           MSM_GEM_INFO ioctl.
  */
 #define MSM_VERSION_MAJOR	1
-#define MSM_VERSION_MINOR	2
+#define MSM_VERSION_MINOR	3
 #define MSM_VERSION_PATCHLEVEL	0
-
-static void msm_fb_output_poll_changed(struct drm_device *dev)
-{
-	struct msm_drm_private *priv = dev->dev_private;
-	if (priv->fbdev)
-		drm_fb_helper_hotplug_event(priv->fbdev);
-}
 
 static const struct drm_mode_config_funcs mode_config_funcs = {
 	.fb_create = msm_framebuffer_create,
-	.output_poll_changed = msm_fb_output_poll_changed,
-	.atomic_check = msm_atomic_check,
-	.atomic_commit = msm_atomic_commit,
-	.atomic_state_alloc = msm_atomic_state_alloc,
-	.atomic_state_clear = msm_atomic_state_clear,
-	.atomic_state_free = msm_atomic_state_free,
+	.output_poll_changed = drm_fb_helper_output_poll_changed,
+	.atomic_check = drm_atomic_helper_check,
+	.atomic_commit = drm_atomic_helper_commit,
+};
+
+static const struct drm_mode_config_helper_funcs mode_config_helper_funcs = {
+	.atomic_commit_tail = msm_atomic_commit_tail,
 };
 
 #ifdef CONFIG_DRM_MSM_REGISTER_LOGGING
@@ -211,7 +208,6 @@ static int msm_drm_uninit(struct device *dev)
 	struct drm_device *ddev = platform_get_drvdata(pdev);
 	struct msm_drm_private *priv = ddev->dev_private;
 	struct msm_kms *kms = priv->kms;
-	struct msm_gpu *gpu = priv->gpu;
 	struct msm_vblank_ctrl *vbl_ctrl = &priv->vblank_ctrl;
 	struct vblank_event *vbl_ev, *tmp;
 
@@ -252,15 +248,6 @@ static int msm_drm_uninit(struct device *dev)
 
 	if (kms && kms->funcs)
 		kms->funcs->destroy(kms);
-
-	if (gpu) {
-		mutex_lock(&ddev->struct_mutex);
-		// XXX what do we do here?
-		//pm_runtime_enable(&pdev->dev);
-		gpu->funcs->pm_suspend(gpu);
-		mutex_unlock(&ddev->struct_mutex);
-		gpu->funcs->destroy(gpu);
-	}
 
 	if (priv->vram.paddr) {
 		unsigned long attrs = DMA_ATTR_NO_KERNEL_MAPPING;
@@ -398,7 +385,6 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 
 	priv->wq = alloc_ordered_workqueue("msm", 0);
 	priv->atomic_wq = alloc_ordered_workqueue("msm:atomic", 0);
-	init_waitqueue_head(&priv->pending_crtcs_event);
 
 	INIT_LIST_HEAD(&priv->inactive_list);
 	INIT_LIST_HEAD(&priv->vblank_ctrl.event_list);
@@ -456,6 +442,7 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 	}
 
 	ddev->mode_config.funcs = &mode_config_funcs;
+	ddev->mode_config.helper_private = &mode_config_helper_funcs;
 
 	ret = drm_vblank_init(ddev, priv->num_crtcs);
 	if (ret < 0) {
@@ -514,22 +501,35 @@ static void load_gpu(struct drm_device *dev)
 	mutex_unlock(&init_lock);
 }
 
-static int msm_open(struct drm_device *dev, struct drm_file *file)
+static int context_init(struct drm_device *dev, struct drm_file *file)
 {
 	struct msm_file_private *ctx;
-
-	/* For now, load gpu on open.. to avoid the requirement of having
-	 * firmware in the initrd.
-	 */
-	load_gpu(dev);
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
+	msm_submitqueue_init(dev, ctx);
+
 	file->driver_priv = ctx;
 
 	return 0;
+}
+
+static int msm_open(struct drm_device *dev, struct drm_file *file)
+{
+	/* For now, load gpu on open.. to avoid the requirement of having
+	 * firmware in the initrd.
+	 */
+	load_gpu(dev);
+
+	return context_init(dev, file);
+}
+
+static void context_close(struct msm_file_private *ctx)
+{
+	msm_submitqueue_close(ctx);
+	kfree(ctx);
 }
 
 static void msm_postclose(struct drm_device *dev, struct drm_file *file)
@@ -542,14 +542,7 @@ static void msm_postclose(struct drm_device *dev, struct drm_file *file)
 		priv->lastctx = NULL;
 	mutex_unlock(&dev->struct_mutex);
 
-	kfree(ctx);
-}
-
-static void msm_lastclose(struct drm_device *dev)
-{
-	struct msm_drm_private *priv = dev->dev_private;
-	if (priv->fbdev)
-		drm_fb_helper_restore_fbdev_mode_unlocked(priv->fbdev);
+	context_close(ctx);
 }
 
 static irqreturn_t msm_irq(int irq, void *arg)
@@ -668,7 +661,7 @@ static int msm_ioctl_gem_cpu_prep(struct drm_device *dev, void *data,
 
 	ret = msm_gem_cpu_prep(obj, args->op, &timeout);
 
-	drm_gem_object_unreference_unlocked(obj);
+	drm_gem_object_put_unlocked(obj);
 
 	return ret;
 }
@@ -686,7 +679,7 @@ static int msm_ioctl_gem_cpu_fini(struct drm_device *dev, void *data,
 
 	ret = msm_gem_cpu_fini(obj);
 
-	drm_gem_object_unreference_unlocked(obj);
+	drm_gem_object_put_unlocked(obj);
 
 	return ret;
 }
@@ -726,7 +719,7 @@ static int msm_ioctl_gem_info(struct drm_device *dev, void *data,
 		args->offset = msm_gem_mmap_offset(obj);
 	}
 
-	drm_gem_object_unreference_unlocked(obj);
+	drm_gem_object_put_unlocked(obj);
 
 	return ret;
 }
@@ -737,16 +730,27 @@ static int msm_ioctl_wait_fence(struct drm_device *dev, void *data,
 	struct msm_drm_private *priv = dev->dev_private;
 	struct drm_msm_wait_fence *args = data;
 	ktime_t timeout = to_ktime(args->timeout);
+	struct msm_gpu_submitqueue *queue;
+	struct msm_gpu *gpu = priv->gpu;
+	int ret;
 
 	if (args->pad) {
 		DRM_ERROR("invalid pad: %08x\n", args->pad);
 		return -EINVAL;
 	}
 
-	if (!priv->gpu)
+	if (!gpu)
 		return 0;
 
-	return msm_wait_fence(priv->gpu->fctx, args->fence, &timeout, true);
+	queue = msm_submitqueue_get(file->driver_priv, args->queueid);
+	if (!queue)
+		return -ENOENT;
+
+	ret = msm_wait_fence(gpu->rb[queue->prio]->fctx, args->fence, &timeout,
+		true);
+
+	msm_submitqueue_put(queue);
+	return ret;
 }
 
 static int msm_ioctl_gem_madvise(struct drm_device *dev, void *data,
@@ -780,11 +784,33 @@ static int msm_ioctl_gem_madvise(struct drm_device *dev, void *data,
 		ret = 0;
 	}
 
-	drm_gem_object_unreference(obj);
+	drm_gem_object_put(obj);
 
 unlock:
 	mutex_unlock(&dev->struct_mutex);
 	return ret;
+}
+
+
+static int msm_ioctl_submitqueue_new(struct drm_device *dev, void *data,
+		struct drm_file *file)
+{
+	struct drm_msm_submitqueue *args = data;
+
+	if (args->flags & ~MSM_SUBMITQUEUE_FLAGS)
+		return -EINVAL;
+
+	return msm_submitqueue_create(dev, file->driver_priv, args->prio,
+		args->flags, &args->id);
+}
+
+
+static int msm_ioctl_submitqueue_close(struct drm_device *dev, void *data,
+		struct drm_file *file)
+{
+	u32 id = *(u32 *) data;
+
+	return msm_submitqueue_remove(file->driver_priv, id);
 }
 
 static const struct drm_ioctl_desc msm_ioctls[] = {
@@ -796,6 +822,8 @@ static const struct drm_ioctl_desc msm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(MSM_GEM_SUBMIT,   msm_ioctl_gem_submit,   DRM_AUTH|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(MSM_WAIT_FENCE,   msm_ioctl_wait_fence,   DRM_AUTH|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(MSM_GEM_MADVISE,  msm_ioctl_gem_madvise,  DRM_AUTH|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_NEW,   msm_ioctl_submitqueue_new,   DRM_AUTH|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_CLOSE, msm_ioctl_submitqueue_close, DRM_AUTH|DRM_RENDER_ALLOW),
 };
 
 static const struct vm_operations_struct vm_ops = {
@@ -825,7 +853,7 @@ static struct drm_driver msm_driver = {
 				DRIVER_MODESET,
 	.open               = msm_open,
 	.postclose           = msm_postclose,
-	.lastclose          = msm_lastclose,
+	.lastclose          = drm_fb_helper_lastclose,
 	.irq_handler        = msm_irq,
 	.irq_preinstall     = msm_irq_preinstall,
 	.irq_postinstall    = msm_irq_postinstall,

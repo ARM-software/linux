@@ -353,7 +353,7 @@ int of_reserved_mem_device_init_by_idx(struct device *dev,
 		/* ensure that dma_ops is set for virtual devices
 		 * using reserved memory
 		 */
-		of_dma_configure(dev, np);
+		of_dma_configure(dev, np, true);
 
 		dev_info(dev, "assigned reserved memory node %s\n", rmem->name);
 	} else {
@@ -393,3 +393,29 @@ void of_reserved_mem_device_release(struct device *dev)
 	rmem->ops->device_release(rmem, dev);
 }
 EXPORT_SYMBOL_GPL(of_reserved_mem_device_release);
+
+/**
+ * of_reserved_mem_lookup() - acquire reserved_mem from a device node
+ * @np:		node pointer of the desired reserved-memory region
+ *
+ * This function allows drivers to acquire a reference to the reserved_mem
+ * struct based on a device node handle.
+ *
+ * Returns a reserved_mem reference, or NULL on error.
+ */
+struct reserved_mem *of_reserved_mem_lookup(struct device_node *np)
+{
+	const char *name;
+	int i;
+
+	if (!np->full_name)
+		return NULL;
+
+	name = kbasename(np->full_name);
+	for (i = 0; i < reserved_mem_count; i++)
+		if (!strcmp(reserved_mem[i].name, name))
+			return &reserved_mem[i];
+
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(of_reserved_mem_lookup);

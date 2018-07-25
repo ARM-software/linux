@@ -115,7 +115,7 @@ static void imx_drm_crtc_reset(struct drm_crtc *crtc)
 
 	if (crtc->state) {
 		if (crtc->state->mode_blob)
-			drm_property_unreference_blob(crtc->state->mode_blob);
+			drm_property_blob_put(crtc->state->mode_blob);
 
 		state = to_imx_crtc_state(crtc->state);
 		memset(state, 0, sizeof(*state));
@@ -213,7 +213,7 @@ static bool ipu_crtc_mode_fixup(struct drm_crtc *crtc,
 static int ipu_crtc_atomic_check(struct drm_crtc *crtc,
 				 struct drm_crtc_state *state)
 {
-	u32 primary_plane_mask = 1 << drm_plane_index(crtc->primary);
+	u32 primary_plane_mask = drm_plane_mask(crtc->primary);
 
 	if (state->active && (primary_plane_mask & state->plane_mask) == 0)
 		return -EINVAL;

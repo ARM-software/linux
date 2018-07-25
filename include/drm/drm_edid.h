@@ -333,7 +333,6 @@ struct drm_encoder;
 struct drm_connector;
 struct drm_display_mode;
 
-void drm_edid_to_eld(struct drm_connector *connector, struct edid *edid);
 int drm_edid_to_sad(struct edid *edid, struct cea_sad **sads);
 int drm_edid_to_speaker_allocation(struct edid *edid, u8 **sadb);
 int drm_av_sync_delay(struct drm_connector *connector,
@@ -341,6 +340,8 @@ int drm_av_sync_delay(struct drm_connector *connector,
 
 #ifdef CONFIG_DRM_LOAD_EDID_FIRMWARE
 struct edid *drm_load_edid_firmware(struct drm_connector *connector);
+int __drm_set_edid_firmware_path(const char *path);
+int __drm_get_edid_firmware_path(char *buf, size_t bufsize);
 #else
 static inline struct edid *
 drm_load_edid_firmware(struct drm_connector *connector)
@@ -355,6 +356,7 @@ drm_hdmi_avi_infoframe_from_display_mode(struct hdmi_avi_infoframe *frame,
 					 bool is_hdmi2_sink);
 int
 drm_hdmi_vendor_infoframe_from_display_mode(struct hdmi_vendor_infoframe *frame,
+					    struct drm_connector *connector,
 					    const struct drm_display_mode *mode);
 void
 drm_hdmi_avi_infoframe_quant_range(struct hdmi_avi_infoframe *frame,

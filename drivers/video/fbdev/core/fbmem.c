@@ -489,7 +489,8 @@ static int fb_show_logo_line(struct fb_info *info, int rotate,
 	}
 
 	if (fb_logo.depth <= 4) {
-		logo_new = kmalloc(logo->width * logo->height, GFP_KERNEL);
+		logo_new = kmalloc_array(logo->width, logo->height,
+					 GFP_KERNEL);
 		if (logo_new == NULL) {
 			kfree(palette);
 			if (saved_pseudo_palette)
@@ -506,8 +507,8 @@ static int fb_show_logo_line(struct fb_info *info, int rotate,
 	image.height = logo->height;
 
 	if (rotate) {
-		logo_rotate = kmalloc(logo->width *
-				      logo->height, GFP_KERNEL);
+		logo_rotate = kmalloc_array(logo->width, logo->height,
+					    GFP_KERNEL);
 		if (logo_rotate)
 			fb_rotate_logo(info, logo_rotate, &image, rotate);
 	}
@@ -1679,7 +1680,7 @@ static int do_register_framebuffer(struct fb_info *fb_info)
 			fb_info->pixmap.access_align = 32;
 			fb_info->pixmap.flags = FB_PIXMAP_DEFAULT;
 		}
-	}	
+	}
 	fb_info->pixmap.offset = 0;
 
 	if (!fb_info->pixmap.blit_x)
