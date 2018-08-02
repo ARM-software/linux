@@ -85,3 +85,10 @@
 		status = "disabled";
 		#iommu-cells = <1>;
 	};
+
+	smmu: smmu@e00000 {
+		compatible = "arm,smmu-v3";
+		reg = <0xe00000 0x20000>;
+		msi-parent = <&v2m_0>;
+		status = "disabled";
+	};
