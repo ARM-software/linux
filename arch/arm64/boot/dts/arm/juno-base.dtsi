@@ -571,6 +571,38 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
 			thermal-sensors = <&scpi_sensors0 3>;
+			sustainable-power = <2500>;
+
+			trips {
+				threshold: trip-point@0 {
+					temperature = <55000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+				target: trip-point@1 {
+					temperature = <65000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&target>;
+					contribution = <1024>;
+					cooling-device = <&cluster0 0 0>;
+				};
+				map1 {
+					trip = <&target>;
+					contribution = <2048>;
+					cooling-device = <&cluster1 0 0>;
+				};
+				map2 {
+					trip = <&target>;
+					contribution = <1024>;
+					cooling-device = <&gpu 0 4>;
+				};
+			};
 		};
 
 		big_cluster_thermal_zone: big-cluster {

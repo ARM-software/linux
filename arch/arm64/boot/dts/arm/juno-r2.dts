@@ -38,7 +38,8 @@
 		#size-cells = <0>;
 
 		cpu-map {
-			cluster0 {
+			cluster0: cluster0 {
+				#cooling-cells = <2>;
 				core0 {
 					cpu = <&A72_0>;
 				};
@@ -47,7 +48,8 @@
 				};
 			};
 
-			cluster1 {
+			cluster1: cluster1 {
+				#cooling-cells = <2>;
 				core0 {
 					cpu = <&A53_0>;
 				};
