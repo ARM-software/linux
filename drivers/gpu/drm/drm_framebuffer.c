@@ -157,6 +157,18 @@ static int fb_plane_height(int height,
 	return DIV_ROUND_UP(height, format->vsub);
 }
 
+static bool format_is_non_linear_only(uint32_t format)
+{
+	switch (format) {
+	case DRM_FORMAT_VUY101010:
+	case DRM_FORMAT_YUV420_8BIT:
+	case DRM_FORMAT_YUV420_10BIT:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static int framebuffer_check(struct drm_device *dev,
 			     const struct drm_mode_fb_cmd2 *r)
 {
@@ -214,10 +226,23 @@ static int framebuffer_check(struct drm_device *dev,
 			return -EINVAL;
 		}
 
-		if (r->flags & DRM_MODE_FB_MODIFIERS &&
-		    r->modifier[i] != r->modifier[0]) {
-			DRM_DEBUG_KMS("bad fb modifier %llu for plane %d\n",
-				      r->modifier[i], i);
+		if (r->flags & DRM_MODE_FB_MODIFIERS) {
+			if (r->modifier[i] != r->modifier[0]) {
+				DRM_DEBUG_KMS("bad fb modifier %llu for plane %d\n",
+					      r->modifier[i], i);
+				return -EINVAL;
+			}
+		}
+
+		if ((!(r->flags & DRM_MODE_FB_MODIFIERS) ||
+		    r->modifier[i] == DRM_FORMAT_MOD_LINEAR) &&
+		    format_is_non_linear_only(r->pixel_format)) {
+			struct drm_format_name_buf format_name;
+
+			DRM_DEBUG_KMS("format %s cannot be linear\n",
+				      drm_get_format_name(r->pixel_format,
+							  &format_name));
+
 			return -EINVAL;
 		}
 
