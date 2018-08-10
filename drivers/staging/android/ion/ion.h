@@ -23,7 +23,7 @@
 
 /**
  * struct ion_platform_heap - defines a heap in the given platform
- * @type:	type of the heap from ion_heap_type enum
+ * @heap:	heap created by the platform_heap
  * @id:		unique identifier for heap.  When allocating higher numb ers
  *		will be allocated from first.  At allocation these are passed
  *		as a bit mask and therefore can not exceed ION_NUM_HEAP_IDS.
@@ -35,7 +35,7 @@
  * Provided by the board file.
  */
 struct ion_platform_heap {
-	enum ion_heap_type type;
+	struct ion_heap *heap;
 	unsigned int id;
 	const char *name;
 	phys_addr_t base;
@@ -176,6 +176,7 @@ struct ion_heap {
 	unsigned int id;
 	const char *name;
 	struct shrinker shrinker;
+	struct dentry *shrinker_debug;
 	struct list_head free_list;
 	size_t free_list_size;
 	spinlock_t free_lock;
@@ -192,6 +193,12 @@ struct ion_heap {
  * @heap:		the heap to add
  */
 void ion_device_add_heap(struct ion_heap *heap);
+
+/**
+ * ion_device_remove_heap - remove a heap from the ion device
+ * @heap:		the heap to remove
+ */
+void ion_device_remove_heap(struct ion_heap *heap);
 
 /**
  * some helpers for common operations on buffers using the sg_table
@@ -218,6 +225,8 @@ int ion_alloc(size_t len,
  */
 int ion_heap_init_shrinker(struct ion_heap *heap);
 
+void ion_heap_destroy_shrinker(struct ion_heap *heap);
+
 /**
  * ion_heap_init_deferred_free -- initialize deferred free functionality
  * @heap:		the heap
@@ -227,6 +236,9 @@ int ion_heap_init_shrinker(struct ion_heap *heap);
  * return immediately and the actual free will occur some time later
  */
 int ion_heap_init_deferred_free(struct ion_heap *heap);
+
+void ion_heap_destroy_deferred_free(struct ion_heap *heap);
+
 
 /**
  * ion_heap_freelist_add - add a buffer to the deferred free list

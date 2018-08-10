@@ -560,14 +560,35 @@ void ion_device_add_heap(struct ion_heap *heap)
 		char debug_name[64];
 
 		snprintf(debug_name, 64, "%s_shrink", heap->name);
-		debugfs_create_file(debug_name, 0644, dev->debug_root,
-				    heap, &debug_shrink_fops);
+		heap->shrinker_debug = debugfs_create_file(
+			debug_name, 0644, dev->debug_root, heap,
+			&debug_shrink_fops);
 	}
 
 	dev->heap_cnt++;
 	up_write(&dev->lock);
 }
 EXPORT_SYMBOL(ion_device_add_heap);
+
+void ion_device_remove_heap(struct ion_heap *heap)
+{
+	struct ion_device *dev = internal_dev;
+
+	down_write(&dev->lock);
+	plist_del(&heap->node, &dev->heaps);
+	dev->heap_cnt--;
+	up_write(&dev->lock);
+
+	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE)
+		ion_heap_destroy_deferred_free(heap);
+
+	if ((heap->flags & ION_HEAP_FLAG_DEFER_FREE) || heap->ops->shrink)
+		ion_heap_destroy_shrinker(heap);
+
+	if (heap->shrinker_debug)
+		debugfs_remove(heap->shrinker_debug);
+}
+EXPORT_SYMBOL(ion_device_remove_heap);
 
 static int ion_device_create(void)
 {

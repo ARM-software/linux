@@ -151,3 +151,11 @@ error_gen_pool_create:
 	return ERR_PTR(ret);
 }
 
+void ion_chunk_heap_destroy(struct ion_platform_heap *heap_data)
+{
+	struct ion_chunk_heap *chunk_heap =
+		container_of(heap_data->heap, struct ion_chunk_heap, heap);
+
+	gen_pool_destroy(chunk_heap->pool);
+	kfree(chunk_heap);
+}
