@@ -129,6 +129,7 @@ static int __ion_add_cma_heaps(struct cma *cma, void *data)
 		return PTR_ERR(heap);
 
 	heap->name = cma_get_name(cma);
+	heap->owner = THIS_MODULE;
 
 	ion_device_add_heap(heap);
 	return 0;

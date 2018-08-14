@@ -157,6 +157,8 @@ struct ion_heap_ops {
  * @lock:		protects the free list
  * @waitqueue:		queue to wait on from deferred free thread
  * @task:		task struct of deferred free thread
+ * @owner:		pointer to exporter module - used for refcounting kernel
+ * 			module
  * @debug_show:		called when heap debug file is read to add any
  *			heap specific debug info to output
  *
@@ -179,6 +181,7 @@ struct ion_heap {
 	spinlock_t free_lock;
 	wait_queue_head_t waitqueue;
 	struct task_struct *task;
+	struct module *owner;
 
 	int (*debug_show)(struct ion_heap *heap, struct seq_file *s,
 			  void *unused);

@@ -422,6 +422,7 @@ int ion_alloc(size_t len, unsigned int heap_id_mask, unsigned int flags)
 	exp_info.size = buffer->size;
 	exp_info.flags = O_RDWR;
 	exp_info.priv = buffer;
+	exp_info.owner = heap->owner;
 
 	dmabuf = dma_buf_export(&exp_info);
 	if (IS_ERR(dmabuf)) {

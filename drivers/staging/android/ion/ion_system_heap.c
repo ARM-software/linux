@@ -297,6 +297,7 @@ static int ion_system_heap_create(void)
 	if (IS_ERR(heap))
 		return PTR_ERR(heap);
 	heap->name = "ion_system_heap";
+	heap->owner = THIS_MODULE;
 
 	ion_device_add_heap(heap);
 	return 0;
