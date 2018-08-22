@@ -264,29 +264,8 @@ static bool
 malidp_fb_verify_afbc_framebuffer_caps(struct drm_device *dev,
 				       const struct drm_mode_fb_cmd2 *mode_cmd)
 {
-	const struct drm_format_info *info;
-
-	if ((mode_cmd->modifier[0] >> 56) != DRM_FORMAT_MOD_VENDOR_ARM) {
-		DRM_ERROR("Unknown modifier (not Arm)\n");
+	if (malidp_format_mod_supported(dev, mode_cmd->pixel_format, mode_cmd->modifier[0]) == false)
 		return false;
-	}
-
-	if (mode_cmd->modifier[0] &
-	    ~DRM_FORMAT_MOD_ARM_AFBC(AFBC_MOD_VALID_BITS)) {
-		DRM_ERROR("Unsupported modifiers\n");
-		return false;
-	}
-
-	info = drm_get_format_info(dev, mode_cmd);
-	if (!info) {
-		DRM_ERROR("Unable to get the format information\n");
-		return false;
-	}
-
-	if (info->num_planes != 1) {
-		DRM_ERROR("AFBC buffers expect one plane\n");
-		return false;
-	}
 
 	if (mode_cmd->offsets[0] != 0) {
 		DRM_ERROR("AFBC buffers' plane offset should be 0\n");

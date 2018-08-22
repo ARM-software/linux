@@ -945,6 +945,30 @@ u8 malidp_hw_get_format_id(const struct malidp_hw_regmap *map,
 	return MALIDP_INVALID_FORMAT_ID;
 }
 
+bool malidp_hw_format_is_linear_only(u32 format)
+{
+	switch (format) {
+		case DRM_FORMAT_ARGB2101010 :
+		case DRM_FORMAT_RGBA1010102 :
+		case DRM_FORMAT_BGRA1010102 :
+		case DRM_FORMAT_ARGB8888 :
+		case DRM_FORMAT_RGBA8888 :
+		case DRM_FORMAT_BGRA8888 :
+		case DRM_FORMAT_XBGR8888 :
+		case DRM_FORMAT_XRGB8888 :
+		case DRM_FORMAT_RGBX8888 :
+		case DRM_FORMAT_BGRX8888 :
+		case DRM_FORMAT_RGB888 :
+		case DRM_FORMAT_RGB565 :
+		case DRM_FORMAT_ARGB1555 :
+		case DRM_FORMAT_RGBA5551 :
+		case DRM_FORMAT_BGRA5551 :
+			return true;
+		default :
+			return false;
+	}
+}
+
 static void malidp_hw_clear_irq(struct malidp_hw_device *hwdev, u8 block, u32 irq)
 {
 	u32 base = malidp_get_block_base(hwdev, block);
