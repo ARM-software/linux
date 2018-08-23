@@ -21,8 +21,16 @@
 
 #include "../uapi/ion.h"
 
+struct ion_platform_heap;
+
+struct ion_platform_heap_ops {
+	struct ion_heap *(*heap_create)(struct ion_platform_heap *heap);
+	void (*heap_destroy)(struct ion_platform_heap *heap);
+};
+
 /**
  * struct ion_platform_heap - defines a heap in the given platform
+ * @ops:	callbacks used to create and destroy the heap
  * @heap:	heap created by the platform_heap
  * @id:		unique identifier for heap.  When allocating higher numb ers
  *		will be allocated from first.  At allocation these are passed
@@ -35,6 +43,7 @@
  * Provided by the board file.
  */
 struct ion_platform_heap {
+	const struct ion_platform_heap_ops *ops;
 	struct ion_heap *heap;
 	unsigned int id;
 	const char *name;
@@ -344,5 +353,11 @@ int ion_page_pool_shrink(struct ion_page_pool *pool, gfp_t gfp_mask,
 long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 
 int ion_query_heaps(struct ion_heap_query *query);
+
+struct ion_heap *ion_carveout_heap_create(struct ion_platform_heap *heap_data);
+void ion_carveout_heap_destroy(struct ion_platform_heap *heap_data);
+
+struct ion_heap *ion_chunk_heap_create(struct ion_platform_heap *heap_data);
+void ion_chunk_heap_destroy(struct ion_platform_heap *heap_data);
 
 #endif /* _ION_H */

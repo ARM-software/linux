@@ -1,0 +1,51 @@
+ION platform
+============
+
+The ION platform driver allows to create ION heaps with a reserved memory as a
+back-end.
+
+1) ION node
+
+Required properties:
+
+- compatible : This can be one of the following ION heap types:
+    - "ion,carveout"
+    - "ion,chunk"
+- memory-region:  a phandle to the reserved memory used as a back-end.
+
+Optional properties:
+
+- chunk: chunk size for the ION chunk heap in bytes.
+
+
+2) ION reserved memory
+
+Required properties:
+
+- compatible : "ion-reserved"
+- reg : This property defines the address and size of the reserved memory.
+
+The reserved memory "no-map" option is not supported by this driver.
+
+
+3) Example:
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		gpu_protected: gpu_protected@c0000000 {
+			compatible = "ion-reserved";
+			reg = <0x0 0xc0000000 0x0 0x10000000>;
+		};
+	};
+
+	ion {
+		compatible = "simple-bus";
+
+		protected {
+			compatible = "ion,carveout";
+			memory-region = <&gpu_protected>;
+		};
+	};

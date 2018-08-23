@@ -150,6 +150,7 @@ error_gen_pool_create:
 	kfree(chunk_heap);
 	return ERR_PTR(ret);
 }
+EXPORT_SYMBOL(ion_chunk_heap_create);
 
 void ion_chunk_heap_destroy(struct ion_platform_heap *heap_data)
 {
@@ -159,3 +160,4 @@ void ion_chunk_heap_destroy(struct ion_platform_heap *heap_data)
 	gen_pool_destroy(chunk_heap->pool);
 	kfree(chunk_heap);
 }
+EXPORT_SYMBOL(ion_chunk_heap_destroy);

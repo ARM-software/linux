@@ -17,6 +17,14 @@ config ION_SYSTEM_HEAP
 	  Choose this option to enable the Ion system heap. The system heap
 	  is backed by pages from the buddy allocator. If in doubt, say Y.
 
+config ION_CMA_HEAP
+	bool "Ion CMA heap support"
+	depends on ION && DMA_CMA
+	help
+	  Choose this option to enable CMA heaps with Ion. This heap is backed
+	  by the Contiguous Memory Allocator (CMA). If your system has these
+	  regions, you should say Y here.
+
 config ION_CARVEOUT_HEAP
 	bool "Ion carveout heap support"
 	depends on ION
@@ -35,10 +43,12 @@ config ION_CHUNK_HEAP
 	  into smaller chunk sizes, typically corresponding to a TLB size.
 	  Unless you know your system has these regions, you should say N here.
 
-config ION_CMA_HEAP
-	bool "Ion CMA heap support"
-	depends on ION && DMA_CMA
+config ION_PLAT
+	tristate "Ion platform specific heaps"
+	depends on ION && OF_RESERVED_MEM && (ION_CHUNK_HEAP || ION_CARVEOUT_HEAP)
 	help
-	  Choose this option to enable CMA heaps with Ion. This heap is backed
-	  by the Contiguous Memory Allocator (CMA). If your system has these
-	  regions, you should say Y here.
+	  Choose this option to enable platform specific heaps for ION. This
+	  allows to create Carveout or Chunk heaps based on reserved memory.
+
+config ION_RMEM
+	def_bool y if ION_PLAT
