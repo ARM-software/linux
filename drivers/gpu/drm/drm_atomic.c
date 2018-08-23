@@ -554,29 +554,23 @@ int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		drm_property_blob_put(mode);
 		return ret;
 	} else if (property == config->degamma_lut_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		return drm_atomic_replace_property_blob_from_id(dev,
 					&state->degamma_lut,
 					val,
 					-1, sizeof(struct drm_color_lut),
 					&replaced);
-		state->color_mgmt_changed |= replaced;
-		return ret;
 	} else if (property == config->ctm_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		return drm_atomic_replace_property_blob_from_id(dev,
 					&state->ctm,
 					val,
 					sizeof(struct drm_color_ctm), -1,
 					&replaced);
-		state->color_mgmt_changed |= replaced;
-		return ret;
 	} else if (property == config->gamma_lut_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		return drm_atomic_replace_property_blob_from_id(dev,
 					&state->gamma_lut,
 					val,
 					-1, sizeof(struct drm_color_lut),
 					&replaced);
-		state->color_mgmt_changed |= replaced;
-		return ret;
 	} else if (property == config->prop_out_fence_ptr) {
 		s32 __user *fence_ptr = u64_to_user_ptr(val);
 

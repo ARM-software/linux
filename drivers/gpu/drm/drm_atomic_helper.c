@@ -611,6 +611,13 @@ drm_atomic_helper_check_modeset(struct drm_device *dev,
 
 			return -EINVAL;
 		}
+		if (new_crtc_state->degamma_lut != old_crtc_state->degamma_lut ||
+		    new_crtc_state->ctm != old_crtc_state->ctm ||
+		    new_crtc_state->gamma_lut != old_crtc_state->gamma_lut) {
+			DRM_DEBUG_ATOMIC("[CRTC:%d:%s] color management changed\n",
+					 crtc->base.id, crtc->name);
+			new_crtc_state->color_mgmt_changed = true;
+		}
 	}
 
 	ret = handle_conflicting_encoders(state, false);
@@ -3964,7 +3971,6 @@ int drm_atomic_helper_legacy_gamma_set(struct drm_crtc *crtc,
 	replaced  = drm_property_replace_blob(&crtc_state->degamma_lut, NULL);
 	replaced |= drm_property_replace_blob(&crtc_state->ctm, NULL);
 	replaced |= drm_property_replace_blob(&crtc_state->gamma_lut, blob);
-	crtc_state->color_mgmt_changed |= replaced;
 
 	ret = drm_atomic_commit(state);
 
