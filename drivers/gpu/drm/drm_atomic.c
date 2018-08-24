@@ -852,7 +852,6 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	struct drm_device *dev = plane->dev;
 	struct drm_mode_config *config = &dev->mode_config;
 	bool replaced = false;
-	int ret;
 
 	if (property == config->prop_fb_id) {
 		struct drm_framebuffer *fb = drm_framebuffer_lookup(dev, NULL, val);
@@ -907,25 +906,19 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	} else if (property == plane->color_range_property) {
 		state->color_range = val;
 	} else if (property == plane->degamma_lut_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		return drm_atomic_replace_property_blob_from_id(dev,
 					&state->degamma_lut,
 					val, -1, sizeof(struct drm_color_lut), &replaced);
-		state->color_mgmt_changed |= replaced;
-		return ret;
 	} else if (property == plane->ctm_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		return drm_atomic_replace_property_blob_from_id(dev,
 					&state->ctm,
 					val,
 					sizeof(struct drm_color_ctm), -1,
 					&replaced);
-		state->color_mgmt_changed |= replaced;
-		return ret;
 	} else if (property == plane->gamma_lut_property) {
-		ret = drm_atomic_replace_property_blob_from_id(dev,
+		return drm_atomic_replace_property_blob_from_id(dev,
 					&state->gamma_lut,
 					val, -1, sizeof(struct drm_color_lut), &replaced);
-		state->color_mgmt_changed |= replaced;
-		return ret;
 	} else if (plane->funcs->atomic_set_property) {
 		return plane->funcs->atomic_set_property(plane, state,
 				property, val);

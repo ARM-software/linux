@@ -834,6 +834,14 @@ drm_atomic_helper_check_planes(struct drm_device *dev,
 
 		drm_atomic_helper_plane_changed(state, old_plane_state, new_plane_state, plane);
 
+		if (new_plane_state->degamma_lut != old_plane_state->degamma_lut ||
+		    new_plane_state->ctm != old_plane_state->ctm ||
+		    new_plane_state->gamma_lut != old_plane_state->gamma_lut) {
+			DRM_DEBUG_ATOMIC("[PLANE:%d:%s] color management changed\n",
+					 plane->base.id, plane->name);
+			new_plane_state->color_mgmt_changed = true;
+		}
+
 		if (!funcs || !funcs->atomic_check)
 			continue;
 
