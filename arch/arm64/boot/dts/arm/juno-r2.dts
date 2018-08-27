@@ -11,6 +11,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "juno-base.dtsi"
 #include "juno-cs-r1r2.dtsi"
+#include "juno-t62x.dtsi"
 
 / {
 	model = "ARM Juno development board (r2)";
