@@ -144,6 +144,48 @@ done:
 }
 
 /**
+ * drm_plane_enable_color_mgmt - enable color management properties
+ * @plane: DRM Plane
+ * @plane_degamma_lut_size: the size of the degamma lut (before CSC)
+ * @plane_has_ctm: whether to attach ctm_property for CSC matrix
+ * @plane_gamma_lut_size: the size of the gamma lut (after CSC)
+ *
+ * This function lets the driver enable the color correction
+ * properties on a plane. This includes 3 degamma, csc and gamma
+ * properties that userspace can set and 2 size properties to inform
+ * the userspace of the lut sizes. Each of the properties are
+ * optional. The gamma and degamma properties are only attached if
+ * their size is not 0 and ctm_property is only attached if has_ctm is
+ * true.
+ */
+void drm_plane_enable_color_mgmt(struct drm_plane *plane,
+				uint plane_degamma_lut_size,
+				bool plane_has_ctm,
+				uint plane_gamma_lut_size)
+{
+	if (plane_degamma_lut_size) {
+		drm_object_attach_property(&plane->base,
+				plane->degamma_lut_property, 0);
+		drm_object_attach_property(&plane->base,
+				plane->degamma_lut_size_property,
+				plane_degamma_lut_size);
+	}
+
+	if (plane_has_ctm)
+		drm_object_attach_property(&plane->base,
+				plane->ctm_property, 0);
+
+	if (plane_gamma_lut_size) {
+		drm_object_attach_property(&plane->base,
+				plane->gamma_lut_property, 0);
+		drm_object_attach_property(&plane->base,
+				plane->gamma_lut_size_property,
+				plane_gamma_lut_size);
+	}
+}
+EXPORT_SYMBOL(drm_plane_enable_color_mgmt);
+
+/**
  * drm_universal_plane_init - Initialize a new universal plane object
  * @dev: DRM device
  * @plane: plane object to init
@@ -430,6 +472,25 @@ void drm_plane_force_disable(struct drm_plane *plane)
 }
 EXPORT_SYMBOL(drm_plane_force_disable);
 
+/*
+ * Added to accommodate enhanced LUT precision.
+ * Max LUT precision is 32 bits.
+ */
+uint32_t drm_color_lut_extract_ext(uint32_t user_input, uint32_t bit_precision)
+{
+	uint32_t val = user_input;
+	uint32_t max = 0xffffffff >> (32 - bit_precision);
+
+	/* Round only if we're not using full precision. */
+	if (bit_precision < 32) {
+		val += 1UL << (32 - bit_precision - 1);
+		val >>= 32 - bit_precision;
+	}
+
+	return clamp_val(val, 0, max);
+}
+EXPORT_SYMBOL(drm_color_lut_extract_ext);
+
 /**
  * drm_mode_plane_set_obj_prop - set the value of a property
  * @plane: drm plane object to set property value for
@@ -458,6 +519,76 @@ int drm_mode_plane_set_obj_prop(struct drm_plane *plane,
 	return ret;
 }
 EXPORT_SYMBOL(drm_mode_plane_set_obj_prop);
+
+/**
+ * DOC: degamma_lut_property
+ *
+ * degamma_lut_property:
+ *	Blob property which allows a userspace to provide LUT values
+ *	to apply degamma curve using the h/w plane degamma processing
+ *	engine, thereby making the content as linear for further color
+ *	processing.
+ *
+ * degamma_lut_size_property:
+ *	Range Property to indicate size of the plane degamma LUT.
+ *
+ * ctm_property:
+ *	Blob property which allows a userspace to provide CTM coefficients
+ *	to do color space conversion or any other enhancement by doing a
+ *	matrix multiplication using the h/w CTM processing engine
+ *
+ * gamma_lut_property:
+ *	Blob property which allows a userspace to provide LUT values
+ *	to apply gamma/tone-mapping curve using the h/w plane gamma
+ *	processing engine, thereby making the content as non-linear
+ *	or to perform any tone mapping operation for HDR usecases.
+ *
+ * gamma_lut_size_property:
+ *	Range Property to indicate size of the plane gamma LUT.
+ */
+int drm_plane_color_create_prop(struct drm_device *dev,
+				struct drm_plane *plane)
+{
+	struct drm_property *prop;
+
+	prop = drm_property_create(dev,
+			DRM_MODE_PROP_BLOB,
+			"PLANE_DEGAMMA_LUT", 0);
+	if (!prop)
+		return -ENOMEM;
+	plane->degamma_lut_property = prop;
+
+	prop = drm_property_create_range(dev,
+			DRM_MODE_PROP_IMMUTABLE,
+			"PLANE_DEGAMMA_LUT_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+	plane->degamma_lut_size_property = prop;
+
+	prop = drm_property_create(dev,
+			DRM_MODE_PROP_BLOB,
+			"PLANE_CTM", 0);
+	if (!prop)
+		return -ENOMEM;
+	plane->ctm_property = prop;
+
+	prop = drm_property_create(dev,
+			DRM_MODE_PROP_BLOB,
+			"PLANE_GAMMA_LUT", 0);
+	if (!prop)
+		return -ENOMEM;
+	plane->gamma_lut_property = prop;
+
+	prop = drm_property_create_range(dev,
+			DRM_MODE_PROP_IMMUTABLE,
+			"PLANE_GAMMA_LUT_SIZE", 0, UINT_MAX);
+	if (!prop)
+		return -ENOMEM;
+	plane->gamma_lut_size_property = prop;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_plane_color_create_prop);
 
 int drm_mode_getplane_res(struct drm_device *dev, void *data,
 			  struct drm_file *file_priv)

@@ -1442,7 +1442,6 @@ retry:
 		replaced |= drm_property_replace_blob(&crtc_state->ctm, NULL);
 		replaced |= drm_property_replace_blob(&crtc_state->gamma_lut,
 						      gamma_lut);
-		crtc_state->color_mgmt_changed |= replaced;
 	}
 
 	ret = drm_atomic_commit(state);

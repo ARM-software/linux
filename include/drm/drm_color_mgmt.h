@@ -68,4 +68,9 @@ int drm_plane_create_color_properties(struct drm_plane *plane,
 				      u32 supported_ranges,
 				      enum drm_color_encoding default_encoding,
 				      enum drm_color_range default_range);
+
+void drm_plane_enable_color_mgmt(struct drm_plane *plane,
+				 uint plane_degamma_lut_size,
+				 bool plane_has_ctm,
+				 uint plane_gamma_lut_size);
 #endif

@@ -611,6 +611,13 @@ drm_atomic_helper_check_modeset(struct drm_device *dev,
 
 			return -EINVAL;
 		}
+		if (new_crtc_state->degamma_lut != old_crtc_state->degamma_lut ||
+		    new_crtc_state->ctm != old_crtc_state->ctm ||
+		    new_crtc_state->gamma_lut != old_crtc_state->gamma_lut) {
+			DRM_DEBUG_ATOMIC("[CRTC:%d:%s] color management changed\n",
+					 crtc->base.id, crtc->name);
+			new_crtc_state->color_mgmt_changed = true;
+		}
 	}
 
 	ret = handle_conflicting_encoders(state, false);
@@ -826,6 +833,14 @@ drm_atomic_helper_check_planes(struct drm_device *dev,
 		funcs = plane->helper_private;
 
 		drm_atomic_helper_plane_changed(state, old_plane_state, new_plane_state, plane);
+
+		if (new_plane_state->degamma_lut != old_plane_state->degamma_lut ||
+		    new_plane_state->ctm != old_plane_state->ctm ||
+		    new_plane_state->gamma_lut != old_plane_state->gamma_lut) {
+			DRM_DEBUG_ATOMIC("[PLANE:%d:%s] color management changed\n",
+					 plane->base.id, plane->name);
+			new_plane_state->color_mgmt_changed = true;
+		}
 
 		if (!funcs || !funcs->atomic_check)
 			continue;
@@ -3614,6 +3629,14 @@ void __drm_atomic_helper_plane_duplicate_state(struct drm_plane *plane,
 
 	state->fence = NULL;
 	state->commit = NULL;
+
+	if (state->degamma_lut)
+		drm_property_blob_get(state->degamma_lut);
+	if (state->ctm)
+		drm_property_blob_get(state->ctm);
+	if (state->gamma_lut)
+		drm_property_blob_get(state->gamma_lut);
+	state->color_mgmt_changed = false;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_duplicate_state);
 
@@ -3658,6 +3681,15 @@ void __drm_atomic_helper_plane_destroy_state(struct drm_plane_state *state)
 
 	if (state->commit)
 		drm_crtc_commit_put(state->commit);
+
+	if (state->degamma_lut)
+		drm_property_blob_put(state->degamma_lut);
+
+	if (state->ctm)
+		drm_property_blob_put(state->ctm);
+
+	if (state->gamma_lut)
+		drm_property_blob_put(state->gamma_lut);
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_destroy_state);
 
@@ -3947,7 +3979,6 @@ int drm_atomic_helper_legacy_gamma_set(struct drm_crtc *crtc,
 	replaced  = drm_property_replace_blob(&crtc_state->degamma_lut, NULL);
 	replaced |= drm_property_replace_blob(&crtc_state->ctm, NULL);
 	replaced |= drm_property_replace_blob(&crtc_state->gamma_lut, blob);
-	crtc_state->color_mgmt_changed |= replaced;
 
 	ret = drm_atomic_commit(state);
 
