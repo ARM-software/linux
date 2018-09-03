@@ -686,10 +686,17 @@ static void malidp_de_plane_update(struct drm_plane *plane,
 			LAYER_V_VAL(state->crtc_y),
 			mp->layer->base + MALIDP_LAYER_OFFSET);
 
-	if (mp->layer->id == DE_SMART)
+	if (mp->layer->id == DE_SMART) {
+		/*
+		 * Enable the first rectangle in the SMART layer to be
+		 * able to use it as a drm plane.
+		 */
+		malidp_hw_write(mp->hwdev, 1,
+				mp->layer->base + MALIDP550_LS_ENABLE);
 		malidp_hw_write(mp->hwdev,
 				LAYER_H_VAL(src_w) | LAYER_V_VAL(src_h),
 				mp->layer->base + MALIDP550_LS_R1_IN_SIZE);
+	}
 
 	/* first clear the rotation bits */
 	val = malidp_hw_read(mp->hwdev, mp->layer->base + MALIDP_LAYER_CONTROL);
