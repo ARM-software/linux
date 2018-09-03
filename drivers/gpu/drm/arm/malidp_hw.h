@@ -56,6 +56,12 @@ struct malidp_irq_map {
 	u32 err_mask;		/* mask of bits that represent errors */
 };
 
+enum rotation_features {
+	ROTATE_ANY,		/* supports rotation on any buffers */
+	ROTATE_COMPRESSED,	/* supports rotation only on compressed buffers */
+	ROTATE_NONE,		/* does not support rotation at all */
+};
+
 struct malidp_layer {
 	u16 id;			/* layer ID */
 	u16 base;		/* address offset for the register bank */
@@ -63,6 +69,9 @@ struct malidp_layer {
 	u16 stride_offset;	/* offset to the first stride register. */
 	s16 yuv2rgb_offset;	/* offset to the YUV->RGB matrix entries */
 	u16 mmu_ctrl_offset;    /* offset to the MMU control register */
+	enum rotation_features rot;    /* type of rotation supported */
+	/* address offset for the AFBC decoder registers */
+	u16 afbc_decoder_offset;
 };
 
 enum malidp_scaling_coeff_set {
@@ -86,7 +95,9 @@ struct malidp_se_config {
 };
 
 /* regmap features */
-#define MALIDP_REGMAP_HAS_CLEARIRQ	(1 << 0)
+#define MALIDP_REGMAP_HAS_CLEARIRQ				BIT(0)
+#define MALIDP_DEVICE_AFBC_SUPPORT_SPLIT			BIT(1)
+#define AFBC_SUPPORT_SPLIT_WITH_YUV_420_10			BIT(2)
 
 struct malidp_hw_regmap {
 	/* address offset of the DE register bank */
@@ -174,7 +185,8 @@ struct malidp_hw {
 	 * Calculate the required rotation memory given the active area
 	 * and the buffer format.
 	 */
-	int (*rotmem_required)(struct malidp_hw_device *hwdev, u16 w, u16 h, u32 fmt);
+	int (*rotmem_required)(struct malidp_hw_device *hwdev, u16 w, u16 h,
+			       u32 fmt, bool has_modifier);
 
 	int (*se_set_scaling_coeffs)(struct malidp_hw_device *hwdev,
 				     struct malidp_se_config *se_config,
@@ -395,5 +407,18 @@ static inline void malidp_se_set_enh_coeffs(struct malidp_hw_device *hwdev)
 #define MAX_IGAMMA_TABLES MALIDP_NUM_IGAMMA_DP550
 
 #define MALIDP_GAMMA_LUT_SIZE		4096
+
+#define AFBC_SIZE_MASK		AFBC_FORMAT_MOD_BLOCK_SIZE_MASK
+#define AFBC_SIZE_16X16		AFBC_FORMAT_MOD_BLOCK_SIZE_16x16
+#define AFBC_YTR		AFBC_FORMAT_MOD_YTR
+#define AFBC_SPARSE		AFBC_FORMAT_MOD_SPARSE
+#define AFBC_CBR		AFBC_FORMAT_MOD_CBR
+#define AFBC_SPLIT		AFBC_FORMAT_MOD_SPLIT
+#define AFBC_TILED		AFBC_FORMAT_MOD_TILED
+#define AFBC_SC			AFBC_FORMAT_MOD_SC
+
+#define AFBC_MOD_VALID_BITS (AFBC_SIZE_MASK | AFBC_YTR | AFBC_SPLIT | AFBC_SPARSE | AFBC_CBR | AFBC_TILED | AFBC_SC)
+
+extern const u64 malidp_format_modifiers[];
 
 #endif  /* __MALIDP_HW_H__ */

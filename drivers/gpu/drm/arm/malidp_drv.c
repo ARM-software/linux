@@ -37,6 +37,8 @@
 #include "malidp_hw.h"
 
 #define MALIDP_CONF_VALID_TIMEOUT	250
+#define AFBC_HEADER_SIZE		16
+#define AFBC_SUPERBLK_ALIGNMENT		128
 
 static void malidp_write_gamma_table(struct malidp_hw_device *hwdev,
 				     u32 data[MALIDP_COEFFTAB_NUM_COEFFS])
@@ -314,6 +316,99 @@ static const struct drm_mode_config_helper_funcs malidp_mode_config_helpers = {
 	.atomic_commit_tail = malidp_atomic_commit_tail,
 };
 
+static bool
+malidp_fb_verify_afbc_framebuffer_caps(struct drm_device *dev,
+				       const struct drm_mode_fb_cmd2 *mode_cmd)
+{
+	if (malidp_format_mod_supported(dev, mode_cmd->pixel_format, mode_cmd->modifier[0]) == false)
+		return false;
+
+	if (mode_cmd->offsets[0] != 0) {
+		DRM_ERROR("AFBC buffers' plane offset should be 0\n");
+		return false;
+	}
+
+	switch (mode_cmd->modifier[0] & AFBC_SIZE_MASK) {
+	case AFBC_SIZE_16X16:
+		if ((mode_cmd->width % 16) || (mode_cmd->height % 16)) {
+			DRM_ERROR("AFBC buffers must be aligned to 16 pixels\n");
+			return false;
+		}
+		break;
+	default:
+		DRM_ERROR("Unsupported AFBC block size\n");
+		return false;
+	}
+
+	return true;
+}
+
+static bool
+malidp_fb_verify_afbc_framebuffer_size(struct drm_device *dev,
+				       struct drm_file *file,
+				       const struct drm_mode_fb_cmd2 *mode_cmd)
+{
+	int n_superblocks = 0;
+	const struct drm_format_info *info;
+	struct drm_gem_object *objs = NULL;
+	u32 afbc_superblock_size = 0, afbc_superblock_height = 0;
+	u32 afbc_superblock_width = 0, afbc_size = 0;
+
+	switch (mode_cmd->modifier[0] & AFBC_SIZE_MASK) {
+	case AFBC_SIZE_16X16:
+		afbc_superblock_height = 16;
+		afbc_superblock_width = 16;
+		break;
+	default:
+		DRM_ERROR("AFBC superblock size is not supported\n");
+		return false;
+	}
+
+	info = drm_get_format_info(dev, mode_cmd);
+
+	n_superblocks = (mode_cmd->width / afbc_superblock_width) *
+		(mode_cmd->height / afbc_superblock_height);
+
+	afbc_superblock_size = info->cpp[0] * afbc_superblock_width *
+		afbc_superblock_height;
+
+	afbc_size = ALIGN(n_superblocks * AFBC_HEADER_SIZE, AFBC_SUPERBLK_ALIGNMENT);
+	afbc_size += n_superblocks * ALIGN(afbc_superblock_size, AFBC_SUPERBLK_ALIGNMENT);
+
+	if (mode_cmd->width * info->cpp[0] != mode_cmd->pitches[0]) {
+		DRM_ERROR("Invalid value of pitch (=%u) should be same as width (=%u) * cpp (=%u)\n",
+			  mode_cmd->pitches[0], mode_cmd->width, info->cpp[0]);
+		return false;
+	}
+
+	objs = drm_gem_object_lookup(file, mode_cmd->handles[0]);
+	if (!objs) {
+		DRM_DEBUG_KMS("Failed to lookup GEM object\n");
+		return false;
+	}
+
+	if (objs->size < afbc_size) {
+		DRM_ERROR("buffer size (%zu) too small for AFBC buffer size = %u\n",
+			  objs->size, afbc_size);
+		drm_gem_object_put_unlocked(objs);
+		return false;
+	}
+
+	drm_gem_object_put_unlocked(objs);
+
+	return true;
+}
+
+static bool
+malidp_fb_verify_afbc_framebuffer(struct drm_device *dev, struct drm_file *file,
+				  const struct drm_mode_fb_cmd2 *mode_cmd)
+{
+	if (malidp_fb_verify_afbc_framebuffer_caps(dev, mode_cmd))
+		return malidp_fb_verify_afbc_framebuffer_size(dev, file, mode_cmd);
+
+	return false;
+}
+
 static const struct drm_framebuffer_funcs malidp_gem_fb_funcs = {
 	.destroy	= drm_gem_fb_destroy,
 	.create_handle	= drm_gem_fb_create_handle,
@@ -323,6 +418,11 @@ struct drm_framebuffer *
 malidp_fb_create(struct drm_device *dev, struct drm_file *file,
 		 const struct drm_mode_fb_cmd2 *mode_cmd)
 {
+	if (mode_cmd->modifier[0]) {
+		if (!malidp_fb_verify_afbc_framebuffer(dev, file, mode_cmd))
+			return ERR_PTR(-EINVAL);
+	}
+
 	if (mode_cmd->pixel_format == DRM_FORMAT_X0L2 ||
 	    mode_cmd->pixel_format == DRM_FORMAT_X0L0) {
 		const struct drm_format_info *info;
@@ -398,6 +498,7 @@ static int malidp_init(struct drm_device *drm)
 	drm->mode_config.max_height = hwdev->max_line_size;
 	drm->mode_config.funcs = &malidp_mode_config_funcs;
 	drm->mode_config.helper_private = &malidp_mode_config_helpers;
+	drm->mode_config.allow_fb_modifiers = true;
 
 	ret = malidp_crtc_init(drm);
 	if (ret)

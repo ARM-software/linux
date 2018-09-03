@@ -93,29 +93,70 @@ static const struct malidp_format_id malidp650_de_formats[] = {
 };
 
 static const struct malidp_layer malidp500_layers[] = {
-	{ DE_VIDEO1, MALIDP500_DE_LV_BASE, MALIDP500_DE_LV_PTR_BASE, MALIDP_DE_LV_STRIDE0, MALIDP500_LV_YUV2RGB },
-	{ DE_GRAPHICS1, MALIDP500_DE_LG1_BASE, MALIDP500_DE_LG1_PTR_BASE, MALIDP_DE_LG_STRIDE, 0 },
-	{ DE_GRAPHICS2, MALIDP500_DE_LG2_BASE, MALIDP500_DE_LG2_PTR_BASE, MALIDP_DE_LG_STRIDE, 0 },
+	{ DE_VIDEO1, MALIDP500_DE_LV_BASE, MALIDP500_DE_LV_PTR_BASE,
+		MALIDP_DE_LV_STRIDE0, MALIDP500_LV_YUV2RGB, 0, ROTATE_ANY,
+		MALIDP500_DE_LV_AD_CTRL },
+	{ DE_GRAPHICS1, MALIDP500_DE_LG1_BASE, MALIDP500_DE_LG1_PTR_BASE,
+		MALIDP_DE_LG_STRIDE, 0, 0, ROTATE_ANY, MALIDP500_DE_LG1_AD_CTRL },
+	{ DE_GRAPHICS2, MALIDP500_DE_LG2_BASE, MALIDP500_DE_LG2_PTR_BASE,
+		MALIDP_DE_LG_STRIDE, 0, 0, ROTATE_ANY, MALIDP500_DE_LG2_AD_CTRL },
 };
 
 static const struct malidp_layer malidp550_layers[] = {
-	{ DE_VIDEO1, MALIDP550_DE_LV1_BASE, MALIDP550_DE_LV1_PTR_BASE, MALIDP_DE_LV_STRIDE0, MALIDP550_LV_YUV2RGB },
-	{ DE_GRAPHICS1, MALIDP550_DE_LG_BASE, MALIDP550_DE_LG_PTR_BASE, MALIDP_DE_LG_STRIDE, 0 },
-	{ DE_VIDEO2, MALIDP550_DE_LV2_BASE, MALIDP550_DE_LV2_PTR_BASE, MALIDP_DE_LV_STRIDE0, MALIDP550_LV_YUV2RGB },
-	{ DE_SMART, MALIDP550_DE_LS_BASE, MALIDP550_DE_LS_PTR_BASE, MALIDP550_DE_LS_R1_STRIDE, 0 },
+	{ DE_VIDEO1, MALIDP550_DE_LV1_BASE, MALIDP550_DE_LV1_PTR_BASE,
+		MALIDP_DE_LV_STRIDE0, MALIDP550_LV_YUV2RGB, 0, ROTATE_ANY,
+		MALIDP550_DE_LV1_AD_CTRL },
+	{ DE_GRAPHICS1, MALIDP550_DE_LG_BASE, MALIDP550_DE_LG_PTR_BASE,
+		MALIDP_DE_LG_STRIDE, 0, 0, ROTATE_ANY, MALIDP550_DE_LG_AD_CTRL },
+	{ DE_VIDEO2, MALIDP550_DE_LV2_BASE, MALIDP550_DE_LV2_PTR_BASE,
+		MALIDP_DE_LV_STRIDE0, MALIDP550_LV_YUV2RGB, 0, ROTATE_ANY,
+		MALIDP550_DE_LV2_AD_CTRL },
+	{ DE_SMART, MALIDP550_DE_LS_BASE, MALIDP550_DE_LS_PTR_BASE,
+		MALIDP550_DE_LS_R1_STRIDE, 0, 0, ROTATE_NONE, 0 },
 };
 
 static const struct malidp_layer malidp650_layers[] = {
 	{ DE_VIDEO1, MALIDP550_DE_LV1_BASE, MALIDP550_DE_LV1_PTR_BASE,
 		MALIDP_DE_LV_STRIDE0, MALIDP550_LV_YUV2RGB,
-		MALIDP650_DE_LV_MMU_CTRL },
+		MALIDP650_DE_LV_MMU_CTRL, ROTATE_ANY,
+		MALIDP550_DE_LV1_AD_CTRL },
 	{ DE_GRAPHICS1, MALIDP550_DE_LG_BASE, MALIDP550_DE_LG_PTR_BASE,
-		MALIDP_DE_LG_STRIDE, 0, MALIDP650_DE_LG_MMU_CTRL },
+		MALIDP_DE_LG_STRIDE, 0, MALIDP650_DE_LG_MMU_CTRL,
+		ROTATE_COMPRESSED, MALIDP550_DE_LG_AD_CTRL },
 	{ DE_VIDEO2, MALIDP550_DE_LV2_BASE, MALIDP550_DE_LV2_PTR_BASE,
 		MALIDP_DE_LV_STRIDE0, MALIDP550_LV_YUV2RGB,
-		MALIDP650_DE_LV_MMU_CTRL },
+		MALIDP650_DE_LV_MMU_CTRL, ROTATE_ANY,
+		MALIDP550_DE_LV2_AD_CTRL },
 	{ DE_SMART, MALIDP550_DE_LS_BASE, MALIDP550_DE_LS_PTR_BASE,
-		MALIDP550_DE_LS_R1_STRIDE, 0, MALIDP650_DE_LS_MMU_CTRL },
+		MALIDP550_DE_LS_R1_STRIDE, 0, MALIDP650_DE_LS_MMU_CTRL,
+		ROTATE_NONE, 0 },
+};
+
+const u64 malidp_format_modifiers[] = {
+
+	/* All RGB formats (except XRGB, RGBX, XBGR, BGRX) */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_YTR | AFBC_SPARSE),
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_YTR),
+
+	/* All RGB formats > 16bpp (except XRGB, RGBX, XBGR, BGRX) */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_YTR | AFBC_SPARSE | AFBC_SPLIT),
+
+	/* All 8 or 10 bit YUV 444 formats. */
+	/* In DP550, 10 bit YUV 420 format also supported */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_SPARSE | AFBC_SPLIT),
+
+	/* YUV 420, 422 P1 8 bit and YUV 444 8 bit/10 bit formats */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_SPARSE),
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16),
+
+	/* YUV 420, 422 P1 8, 10 bit formats */
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_CBR | AFBC_SPARSE),
+	DRM_FORMAT_MOD_ARM_AFBC(AFBC_SIZE_16X16 | AFBC_CBR),
+
+	/* All formats */
+	DRM_FORMAT_MOD_LINEAR,
+
+	DRM_FORMAT_MOD_INVALID
 };
 
 #define SE_N_SCALING_COEFFS	96
@@ -308,10 +349,11 @@ static void malidp500_modeset(struct malidp_hw_device *hwdev, struct videomode *
 		malidp_hw_clearbits(hwdev, MALIDP_DISP_FUNC_ILACED, MALIDP_DE_DISPLAY_FUNC);
 }
 
-static int malidp500_rotmem_required(struct malidp_hw_device *hwdev, u16 w, u16 h, u32 fmt)
+static int malidp500_rotmem_required(struct malidp_hw_device *hwdev, u16 w,
+				     u16 h, u32 fmt, bool has_modifier)
 {
-	/* RGB888 or BGR888 can't be rotated */
-	if ((fmt == DRM_FORMAT_RGB888) || (fmt == DRM_FORMAT_BGR888))
+	/* raw RGB888 or BGR888 can't be rotated */
+	if ((fmt == DRM_FORMAT_RGB888 || fmt == DRM_FORMAT_BGR888) && !has_modifier)
 		return -EINVAL;
 
 	/*
@@ -606,12 +648,13 @@ static void malidp550_modeset(struct malidp_hw_device *hwdev, struct videomode *
 		malidp_hw_clearbits(hwdev, MALIDP_DISP_FUNC_ILACED, MALIDP_DE_DISPLAY_FUNC);
 }
 
-static int malidp550_rotmem_required(struct malidp_hw_device *hwdev, u16 w, u16 h, u32 fmt)
+static int malidp550_rotmem_required(struct malidp_hw_device *hwdev, u16 w,
+				     u16 h, u32 fmt, bool has_modifier)
 {
 	u32 bytes_per_col;
 
 	/* raw RGB888 or BGR888 can't be rotated */
-	if ((fmt == DRM_FORMAT_RGB888) || (fmt == DRM_FORMAT_BGR888))
+	if ((fmt == DRM_FORMAT_RGB888 || fmt == DRM_FORMAT_BGR888) && !has_modifier)
 		return -EINVAL;
 
 	switch (fmt) {
@@ -854,7 +897,7 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 			.se_base = MALIDP550_SE_BASE,
 			.dc_base = MALIDP550_DC_BASE,
 			.out_depth_base = MALIDP550_DE_OUTPUT_DEPTH,
-			.features = MALIDP_REGMAP_HAS_CLEARIRQ,
+			.features = MALIDP_REGMAP_HAS_CLEARIRQ | MALIDP_DEVICE_AFBC_SUPPORT_SPLIT | AFBC_SUPPORT_SPLIT_WITH_YUV_420_10,
 			.n_layers = ARRAY_SIZE(malidp550_layers),
 			.layers = malidp550_layers,
 			.de_irq_map = {
@@ -901,7 +944,7 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 			.se_base = MALIDP550_SE_BASE,
 			.dc_base = MALIDP550_DC_BASE,
 			.out_depth_base = MALIDP550_DE_OUTPUT_DEPTH,
-			.features = MALIDP_REGMAP_HAS_CLEARIRQ,
+			.features = MALIDP_REGMAP_HAS_CLEARIRQ | MALIDP_DEVICE_AFBC_SUPPORT_SPLIT,
 			.n_layers = ARRAY_SIZE(malidp650_layers),
 			.layers = malidp650_layers,
 			.de_irq_map = {
@@ -962,6 +1005,30 @@ u8 malidp_hw_get_format_id(const struct malidp_hw_regmap *map,
 	}
 
 	return MALIDP_INVALID_FORMAT_ID;
+}
+
+bool malidp_hw_format_is_linear_only(u32 format)
+{
+	switch (format) {
+		case DRM_FORMAT_ARGB2101010 :
+		case DRM_FORMAT_RGBA1010102 :
+		case DRM_FORMAT_BGRA1010102 :
+		case DRM_FORMAT_ARGB8888 :
+		case DRM_FORMAT_RGBA8888 :
+		case DRM_FORMAT_BGRA8888 :
+		case DRM_FORMAT_XBGR8888 :
+		case DRM_FORMAT_XRGB8888 :
+		case DRM_FORMAT_RGBX8888 :
+		case DRM_FORMAT_BGRX8888 :
+		case DRM_FORMAT_RGB888 :
+		case DRM_FORMAT_RGB565 :
+		case DRM_FORMAT_ARGB1555 :
+		case DRM_FORMAT_RGBA5551 :
+		case DRM_FORMAT_BGRA5551 :
+			return true;
+		default :
+			return false;
+	}
 }
 
 static void malidp_hw_clear_irq(struct malidp_hw_device *hwdev, u8 block, u32 irq)
