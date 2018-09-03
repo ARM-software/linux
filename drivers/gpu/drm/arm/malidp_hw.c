@@ -105,6 +105,19 @@ static const struct malidp_layer malidp550_layers[] = {
 	{ DE_SMART, MALIDP550_DE_LS_BASE, MALIDP550_DE_LS_PTR_BASE, MALIDP550_DE_LS_R1_STRIDE, 0 },
 };
 
+static const struct malidp_layer malidp650_layers[] = {
+	{ DE_VIDEO1, MALIDP550_DE_LV1_BASE, MALIDP550_DE_LV1_PTR_BASE,
+		MALIDP_DE_LV_STRIDE0, MALIDP550_LV_YUV2RGB,
+		MALIDP650_DE_LV_MMU_CTRL },
+	{ DE_GRAPHICS1, MALIDP550_DE_LG_BASE, MALIDP550_DE_LG_PTR_BASE,
+		MALIDP_DE_LG_STRIDE, 0, MALIDP650_DE_LG_MMU_CTRL },
+	{ DE_VIDEO2, MALIDP550_DE_LV2_BASE, MALIDP550_DE_LV2_PTR_BASE,
+		MALIDP_DE_LV_STRIDE0, MALIDP550_LV_YUV2RGB,
+		MALIDP650_DE_LV_MMU_CTRL },
+	{ DE_SMART, MALIDP550_DE_LS_BASE, MALIDP550_DE_LS_PTR_BASE,
+		MALIDP550_DE_LS_R1_STRIDE, 0, MALIDP650_DE_LS_MMU_CTRL },
+};
+
 #define SE_N_SCALING_COEFFS	96
 static const u16 dp500_se_scaling_coeffs[][SE_N_SCALING_COEFFS] = {
 	[MALIDP_UPSCALING_COEFFS - 1] = {
@@ -849,8 +862,8 @@ const struct malidp_hw malidp_device[MALIDP_MAX_DEVICES] = {
 			.dc_base = MALIDP550_DC_BASE,
 			.out_depth_base = MALIDP550_DE_OUTPUT_DEPTH,
 			.features = MALIDP_REGMAP_HAS_CLEARIRQ,
-			.n_layers = ARRAY_SIZE(malidp550_layers),
-			.layers = malidp550_layers,
+			.n_layers = ARRAY_SIZE(malidp650_layers),
+			.layers = malidp650_layers,
 			.de_irq_map = {
 				.irq_mask = MALIDP_DE_IRQ_UNDERRUN |
 					    MALIDP650_DE_IRQ_DRIFT |
