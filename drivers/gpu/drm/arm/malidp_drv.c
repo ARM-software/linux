@@ -258,8 +258,71 @@ static const struct drm_mode_config_helper_funcs malidp_mode_config_helpers = {
 	.atomic_commit_tail = malidp_atomic_commit_tail,
 };
 
+static const struct drm_framebuffer_funcs malidp_gem_fb_funcs = {
+	.destroy	= drm_gem_fb_destroy,
+	.create_handle	= drm_gem_fb_create_handle,
+};
+
+struct drm_framebuffer *
+malidp_fb_create(struct drm_device *dev, struct drm_file *file,
+		 const struct drm_mode_fb_cmd2 *mode_cmd)
+{
+	if (mode_cmd->pixel_format == DRM_FORMAT_X0L2 ||
+	    mode_cmd->pixel_format == DRM_FORMAT_X0L0) {
+		const struct drm_format_info *info;
+		struct drm_gem_object *obj;
+		struct drm_framebuffer *fb = NULL;
+		const unsigned int tile_size = 2;
+		unsigned int min_size;
+
+		info = drm_format_info(mode_cmd->pixel_format &
+					~DRM_FORMAT_BIG_ENDIAN);
+		/*
+		 * Pitch needs to take into consideration that we are dealing
+		 * with a tiled 2x2 format, so the pitch/stride need to cover
+		 * both rows
+		 */
+		if (mode_cmd->pitches[0] < mode_cmd->width * info->cpp[0] *
+				tile_size) {
+			struct drm_format_name_buf format_name;
+
+			drm_get_format_name(mode_cmd->pixel_format,
+					    &format_name);
+			DRM_DEBUG_KMS("Invalid pitch for format %s",
+				      format_name.str);
+			return ERR_PTR(-EINVAL);
+		}
+		obj = drm_gem_object_lookup(file, mode_cmd->handles[0]);
+		if (!obj) {
+			DRM_DEBUG_KMS("Failed to lookup GEM object\n");
+			fb = ERR_PTR(-ENOENT);
+			goto err_gem_object_put;
+		}
+		min_size = mode_cmd->height / tile_size  * mode_cmd->pitches[0];
+		if (obj->size < min_size) {
+			drm_gem_object_put_unlocked(obj);
+			DRM_DEBUG_KMS("Object size is less than minimum"
+				      " required\n");
+			fb = ERR_PTR(-EINVAL);
+			goto err_gem_object_put;
+		}
+
+		fb = drm_gem_fb_alloc(dev, mode_cmd, &obj, 1,
+				      &malidp_gem_fb_funcs);
+		if (IS_ERR(fb))
+			goto err_gem_object_put;
+		return fb;
+
+	err_gem_object_put:
+		drm_gem_object_put_unlocked(obj);
+		return fb;
+	}
+
+	return drm_gem_fb_create(dev, file, mode_cmd);
+}
+
 static const struct drm_mode_config_funcs malidp_mode_config_funcs = {
-	.fb_create = drm_gem_fb_create,
+	.fb_create = malidp_fb_create,
 	.output_poll_changed = drm_fb_helper_output_poll_changed,
 	.atomic_check = drm_atomic_helper_check,
 	.atomic_commit = drm_atomic_helper_commit,

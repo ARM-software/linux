@@ -208,7 +208,17 @@ static int malidp_de_plane_check(struct drm_plane *plane,
 	    (state->crtc_w < mp->hwdev->min_line_size) ||
 	    (state->crtc_h < mp->hwdev->min_line_size))
 		return -EINVAL;
-
+	/*
+	 * Tiled formats DRM_FORMAT_X0L2 and DRM_FORMAT_X0L0
+	 * can be cropped only at multiple of tile dimension
+	 * which is 2.
+	 */
+	if ((fb->format->format == DRM_FORMAT_X0L2 ||
+	    fb->format->format == DRM_FORMAT_X0L0) &&
+	    ((state->src_x >> 16) % 2 || (state->src_y >> 16) % 2)) {
+		DRM_DEBUG_KMS("Invalid crop values");
+		return -EINVAL;
+	}
 	/*
 	 * DP550/650 video layers can accept 3 plane formats only if
 	 * fb->pitches[1] == fb->pitches[2] since they don't have a
@@ -318,6 +328,38 @@ static void malidp_de_set_color_encoding(struct malidp_plane *plane,
 	}
 }
 
+static void malidp_set_plane_base_addr(struct drm_framebuffer *fb,
+				       struct malidp_plane *mp,
+				       int plane_index)
+{
+	dma_addr_t paddr;
+	u16 ptr;
+	struct drm_plane *plane = &mp->base;
+
+	ptr = mp->layer->ptr + (plane_index << 4);
+
+	if (fb->format->format == DRM_FORMAT_X0L2 ||
+	    fb->format->format == DRM_FORMAT_X0L0) {
+		struct drm_gem_cma_object *obj;
+		int tile_size = 2;
+
+		obj = drm_fb_cma_get_gem_obj(fb, plane_index);
+		if (WARN_ON(!obj))
+			return;
+		paddr = obj->paddr + fb->offsets[plane_index];
+		paddr += fb->format->cpp[plane_index] *
+			 (plane->state->src_x >> 16) * tile_size;
+		paddr += (fb->pitches[plane_index] / tile_size) *
+				(plane->state->src_y >> 16);
+
+	} else
+		paddr = drm_fb_cma_get_gem_addr(fb, plane->state,
+						plane_index);
+
+	malidp_hw_write(mp->hwdev, lower_32_bits(paddr), ptr);
+	malidp_hw_write(mp->hwdev, upper_32_bits(paddr), ptr + 4);
+}
+
 static void malidp_de_plane_update(struct drm_plane *plane,
 				   struct drm_plane_state *old_state)
 {
@@ -340,13 +382,7 @@ static void malidp_de_plane_update(struct drm_plane *plane,
 	malidp_hw_write(mp->hwdev, val, mp->layer->base);
 
 	for (i = 0; i < ms->n_planes; i++) {
-		/* calculate the offset for the layer's plane registers */
-		u16 ptr = mp->layer->ptr + (i << 4);
-		dma_addr_t fb_addr = drm_fb_cma_get_gem_addr(plane->state->fb,
-							     plane->state, i);
-
-		malidp_hw_write(mp->hwdev, lower_32_bits(fb_addr), ptr);
-		malidp_hw_write(mp->hwdev, upper_32_bits(fb_addr), ptr + 4);
+		malidp_set_plane_base_addr(plane->state->fb, mp, i);
 	}
 	malidp_de_set_plane_pitches(mp, ms->n_planes,
 				    plane->state->fb->pitches);
