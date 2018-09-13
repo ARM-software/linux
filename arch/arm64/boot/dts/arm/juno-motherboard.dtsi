@@ -151,7 +151,10 @@
 
 				apbregs@10000 {
 					compatible = "syscon", "simple-mfd";
+					#address-cells = <1>;
+					#size-cells = <1>;
 					reg = <0x010000 0x1000>;
+					ranges = <0x0 0x010000 0x1000>;
 
 					led0 {
 						compatible = "register-bit-led";
@@ -214,6 +217,10 @@
 						mask = <0x80>;
 						label = "vexpress:7";
 						default-state = "off";
+					};
+
+					pcie_gbe@74 {
+						reg = <0x74 0x10>;
 					};
 				};
 
