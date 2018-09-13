@@ -47,7 +47,7 @@
 #include <linux/of_device.h>
 #include <linux/of_net.h>
 #include <linux/dmi.h>
-
+#include <linux/of_address.h>
 #include <asm/irq.h>
 
 #include "sky2.h"
@@ -4745,13 +4745,59 @@ static const struct net_device_ops sky2_netdev_ops[2] = {
   },
 };
 
+static void sky2_get_mac_address(struct net_device *dev)
+{
+	struct sky2_port *sky2 = netdev_priv(dev);
+	struct sky2_hw *hw = sky2 ? sky2->hw : NULL;
+	const void *iap;
+
+	/* try to get mac address in the following order:
+	 * 1) from device tree data
+	 * 2) from internal registers set by bootloader
+	 */
+
+	iap = of_get_mac_address(hw->pdev->dev.of_node);
+	if (iap)
+		memcpy(dev->dev_addr, iap, ETH_ALEN);
+	else
+		memcpy_fromio(dev->dev_addr,
+			      hw->regs + B2_MAC_1 + sky2->port * 8,
+			      ETH_ALEN);
+
+#if defined CONFIG_ARM64 && defined CONFIG_VEXPRESS_CONFIG
+	/* 3) From APB registers
+	 */
+	if (!is_valid_ether_addr(dev->dev_addr)) {
+		/* Get the syscon node for SYS_PCIE_GBE register */
+		struct device_node *np = of_find_node_by_name(NULL, "pcie_gbe");
+		u32 __iomem *base_reg = (np) ? of_iomap(np, 0) : NULL;
+
+		if (base_reg) {
+			u64 mac_addr;
+			u8 mask = 0xFF;
+			int i;
+
+			mac_addr = readl_relaxed(base_reg);
+			mac_addr |= ((u64)readl_relaxed(base_reg + 1))
+					<< sizeof(u32) * BITS_PER_BYTE;
+
+			for (i = ETH_ALEN; i > 0; --i)
+				dev->dev_addr[i - 1] = (mac_addr >>
+				    (BITS_PER_BYTE * (ETH_ALEN - i))) & mask;
+			iounmap(base_reg);
+		}
+		if (np)
+			of_node_put(np);
+	}
+#endif
+}
+
 /* Initialize network device */
 static struct net_device *sky2_init_netdev(struct sky2_hw *hw, unsigned port,
 					   int highmem, int wol)
 {
 	struct sky2_port *sky2;
 	struct net_device *dev = alloc_etherdev(sizeof(*sky2));
-	const void *iap;
 
 	if (!dev)
 		return NULL;
@@ -4817,17 +4863,7 @@ static struct net_device *sky2_init_netdev(struct sky2_hw *hw, unsigned port,
 	else
 		dev->max_mtu = ETH_JUMBO_MTU;
 
-	/* try to get mac address in the following order:
-	 * 1) from device tree data
-	 * 2) from internal registers set by bootloader
-	 */
-	iap = of_get_mac_address(hw->pdev->dev.of_node);
-	if (iap)
-		memcpy(dev->dev_addr, iap, ETH_ALEN);
-	else
-		memcpy_fromio(dev->dev_addr, hw->regs + B2_MAC_1 + port * 8,
-			      ETH_ALEN);
-
+	sky2_get_mac_address(dev);
 	/* if the address is invalid, use a random value */
 	if (!is_valid_ether_addr(dev->dev_addr)) {
 		struct sockaddr sa = { AF_UNSPEC };
