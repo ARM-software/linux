@@ -177,8 +177,7 @@ struct ion_page_pool *ion_page_pool_create(gfp_t gfp_mask, unsigned int order,
 	pool->order = order;
 	mutex_init(&pool->mutex);
 	plist_node_init(&pool->list, order);
-	if (cached)
-		pool->cached = true;
+	pool->cached = cached;
 
 	return pool;
 }
