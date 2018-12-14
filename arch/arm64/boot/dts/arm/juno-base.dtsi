@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "juno-clocks.dtsi"
-#include "juno-motherboard.dtsi"
 
 / {
 	/*
@@ -69,29 +68,10 @@
 		interrupt-controller;
 		interrupts = <GIC_PPI 9 (GIC_CPU_MASK_SIMPLE(6) | IRQ_TYPE_LEVEL_HIGH)>;
 		ranges = <0 0 0 0x2c1c0000 0 0x40000>;
-
 		v2m_0: v2m@0 {
 			compatible = "arm,gic-v2m-frame";
 			msi-controller;
-			reg = <0 0 0 0x10000>;
-		};
-
-		v2m@10000 {
-			compatible = "arm,gic-v2m-frame";
-			msi-controller;
-			reg = <0 0x10000 0 0x10000>;
-		};
-
-		v2m@20000 {
-			compatible = "arm,gic-v2m-frame";
-			msi-controller;
-			reg = <0 0x20000 0 0x10000>;
-		};
-
-		v2m@30000 {
-			compatible = "arm,gic-v2m-frame";
-			msi-controller;
-			reg = <0 0x30000 0 0x10000>;
+			reg = <0 0 0 0x1000>;
 		};
 	};
 
@@ -571,16 +551,48 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
 			thermal-sensors = <&scpi_sensors0 3>;
+			sustainable-power = <2500>;
+
+			trips {
+				threshold: trip-point@0 {
+					temperature = <55000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+				target: trip-point@1 {
+					temperature = <65000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&target>;
+					contribution = <1024>;
+					cooling-device = <&cluster0 0 0>;
+				};
+				map1 {
+					trip = <&target>;
+					contribution = <2048>;
+					cooling-device = <&cluster1 0 0>;
+				};
+				map2 {
+					trip = <&target>;
+					contribution = <1024>;
+					cooling-device = <&gpu 0 4>;
+				};
+			};
 		};
 
-		big_cluster_thermal_zone: big-cluster {
+		big_cluster_thermal_zone: big_cluster {
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
 			thermal-sensors = <&scpi_sensors0 21>;
 			status = "disabled";
 		};
 
-		little_cluster_thermal_zone: little-cluster {
+		little_cluster_thermal_zone: little_cluster {
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
 			thermal-sensors = <&scpi_sensors0 22>;
@@ -678,7 +690,7 @@
 		clock-names = "pxlclk";
 
 		port {
-			hdlcd1_output: endpoint {
+			hdlcd1_output: hdlcd1-endpoint {
 				remote-endpoint = <&tda998x_1_input>;
 			};
 		};
@@ -693,7 +705,7 @@
 		clock-names = "pxlclk";
 
 		port {
-			hdlcd0_output: endpoint {
+			hdlcd0_output: hdlcd0-endpoint {
 				remote-endpoint = <&tda998x_0_input>;
 			};
 		};
@@ -721,7 +733,7 @@
 			compatible = "nxp,tda998x";
 			reg = <0x70>;
 			port {
-				tda998x_0_input: endpoint {
+				tda998x_0_input: tda998x-0-endpoint {
 					remote-endpoint = <&hdlcd0_output>;
 				};
 			};
@@ -731,7 +743,7 @@
 			compatible = "nxp,tda998x";
 			reg = <0x71>;
 			port {
-				tda998x_1_input: endpoint {
+				tda998x_1_input: tda998x-1-endpoint {
 					remote-endpoint = <&hdlcd1_output>;
 				};
 			};
@@ -770,7 +782,33 @@
 		      <0x00000008 0x80000000 0x1 0x80000000>;
 	};
 
-	smb@8000000 {
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+                display_reserved: framebuffer@60000000 {
+                        compatible = "shared-dma-pool";
+                        linux,cma-default;
+                        reg = <0 0x60000000 0 0x08000000>;
+                };
+
+		gpu_protected: gpu_protected@c0000000 {
+			compatible = "ion-reserved";
+			reg = <0x0 0xc0000000 0x0 0x10000000>;
+		};
+	};
+
+	ion {
+		compatible = "simple-bus";
+
+		protected {
+			compatible = "ion,carveout";
+			memory-region = <&gpu_protected>;
+		};
+	};
+
+	smb@08000000 {
 		compatible = "simple-bus";
 		#address-cells = <2>;
 		#size-cells = <1>;
@@ -779,7 +817,8 @@
 			 <2 0 0 0x18000000 0x04000000>,
 			 <3 0 0 0x1c000000 0x04000000>,
 			 <4 0 0 0x0c000000 0x04000000>,
-			 <5 0 0 0x10000000 0x04000000>;
+			 <5 0 0 0x10000000 0x04000000>,
+			 <6 0 0 0x6F000000 0x04000000>;
 
 		#interrupt-cells = <1>;
 		interrupt-map-mask = <0 0 15>;
@@ -796,6 +835,15 @@
 				<0 0 10 &gic 0 0 0 167 IRQ_TYPE_LEVEL_HIGH>,
 				<0 0 11 &gic 0 0 0 168 IRQ_TYPE_LEVEL_HIGH>,
 				<0 0 12 &gic 0 0 0 169 IRQ_TYPE_LEVEL_HIGH>;
+
+		/include/ "juno-motherboard.dtsi"
+
+		mve@6,00030000 {
+			compatible = "arm,mali-mve";
+			reg = <6 0x30000 0x10000>;
+			interrupts = <11>;
+			busattr = <0x0 0x0 0x33 0x33>;
+		};
 	};
 
 	site2: tlx@60000000 {
@@ -807,5 +855,4 @@
 		interrupt-map-mask = <0 0>;
 		interrupt-map = <0 0 &gic 0 0 0 168 IRQ_TYPE_LEVEL_HIGH>;
 	};
-
 };

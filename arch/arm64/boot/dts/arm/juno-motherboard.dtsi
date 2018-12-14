@@ -6,9 +6,6 @@
  * This file is licensed under a dual GPLv2 or BSD license.
  *
  */
-
-/ {
-	smb@8000000 {
 		mb_clk24mhz: clk24mhz {
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
@@ -56,46 +53,48 @@
 				regulator-always-on;
 			};
 
-			gpio-keys {
+			gpio_keys {
 				compatible = "gpio-keys";
+				#address-cells = <1>;
+				#size-cells = <0>;
 
 				power-button {
-					debounce-interval = <50>;
+					debounce_interval = <50>;
 					wakeup-source;
 					linux,code = <116>;
 					label = "POWER";
 					gpios = <&iofpga_gpio0 0 0x1>;
 				};
 				home-button {
-					debounce-interval = <50>;
+					debounce_interval = <50>;
 					wakeup-source;
 					linux,code = <102>;
 					label = "HOME";
 					gpios = <&iofpga_gpio0 1 0x1>;
 				};
 				rlock-button {
-					debounce-interval = <50>;
+					debounce_interval = <50>;
 					wakeup-source;
 					linux,code = <152>;
 					label = "RLOCK";
 					gpios = <&iofpga_gpio0 2 0x1>;
 				};
 				vol-up-button {
-					debounce-interval = <50>;
+					debounce_interval = <50>;
 					wakeup-source;
 					linux,code = <115>;
 					label = "VOL+";
 					gpios = <&iofpga_gpio0 3 0x1>;
 				};
 				vol-down-button {
-					debounce-interval = <50>;
+					debounce_interval = <50>;
 					wakeup-source;
 					linux,code = <114>;
 					label = "VOL-";
 					gpios = <&iofpga_gpio0 4 0x1>;
 				};
 				nmi-button {
-					debounce-interval = <50>;
+					debounce_interval = <50>;
 					wakeup-source;
 					linux,code = <99>;
 					label = "NMI";
@@ -150,7 +149,10 @@
 
 				v2m_sysreg: apbregs@010000 {
 					compatible = "syscon", "simple-mfd", "arm,vexpress-sysreg";
+					#address-cells = <1>;
+					#size-cells = <1>;
 					reg = <0x010000 0x1000>;
+					ranges = <0x0 0x010000 0x1000>;
 
 					led0 {
 						compatible = "register-bit-led";
@@ -213,6 +215,10 @@
 						mask = <0x80>;
 						label = "vexpress:7";
 						default-state = "off";
+					};
+
+					pcie_gbe@74 {
+						reg = <0x74 0x10>;
 					};
 				};
 
@@ -289,5 +295,3 @@
 				};
 			};
 		};
-	};
-};

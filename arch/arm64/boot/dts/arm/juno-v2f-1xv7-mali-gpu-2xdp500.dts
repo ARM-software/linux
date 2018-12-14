@@ -5,7 +5,7 @@
  * corresponding MMU-400s
  */
 
-#include "juno.dts"
+#include "juno-r1.dts"
 
 / {
 	aliases {
