@@ -10,12 +10,11 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "juno-base.dtsi"
-#include "juno-cs-r1r2.dtsi"
 #include "juno-t62x.dtsi"
 
 / {
-	model = "ARM Juno development board (r1)";
-	compatible = "arm,juno-r1", "arm,juno", "arm,vexpress";
+	model = "ARM Juno development board (r0)";
+	compatible = "arm,juno", "arm,vexpress";
 	interrupt-parent = <&gic>;
 	#address-cells = <2>;
 	#size-cells = <2>;
@@ -101,6 +100,7 @@
 			next-level-cache = <&A57_L2>;
 			clocks = <&scpi_dvfs 0>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			sched-energy-costs = <&CPU_COST_A57 &CLUSTER_COST_A57>;
 			capacity-dmips-mhz = <1024>;
 		};
 
@@ -118,6 +118,7 @@
 			next-level-cache = <&A57_L2>;
 			clocks = <&scpi_dvfs 0>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			sched-energy-costs = <&CPU_COST_A57 &CLUSTER_COST_A57>;
 			capacity-dmips-mhz = <1024>;
 		};
 
@@ -135,6 +136,7 @@
 			next-level-cache = <&A53_L2>;
 			clocks = <&scpi_dvfs 1>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			sched-energy-costs = <&CPU_COST_A53 &CLUSTER_COST_A53>;
 			capacity-dmips-mhz = <578>;
 		};
 
@@ -152,6 +154,7 @@
 			next-level-cache = <&A53_L2>;
 			clocks = <&scpi_dvfs 1>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			sched-energy-costs = <&CPU_COST_A53 &CLUSTER_COST_A53>;
 			capacity-dmips-mhz = <578>;
 		};
 
@@ -169,6 +172,7 @@
 			next-level-cache = <&A53_L2>;
 			clocks = <&scpi_dvfs 1>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			sched-energy-costs = <&CPU_COST_A53 &CLUSTER_COST_A53>;
 			capacity-dmips-mhz = <578>;
 		};
 
@@ -186,6 +190,7 @@
 			next-level-cache = <&A53_L2>;
 			clocks = <&scpi_dvfs 1>;
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			sched-energy-costs = <&CPU_COST_A53 &CLUSTER_COST_A53>;
 			capacity-dmips-mhz = <578>;
 		};
 
@@ -202,6 +207,7 @@
 			cache-line-size = <64>;
 			cache-sets = <1024>;
 		};
+		/include/ "juno-sched-energy.dtsi"
 	};
 
 	pmu_a57 {
@@ -223,14 +229,6 @@
 				     <&A53_2>,
 				     <&A53_3>;
 	};
-};
-
-&memtimer {
-	status = "okay";
-};
-
-&pcie_ctlr {
-	status = "okay";
 };
 
 &etm0 {
@@ -257,32 +255,28 @@
 	cpu = <&A53_3>;
 };
 
-&big_cluster_thermal_zone {
-	status = "okay";
-};
-
-&little_cluster_thermal_zone {
-	status = "okay";
-};
-
-&gpu0_thermal_zone {
-	status = "okay";
-};
-
-&gpu1_thermal_zone {
-	status = "okay";
-};
-
 &etf0_out_port {
-	remote-endpoint = <&csys2_funnel_in_port0>;
+	remote-endpoint = <&replicator_in_port0>;
 };
 
 &replicator_in_port0 {
-	remote-endpoint = <&csys2_funnel_out_port>;
+	remote-endpoint = <&etf0_out_port>;
 };
 
 &stm_out_port {
-	remote-endpoint = <&csys1_funnel_in_port0>;
+	remote-endpoint = <&main_funnel_in_port2>;
+};
+
+&main_funnel {
+	ports {
+		port@3 {
+			reg = <2>;
+			main_funnel_in_port2: endpoint {
+				slave-mode;
+				remote-endpoint = <&stm_out_port>;
+			};
+		};
+	};
 };
 
 &cpu_debug0 {

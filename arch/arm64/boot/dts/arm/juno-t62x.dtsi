@@ -72,7 +72,7 @@
 		power_model {
 			compatible = "arm,mali-simple-power-model";
 			ts = <20000 2000 (-20) 2>;
-			thermal-zone = "gpu";
+			thermal-zone = "soc";
 			/* Old Power Model */
 			voltage = <800>;
 			frequency = <500>;

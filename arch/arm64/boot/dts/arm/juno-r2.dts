@@ -1,7 +1,7 @@
 /*
  * ARM Ltd. Juno Platform
  *
- * Copyright (c) 2015 ARM Ltd.
+ * Copyright (c) 2017 ARM Ltd.
  *
  * This file is licensed under a dual GPLv2 or BSD license.
  */
@@ -38,7 +38,8 @@
 		#size-cells = <0>;
 
 		cpu-map {
-			cluster0 {
+			cluster0: cluster0 {
+				#cooling-cells = <2>;
 				core0 {
 					cpu = <&A72_0>;
 				};
@@ -47,7 +48,8 @@
 				};
 			};
 
-			cluster1 {
+			cluster1: cluster1 {
+				#cooling-cells = <2>;
 				core0 {
 					cpu = <&A53_0>;
 				};
@@ -209,7 +211,7 @@
 		/include/ "juno-sched-energy.dtsi"
 	};
 
-	pmu-a72 {
+	pmu_a72 {
 		compatible = "arm,cortex-a72-pmu";
 		interrupts = <GIC_SPI 02 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 06 IRQ_TYPE_LEVEL_HIGH>;
@@ -217,7 +219,7 @@
 				     <&A72_1>;
 	};
 
-	pmu-a53 {
+	pmu_a53 {
 		compatible = "arm,cortex-a53-pmu";
 		interrupts = <GIC_SPI 18 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 22 IRQ_TYPE_LEVEL_HIGH>,
@@ -284,10 +286,6 @@
 
 &replicator_in_port0 {
 	remote-endpoint = <&csys2_funnel_out_port>;
-};
-
-&csys1_funnel_in_port0 {
-	remote-endpoint = <&stm_out_port>;
 };
 
 &stm_out_port {

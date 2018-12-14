@@ -5,7 +5,7 @@
  * corresponding MMU-500 shared between the DPs
  */
 
-#include "juno.dts"
+#include "juno-r1.dts"
 
 / {
 	aliases {
