@@ -6,6 +6,7 @@
  * This file is licensed under a dual GPLv2 or BSD license.
  *
  */
+#include <dt-bindings/gpio/gpio.h>
 
 / {
 	smb@8000000 {
@@ -64,42 +65,42 @@
 					wakeup-source;
 					linux,code = <116>;
 					label = "POWER";
-					gpios = <&iofpga_gpio0 0 0x4>;
+					gpios = <&iofpga_gpio0 0 GPIO_ACTIVE_LOW>;
 				};
 				home-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <102>;
 					label = "HOME";
-					gpios = <&iofpga_gpio0 1 0x4>;
+					gpios = <&iofpga_gpio0 1 GPIO_ACTIVE_LOW>;
 				};
 				rlock-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <152>;
 					label = "RLOCK";
-					gpios = <&iofpga_gpio0 2 0x4>;
+					gpios = <&iofpga_gpio0 2 GPIO_ACTIVE_LOW>;
 				};
 				vol-up-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <115>;
 					label = "VOL+";
-					gpios = <&iofpga_gpio0 3 0x4>;
+					gpios = <&iofpga_gpio0 3 GPIO_ACTIVE_LOW>;
 				};
 				vol-down-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <114>;
 					label = "VOL-";
-					gpios = <&iofpga_gpio0 4 0x4>;
+					gpios = <&iofpga_gpio0 4 GPIO_ACTIVE_LOW>;
 				};
 				nmi-button {
 					debounce-interval = <50>;
 					wakeup-source;
 					linux,code = <99>;
 					label = "NMI";
-					gpios = <&iofpga_gpio0 5 0x4>;
+					gpios = <&iofpga_gpio0 5 GPIO_ACTIVE_LOW>;
 				};
 			};
 
