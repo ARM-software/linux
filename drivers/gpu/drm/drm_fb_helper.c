@@ -41,6 +41,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_gem.h>
 
 #include "drm_crtc_internal.h"
 #include "drm_crtc_helper_internal.h"
@@ -3020,6 +3021,25 @@ static int drm_fbdev_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 		return -ENODEV;
 }
 
+static struct dma_buf *drm_fb_dmabuf_export(struct fb_info *info)
+{
+       struct drm_fb_helper *helper = (struct drm_fb_helper*)info->par;
+       struct drm_gem_object *obj = helper->fb->obj[0];
+       struct dma_buf *dma_buf;
+
+       dma_buf = drm_gem_prime_export(helper->dev, obj, O_RDWR);
+       if (!dma_buf)
+               dev_info(info->dev, "Failed to export DMA buffer\n");
+       else
+               /*
+                * We need a reference on the gem object. This will be released
+                * by drm_gem_dmabuf_release when the file descriptor is closed.
+                */
+               drm_gem_object_reference(obj);
+
+       return dma_buf;
+}
+
 static struct fb_ops drm_fbdev_fb_ops = {
 	.owner		= THIS_MODULE,
 	DRM_FB_HELPER_DEFAULT_OPS,
@@ -3032,6 +3052,7 @@ static struct fb_ops drm_fbdev_fb_ops = {
 	.fb_fillrect	= drm_fb_helper_sys_fillrect,
 	.fb_copyarea	= drm_fb_helper_sys_copyarea,
 	.fb_imageblit	= drm_fb_helper_sys_imageblit,
+	.fb_dmabuf_export = drm_fb_dmabuf_export,
 };
 
 static struct fb_deferred_io drm_fbdev_defio = {
