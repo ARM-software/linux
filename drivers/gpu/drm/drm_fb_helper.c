@@ -46,6 +46,8 @@
 #include "drm_crtc_internal.h"
 #include "drm_crtc_helper_internal.h"
 
+#define FB_FIX_SCREENINFO_ID_MAX 16
+
 static bool drm_fbdev_emulation = true;
 module_param_named(fbdev_emulation, drm_fbdev_emulation, bool, 0600);
 MODULE_PARM_DESC(fbdev_emulation,
@@ -3114,7 +3116,7 @@ int drm_fb_helper_generic_probe(struct drm_fb_helper *fb_helper,
 		fbi->fix.smem_start =
 			page_to_phys(virt_to_page(fbi->screen_buffer));
 #endif
-	strcpy(fbi->fix.id, "DRM emulated");
+	strncpy(fbi->fix.id, fb_helper->dev->driver->desc, FB_FIX_SCREENINFO_ID_MAX);
 
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->format->depth);
 	drm_fb_helper_fill_var(fbi, fb_helper, sizes->fb_width, sizes->fb_height);
