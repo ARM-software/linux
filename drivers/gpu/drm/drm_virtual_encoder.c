@@ -32,6 +32,8 @@ struct drm_virt_priv {
 	struct drm_connector connector;
 	struct drm_encoder encoder;
 	struct display_timings *timings;
+	uint32_t vfp_range[2];
+	bool supports_vrr;
 };
 
 #define connector_to_drm_virt_priv(x) \
@@ -52,6 +54,27 @@ static enum drm_connector_status
 drm_virtcon_detect(struct drm_connector *connector, bool force)
 {
 	return connector_status_connected;
+}
+
+static int drm_virtcon_create_vrr_property(struct drm_connector *connector)
+{
+	struct drm_virt_priv *conn = connector_to_drm_virt_priv(connector);
+	struct drm_property *prop;
+
+	if (!conn->supports_vrr)
+		return 0;
+
+	prop = drm_property_create_range(connector->dev,
+					 DRM_MODE_PROP_IMMUTABLE,
+					 "variable_refresh_rate",
+					 conn->vfp_range[0],
+					 conn->vfp_range[1]);
+	if (!prop)
+		return -ENOMEM;
+
+	drm_object_attach_property(&connector->base, prop, 0);
+
+	return 0;
 }
 
 static const struct drm_connector_funcs drm_virtcon_funcs = {
@@ -195,6 +218,8 @@ static int drm_vencoder_bind(struct device *dev, struct device *master,
 			dev_err(dev, "failed to get display panel timings\n");
 			return ENXIO;
 		}
+		con->supports_vrr = of_property_read_variable_u32_array(np,
+				"vfp-range", con->vfp_range, 2, 2) >= 0;
 	}
 
 	/* If no CRTCs were found, fall back to the old encoder's behaviour */
@@ -240,6 +265,10 @@ static int drm_vencoder_bind(struct device *dev, struct device *master,
 	drm_connector_helper_add(connector, &drm_virtcon_helper_funcs);
 
 	drm_connector_register(connector);
+
+	ret = drm_virtcon_create_vrr_property(connector);
+	if (ret)
+		goto attach_err;
 
 	ret = drm_connector_attach_encoder(connector, encoder);
 	if (ret)
