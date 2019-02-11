@@ -268,6 +268,22 @@ void drm_writeback_queue_job(struct drm_writeback_connector *wb_connector,
 }
 EXPORT_SYMBOL(drm_writeback_queue_job);
 
+/**
+ * drm_writeback_cleanup_job - cleanup a writeback job
+ * @job: The job to cleanup
+ */
+void drm_writeback_cleanup_job(struct drm_writeback_job *job)
+{
+	if (job->fb)
+		drm_framebuffer_put(job->fb);
+
+	if (job->out_fence)
+		dma_fence_put(job->out_fence);
+
+	kfree(job);
+}
+EXPORT_SYMBOL(drm_writeback_cleanup_job);
+
 /*
  * @cleanup_work: deferred cleanup of a writeback job
  *
@@ -280,10 +296,8 @@ static void cleanup_work(struct work_struct *work)
 	struct drm_writeback_job *job = container_of(work,
 						     struct drm_writeback_job,
 						     cleanup_work);
-	drm_framebuffer_put(job->fb);
-	kfree(job);
+	drm_writeback_cleanup_job(job);
 }
-
 
 /**
  * drm_writeback_signal_completion - Signal the completion of a writeback job
@@ -319,6 +333,7 @@ drm_writeback_signal_completion(struct drm_writeback_connector *wb_connector,
 				dma_fence_set_error(job->out_fence, status);
 			dma_fence_signal(job->out_fence);
 			dma_fence_put(job->out_fence);
+			job->out_fence = NULL;
 		}
 	}
 	spin_unlock_irqrestore(&wb_connector->job_lock, flags);

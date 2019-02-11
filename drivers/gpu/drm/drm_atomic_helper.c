@@ -3859,6 +3859,9 @@ EXPORT_SYMBOL(drm_atomic_helper_duplicate_state);
 void
 __drm_atomic_helper_connector_destroy_state(struct drm_connector_state *state)
 {
+	if (state->writeback_job)
+		drm_writeback_cleanup_job(state->writeback_job);
+
 	if (state->crtc)
 		drm_connector_put(state->connector);
 
