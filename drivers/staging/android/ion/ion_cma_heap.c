@@ -60,12 +60,23 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 			void *vaddr = kmap_atomic(page);
 
 			memset(vaddr, 0, PAGE_SIZE);
+#ifdef CONFIG_ARM64
+			/* kmap default enabled cache, so if the buffer doesn't
+			 * want cache need to flush it to avoid aliasing problem
+			 */
+			if (!ion_buffer_cached(buffer))
+				__dma_flush_area(vaddr, PAGE_SIZE);
+#endif
 			kunmap_atomic(vaddr);
 			page++;
 			nr_clear_pages--;
 		}
 	} else {
 		memset(page_address(pages), 0, size);
+#ifdef CONFIG_ARM64
+		if (!ion_buffer_cached(buffer))
+			__dma_flush_area(page_address(pages), size);
+#endif
 	}
 
 	table = kmalloc(sizeof(*table), GFP_KERNEL);
