@@ -9,7 +9,8 @@
 / {
 	aliases {
 		malidp0 = &dp0;
-	};
+		maliad0 = &ad0;
+        };
 };
 
 &site2 {
@@ -60,4 +61,12 @@
 
 &dp0_pl0_out {
 	remote-endpoint = <&db_dvi0_in>;
+};
+
+&dp0_pl0_out1 {
+        remote-endpoint = <&ad0_in>;
+};
+
+&ad0_in {
+	remote-endpoint = <&dp0_pl0_out1>;
 };
