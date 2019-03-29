@@ -23,6 +23,13 @@
 
 					};
 				};
+				port@1 {
+                                        reg = <1>;
+                                        dp0_pl0_out1: endpoint {
+
+                                        };
+                                };
+
 			};
 		};
 	};
@@ -33,4 +40,36 @@
 		interrupt-names = "AEU";
 		clocks = <&dpu_aclk>;
 		clock-names = "aclk";
+	};
+
+	als:virtual-als {
+		compatible = "arm,ad-test-als";
+		#io-channel-cells = <1>;
+	};
+
+	vled:virtual-led {
+		compatible = "arm,ad-test-led";
+		label = "test-led";
+		linux,default-trigger = "AD3";
+		default-state = "on";
+	};
+
+	ad0: ad@d00000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "arm,ad-v3";
+		clocks = <&dpu_aclk>;
+		clock-names = "aclk";
+		reg = <0xd00000 0x584>;
+		firmware_name = "ad.bin";
+		io-channels = <&als 0>;
+		io-channel-names = "als0";
+		led_trigger = "AD3";
+		status = "okay";
+
+		port {
+			ad0_in: endpoint {
+				remote-endpoint = <&dp0_pl0_out1>;
+			};
+		};
 	};
