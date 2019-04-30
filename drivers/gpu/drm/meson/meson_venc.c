@@ -71,8 +71,11 @@
  */
 
 /* HHI Registers */
+#define HHI_GCLK_MPEG2		0x148 /* 0x52 offset in data sheet */
 #define HHI_VDAC_CNTL0		0x2F4 /* 0xbd offset in data sheet */
+#define HHI_VDAC_CNTL0_G12A	0x2EC /* 0xbd offset in data sheet */
 #define HHI_VDAC_CNTL1		0x2F8 /* 0xbe offset in data sheet */
+#define HHI_VDAC_CNTL1_G12A	0x2F0 /* 0xbe offset in data sheet */
 #define HHI_HDMI_PHY_CNTL0	0x3a0 /* 0xe8 offset in data sheet */
 
 struct meson_cvbs_enci_mode meson_cvbs_enci_pal = {
@@ -697,6 +700,132 @@ union meson_hdmi_venc_mode meson_hdmi_encp_mode_1080p60 = {
 	},
 };
 
+union meson_hdmi_venc_mode meson_hdmi_encp_mode_2160p24 = {
+	.encp = {
+		.dvi_settings = 0x1,
+		.video_mode = 0x4040,
+		.video_mode_adv = 0x8,
+		/* video_sync_mode */
+		/* video_yc_dly */
+		/* video_rgb_ctrl */
+		.video_filt_ctrl = 0x1000,
+		.video_filt_ctrl_present = true,
+		/* video_ofld_voav_ofst */
+		.yfp1_htime = 140,
+		.yfp2_htime = 140+3840,
+		.max_pxcnt = 3840+1660-1,
+		.hspuls_begin = 2156+1920,
+		.hspuls_end = 44,
+		.hspuls_switch = 44,
+		.vspuls_begin = 140,
+		.vspuls_end = 2059+1920,
+		.vspuls_bline = 0,
+		.vspuls_eline = 4,
+		.havon_begin = 148,
+		.havon_end = 3987,
+		.vavon_bline = 89,
+		.vavon_eline = 2248,
+		/* eqpuls_begin */
+		/* eqpuls_end */
+		/* eqpuls_bline */
+		/* eqpuls_eline */
+		.hso_begin = 44,
+		.hso_end = 2156+1920,
+		.vso_begin = 2100+1920,
+		.vso_end = 2164+1920,
+		.vso_bline = 51,
+		.vso_eline = 53,
+		.vso_eline_present = true,
+		/* sy_val */
+		/* sy2_val */
+		.max_lncnt = 2249,
+	},
+};
+
+union meson_hdmi_venc_mode meson_hdmi_encp_mode_2160p25 = {
+	.encp = {
+		.dvi_settings = 0x1,
+		.video_mode = 0x4040,
+		.video_mode_adv = 0x8,
+		/* video_sync_mode */
+		/* video_yc_dly */
+		/* video_rgb_ctrl */
+		.video_filt_ctrl = 0x1000,
+		.video_filt_ctrl_present = true,
+		/* video_ofld_voav_ofst */
+		.yfp1_htime = 140,
+		.yfp2_htime = 140+3840,
+		.max_pxcnt = 3840+1440-1,
+		.hspuls_begin = 2156+1920,
+		.hspuls_end = 44,
+		.hspuls_switch = 44,
+		.vspuls_begin = 140,
+		.vspuls_end = 2059+1920,
+		.vspuls_bline = 0,
+		.vspuls_eline = 4,
+		.havon_begin = 148,
+		.havon_end = 3987,
+		.vavon_bline = 89,
+		.vavon_eline = 2248,
+		/* eqpuls_begin */
+		/* eqpuls_end */
+		/* eqpuls_bline */
+		/* eqpuls_eline */
+		.hso_begin = 44,
+		.hso_end = 2156+1920,
+		.vso_begin = 2100+1920,
+		.vso_end = 2164+1920,
+		.vso_bline = 51,
+		.vso_eline = 53,
+		.vso_eline_present = true,
+		/* sy_val */
+		/* sy2_val */
+		.max_lncnt = 2249,
+	},
+};
+
+union meson_hdmi_venc_mode meson_hdmi_encp_mode_2160p30 = {
+	.encp = {
+		.dvi_settings = 0x1,
+		.video_mode = 0x4040,
+		.video_mode_adv = 0x8,
+		/* video_sync_mode */
+		/* video_yc_dly */
+		/* video_rgb_ctrl */
+		.video_filt_ctrl = 0x1000,
+		.video_filt_ctrl_present = true,
+		/* video_ofld_voav_ofst */
+		.yfp1_htime = 140,
+		.yfp2_htime = 140+3840,
+		.max_pxcnt = 3840+560-1,
+		.hspuls_begin = 2156+1920,
+		.hspuls_end = 44,
+		.hspuls_switch = 44,
+		.vspuls_begin = 140,
+		.vspuls_end = 2059+1920,
+		.vspuls_bline = 0,
+		.vspuls_eline = 4,
+		.havon_begin = 148,
+		.havon_end = 3987,
+		.vavon_bline = 89,
+		.vavon_eline = 2248,
+		/* eqpuls_begin */
+		/* eqpuls_end */
+		/* eqpuls_bline */
+		/* eqpuls_eline */
+		.hso_begin = 44,
+		.hso_end = 2156+1920,
+		.vso_begin = 2100+1920,
+		.vso_end = 2164+1920,
+		.vso_bline = 51,
+		.vso_eline = 53,
+		.vso_eline_present = true,
+		/* sy_val */
+		/* sy2_val */
+		.max_lncnt = 2249,
+	},
+};
+
 struct meson_hdmi_venc_vic_mode {
 	unsigned int vic;
 	union meson_hdmi_venc_mode *mode;
@@ -718,6 +847,11 @@ struct meson_hdmi_venc_vic_mode {
 	{ 34, &meson_hdmi_encp_mode_1080p30 },
 	{ 31, &meson_hdmi_encp_mode_1080p50 },
 	{ 16, &meson_hdmi_encp_mode_1080p60 },
+	{ 93, &meson_hdmi_encp_mode_2160p24 },
+	{ 94, &meson_hdmi_encp_mode_2160p25 },
+	{ 95, &meson_hdmi_encp_mode_2160p30 },
+	{ 96, &meson_hdmi_encp_mode_2160p25 },
+	{ 97, &meson_hdmi_encp_mode_2160p30 },
 	{ 0, NULL}, /* sentinel */
 };
 
@@ -737,6 +871,23 @@ static unsigned long modulo(unsigned long a, unsigned long b)
 		return a;
 }
 
+enum drm_mode_status
+meson_venc_hdmi_supported_mode(const struct drm_display_mode *mode)
+{
+	if (mode->flags & ~(DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NHSYNC |
+			    DRM_MODE_FLAG_PVSYNC | DRM_MODE_FLAG_NVSYNC))
+		return MODE_BAD;
+
+	if (mode->hdisplay < 640 || mode->hdisplay > 1920)
+		return MODE_BAD_HVALUE;
+
+	if (mode->vdisplay < 480 || mode->vdisplay > 1200)
+		return MODE_BAD_VVALUE;
+
+	return MODE_OK;
+}
+EXPORT_SYMBOL_GPL(meson_venc_hdmi_supported_mode);
+
 bool meson_venc_hdmi_supported_vic(int vic)
 {
 	struct meson_hdmi_venc_vic_mode *vmode = meson_hdmi_venc_vic_modes;
@@ -750,6 +901,31 @@ bool meson_venc_hdmi_supported_vic(int vic)
 	return false;
 }
 EXPORT_SYMBOL_GPL(meson_venc_hdmi_supported_vic);
+
+void meson_venc_hdmi_get_dmt_vmode(const struct drm_display_mode *mode,
+				   union meson_hdmi_venc_mode *dmt_mode)
+{
+	memset(dmt_mode, 0, sizeof(*dmt_mode));
+
+	dmt_mode->encp.dvi_settings = 0x21;
+	dmt_mode->encp.video_mode = 0x4040;
+	dmt_mode->encp.video_mode_adv = 0x18;
+	dmt_mode->encp.max_pxcnt = mode->htotal - 1;
+	dmt_mode->encp.havon_begin = mode->htotal - mode->hsync_start;
+	dmt_mode->encp.havon_end = dmt_mode->encp.havon_begin +
+				   mode->hdisplay - 1;
+	dmt_mode->encp.vavon_bline = mode->vtotal - mode->vsync_start;
+	dmt_mode->encp.vavon_eline = dmt_mode->encp.vavon_bline +
+				     mode->vdisplay - 1;
+	dmt_mode->encp.hso_begin = 0;
+	dmt_mode->encp.hso_end = mode->hsync_end - mode->hsync_start;
+	dmt_mode->encp.vso_begin = 30;
+	dmt_mode->encp.vso_end = 50;
+	dmt_mode->encp.vso_bline = 0;
+	dmt_mode->encp.vso_eline = mode->vsync_end - mode->vsync_start;
+	dmt_mode->encp.vso_eline_present = true;
+	dmt_mode->encp.max_lncnt = mode->vtotal - 1;
+}
 
 static union meson_hdmi_venc_mode *meson_venc_hdmi_get_vic_vmode(int vic)
 {
@@ -785,6 +961,7 @@ void meson_venc_hdmi_mode_set(struct meson_drm *priv, int vic,
 			      struct drm_display_mode *mode)
 {
 	union meson_hdmi_venc_mode *vmode = NULL;
+	union meson_hdmi_venc_mode vmode_dmt;
 	bool use_enci = false;
 	bool venc_repeat = false;
 	bool hdmi_repeat = false;
@@ -812,18 +989,25 @@ void meson_venc_hdmi_mode_set(struct meson_drm *priv, int vic,
 	unsigned int sof_lines;
 	unsigned int vsync_lines;
 
-	vmode = meson_venc_hdmi_get_vic_vmode(vic);
-	if (!vmode) {
-		dev_err(priv->dev, "%s: Fatal Error, unsupported vic %d\n",
-			__func__, vic);
-		return;
-	}
-
 	/* Use VENCI for 480i and 576i and double HDMI pixels */
 	if (mode->flags & DRM_MODE_FLAG_DBLCLK) {
 		hdmi_repeat = true;
 		use_enci = true;
 		venc_hdmi_latency = 1;
+	}
+
+	if (meson_venc_hdmi_supported_vic(vic)) {
+		vmode = meson_venc_hdmi_get_vic_vmode(vic);
+		if (!vmode) {
+			dev_err(priv->dev, "%s: Fatal Error, unsupported mode "
+				DRM_MODE_FMT "\n", __func__,
+				DRM_MODE_ARG(mode));
+			return;
+		}
+	} else {
+		meson_venc_hdmi_get_dmt_vmode(mode, &vmode_dmt);
+		vmode = &vmode_dmt;
+		use_enci = false;
 	}
 
 	/* Repeat VENC pixels for 480/576i/p, 720p50/60 and 1080p50/60 */
@@ -865,7 +1049,7 @@ void meson_venc_hdmi_mode_set(struct meson_drm *priv, int vic,
 		hsync_pixels_venc *= 2;
 
 	/* Disable VDACs */
-	writel_bits_relaxed(0x1f, 0x1f,
+	writel_bits_relaxed(0xff, 0xff,
 			priv->io_base + _REG(VENC_VDAC_SETTING));
 
 	writel_relaxed(0, priv->io_base + _REG(ENCI_VIDEO_EN));
@@ -1481,18 +1665,25 @@ unsigned int meson_venci_get_field(struct meson_drm *priv)
 void meson_venc_enable_vsync(struct meson_drm *priv)
 {
 	writel_relaxed(2, priv->io_base + _REG(VENC_INTCTRL));
+	regmap_update_bits(priv->hhi, HHI_GCLK_MPEG2, BIT(25), BIT(25));
 }
 
 void meson_venc_disable_vsync(struct meson_drm *priv)
 {
+	regmap_update_bits(priv->hhi, HHI_GCLK_MPEG2, BIT(25), 0);
 	writel_relaxed(0, priv->io_base + _REG(VENC_INTCTRL));
 }
 
 void meson_venc_init(struct meson_drm *priv)
 {
 	/* Disable CVBS VDAC */
-	regmap_write(priv->hhi, HHI_VDAC_CNTL0, 0);
-	regmap_write(priv->hhi, HHI_VDAC_CNTL1, 8);
+	if (meson_vpu_is_compatible(priv, "amlogic,meson-g12a-vpu")) {
+		regmap_write(priv->hhi, HHI_VDAC_CNTL0_G12A, 0);
+		regmap_write(priv->hhi, HHI_VDAC_CNTL1_G12A, 8);
+	} else {
+		regmap_write(priv->hhi, HHI_VDAC_CNTL0, 0);
+		regmap_write(priv->hhi, HHI_VDAC_CNTL1, 8);
+	}
 
 	/* Power Down Dacs */
 	writel_relaxed(0xff, priv->io_base + _REG(VENC_VDAC_SETTING));

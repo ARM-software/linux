@@ -21,6 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include "intel_dp.h"
 #include "intel_drv.h"
 
 /**
@@ -147,7 +148,7 @@ struct bxt_ddi_phy_info {
 	 */
 	struct {
 		/**
-		 * @port: which port maps to this channel.
+		 * @channel.port: which port maps to this channel.
 		 */
 		enum port port;
 	} channel[2];
@@ -341,7 +342,7 @@ static u32 bxt_get_grc(struct drm_i915_private *dev_priv, enum dpio_phy phy)
 static void bxt_phy_wait_grc_done(struct drm_i915_private *dev_priv,
 				  enum dpio_phy phy)
 {
-	if (intel_wait_for_register(dev_priv,
+	if (intel_wait_for_register(&dev_priv->uncore,
 				    BXT_PORT_REF_DW3(phy),
 				    GRC_DONE, GRC_DONE,
 				    10))
@@ -380,13 +381,15 @@ static void _bxt_ddi_phy_init(struct drm_i915_private *dev_priv,
 	 * all 1s.  Eventually they become accessible as they power up, then
 	 * the reserved bit will give the default 0.  Poll on the reserved bit
 	 * becoming 0 to find when the PHY is accessible.
-	 * HW team confirmed that the time to reach phypowergood status is
-	 * anywhere between 50 us and 100us.
+	 * The flag should get set in 100us according to the HW team, but
+	 * use 1ms due to occasional timeouts observed with that.
 	 */
-	if (wait_for_us(((I915_READ(BXT_PORT_CL1CM_DW0(phy)) &
-		(PHY_RESERVED | PHY_POWER_GOOD)) == PHY_POWER_GOOD), 100)) {
+	if (intel_wait_for_register_fw(&dev_priv->uncore,
+				       BXT_PORT_CL1CM_DW0(phy),
+				       PHY_RESERVED | PHY_POWER_GOOD,
+				       PHY_POWER_GOOD,
+				       1))
 		DRM_ERROR("timeout during PHY%d power on\n", phy);
-	}
 
 	/* Program PLL Rcomp code offset */
 	val = I915_READ(BXT_PORT_CL1CM_DW9(phy));
@@ -412,7 +415,7 @@ static void _bxt_ddi_phy_init(struct drm_i915_private *dev_priv,
 	}
 
 	if (phy_info->rcomp_phy != -1) {
-		uint32_t grc_code;
+		u32 grc_code;
 
 		bxt_phy_wait_grc_done(dev_priv, phy_info->rcomp_phy);
 
@@ -444,7 +447,7 @@ static void _bxt_ddi_phy_init(struct drm_i915_private *dev_priv,
 void bxt_ddi_phy_uninit(struct drm_i915_private *dev_priv, enum dpio_phy phy)
 {
 	const struct bxt_ddi_phy_info *phy_info;
-	uint32_t val;
+	u32 val;
 
 	phy_info = bxt_get_phy_info(dev_priv, phy);
 
@@ -466,21 +469,21 @@ void bxt_ddi_phy_init(struct drm_i915_private *dev_priv, enum dpio_phy phy)
 
 	lockdep_assert_held(&dev_priv->power_domains.lock);
 
-	if (rcomp_phy != -1) {
+	was_enabled = true;
+	if (rcomp_phy != -1)
 		was_enabled = bxt_ddi_phy_is_enabled(dev_priv, rcomp_phy);
 
-		/*
-		 * We need to copy the GRC calibration value from rcomp_phy,
-		 * so make sure it's powered up.
-		 */
-		if (!was_enabled)
-			_bxt_ddi_phy_init(dev_priv, rcomp_phy);
-	}
+	/*
+	 * We need to copy the GRC calibration value from rcomp_phy,
+	 * so make sure it's powered up.
+	 */
+	if (!was_enabled)
+		_bxt_ddi_phy_init(dev_priv, rcomp_phy);
 
 	_bxt_ddi_phy_init(dev_priv, phy);
 
-	if (rcomp_phy != -1 && !was_enabled)
-		bxt_ddi_phy_uninit(dev_priv, phy_info->rcomp_phy);
+	if (!was_enabled)
+		bxt_ddi_phy_uninit(dev_priv, rcomp_phy);
 }
 
 static bool __printf(6, 7)
@@ -514,7 +517,7 @@ bool bxt_ddi_phy_verify_state(struct drm_i915_private *dev_priv,
 			      enum dpio_phy phy)
 {
 	const struct bxt_ddi_phy_info *phy_info;
-	uint32_t mask;
+	u32 mask;
 	bool ok;
 
 	phy_info = bxt_get_phy_info(dev_priv, phy);
@@ -566,9 +569,8 @@ bool bxt_ddi_phy_verify_state(struct drm_i915_private *dev_priv,
 #undef _CHK
 }
 
-uint8_t
-bxt_ddi_phy_calc_lane_lat_optim_mask(struct intel_encoder *encoder,
-				     uint8_t lane_count)
+u8
+bxt_ddi_phy_calc_lane_lat_optim_mask(u8 lane_count)
 {
 	switch (lane_count) {
 	case 1:
@@ -585,11 +587,10 @@ bxt_ddi_phy_calc_lane_lat_optim_mask(struct intel_encoder *encoder,
 }
 
 void bxt_ddi_phy_set_lane_optim_mask(struct intel_encoder *encoder,
-				     uint8_t lane_lat_optim_mask)
+				     u8 lane_lat_optim_mask)
 {
-	struct intel_digital_port *dport = enc_to_dig_port(&encoder->base);
-	struct drm_i915_private *dev_priv = to_i915(dport->base.base.dev);
-	enum port port = dport->port;
+	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
+	enum port port = encoder->port;
 	enum dpio_phy phy;
 	enum dpio_channel ch;
 	int lane;
@@ -611,16 +612,15 @@ void bxt_ddi_phy_set_lane_optim_mask(struct intel_encoder *encoder,
 	}
 }
 
-uint8_t
+u8
 bxt_ddi_phy_get_lane_lat_optim_mask(struct intel_encoder *encoder)
 {
-	struct intel_digital_port *dport = enc_to_dig_port(&encoder->base);
-	struct drm_i915_private *dev_priv = to_i915(dport->base.base.dev);
-	enum port port = dport->port;
+	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
+	enum port port = encoder->port;
 	enum dpio_phy phy;
 	enum dpio_channel ch;
 	int lane;
-	uint8_t mask;
+	u8 mask;
 
 	bxt_port_to_phy_channel(dev_priv, port, &phy, &ch);
 
@@ -642,7 +642,7 @@ void chv_set_phy_signal_level(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct intel_digital_port *dport = enc_to_dig_port(&encoder->base);
-	struct intel_crtc *intel_crtc = to_intel_crtc(dport->base.base.crtc);
+	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
 	enum dpio_channel ch = vlv_dport_to_channel(dport);
 	enum pipe pipe = intel_crtc->pipe;
 	u32 val;
@@ -734,13 +734,14 @@ void chv_set_phy_signal_level(struct intel_encoder *encoder,
 }
 
 void chv_data_lane_soft_reset(struct intel_encoder *encoder,
+			      const struct intel_crtc_state *crtc_state,
 			      bool reset)
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	enum dpio_channel ch = vlv_dport_to_channel(enc_to_dig_port(&encoder->base));
-	struct intel_crtc *crtc = to_intel_crtc(encoder->base.crtc);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->base.crtc);
 	enum pipe pipe = crtc->pipe;
-	uint32_t val;
+	u32 val;
 
 	val = vlv_dpio_read(dev_priv, pipe, VLV_PCS01_DW0(ch));
 	if (reset)
@@ -749,7 +750,7 @@ void chv_data_lane_soft_reset(struct intel_encoder *encoder,
 		val |= DPIO_PCS_TX_LANE2_RESET | DPIO_PCS_TX_LANE1_RESET;
 	vlv_dpio_write(dev_priv, pipe, VLV_PCS01_DW0(ch), val);
 
-	if (crtc->config->lane_count > 2) {
+	if (crtc_state->lane_count > 2) {
 		val = vlv_dpio_read(dev_priv, pipe, VLV_PCS23_DW0(ch));
 		if (reset)
 			val &= ~(DPIO_PCS_TX_LANE2_RESET | DPIO_PCS_TX_LANE1_RESET);
@@ -766,7 +767,7 @@ void chv_data_lane_soft_reset(struct intel_encoder *encoder,
 		val |= DPIO_PCS_CLK_SOFT_RESET;
 	vlv_dpio_write(dev_priv, pipe, VLV_PCS01_DW1(ch), val);
 
-	if (crtc->config->lane_count > 2) {
+	if (crtc_state->lane_count > 2) {
 		val = vlv_dpio_read(dev_priv, pipe, VLV_PCS23_DW1(ch));
 		val |= CHV_PCS_REQ_SOFTRESET_EN;
 		if (reset)
@@ -777,17 +778,16 @@ void chv_data_lane_soft_reset(struct intel_encoder *encoder,
 	}
 }
 
-void chv_phy_pre_pll_enable(struct intel_encoder *encoder)
+void chv_phy_pre_pll_enable(struct intel_encoder *encoder,
+			    const struct intel_crtc_state *crtc_state)
 {
 	struct intel_digital_port *dport = enc_to_dig_port(&encoder->base);
-	struct drm_device *dev = encoder->base.dev;
-	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct intel_crtc *intel_crtc =
-		to_intel_crtc(encoder->base.crtc);
+	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->base.crtc);
 	enum dpio_channel ch = vlv_dport_to_channel(dport);
-	enum pipe pipe = intel_crtc->pipe;
+	enum pipe pipe = crtc->pipe;
 	unsigned int lane_mask =
-		intel_dp_unused_lane_mask(intel_crtc->config->lane_count);
+		intel_dp_unused_lane_mask(crtc_state->lane_count);
 	u32 val;
 
 	/*
@@ -803,7 +803,7 @@ void chv_phy_pre_pll_enable(struct intel_encoder *encoder)
 	mutex_lock(&dev_priv->sb_lock);
 
 	/* Assert data lane reset */
-	chv_data_lane_soft_reset(encoder, true);
+	chv_data_lane_soft_reset(encoder, crtc_state, true);
 
 	/* program left/right clock distribution */
 	if (pipe != PIPE_B) {
@@ -833,7 +833,7 @@ void chv_phy_pre_pll_enable(struct intel_encoder *encoder)
 		val |= CHV_PCS_USEDCLKCHANNEL;
 	vlv_dpio_write(dev_priv, pipe, VLV_PCS01_DW8(ch), val);
 
-	if (intel_crtc->config->lane_count > 2) {
+	if (crtc_state->lane_count > 2) {
 		val = vlv_dpio_read(dev_priv, pipe, VLV_PCS23_DW8(ch));
 		val |= CHV_PCS_USEDCLKCHANNEL_OVRRIDE;
 		if (pipe != PIPE_B)
@@ -858,16 +858,15 @@ void chv_phy_pre_pll_enable(struct intel_encoder *encoder)
 	mutex_unlock(&dev_priv->sb_lock);
 }
 
-void chv_phy_pre_encoder_enable(struct intel_encoder *encoder)
+void chv_phy_pre_encoder_enable(struct intel_encoder *encoder,
+				const struct intel_crtc_state *crtc_state)
 {
 	struct intel_dp *intel_dp = enc_to_intel_dp(&encoder->base);
 	struct intel_digital_port *dport = dp_to_dig_port(intel_dp);
-	struct drm_device *dev = encoder->base.dev;
-	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct intel_crtc *intel_crtc =
-		to_intel_crtc(encoder->base.crtc);
+	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->base.crtc);
 	enum dpio_channel ch = vlv_dport_to_channel(dport);
-	int pipe = intel_crtc->pipe;
+	enum pipe pipe = crtc->pipe;
 	int data, i, stagger;
 	u32 val;
 
@@ -878,16 +877,16 @@ void chv_phy_pre_encoder_enable(struct intel_encoder *encoder)
 	val &= ~DPIO_LANEDESKEW_STRAP_OVRD;
 	vlv_dpio_write(dev_priv, pipe, VLV_PCS01_DW11(ch), val);
 
-	if (intel_crtc->config->lane_count > 2) {
+	if (crtc_state->lane_count > 2) {
 		val = vlv_dpio_read(dev_priv, pipe, VLV_PCS23_DW11(ch));
 		val &= ~DPIO_LANEDESKEW_STRAP_OVRD;
 		vlv_dpio_write(dev_priv, pipe, VLV_PCS23_DW11(ch), val);
 	}
 
 	/* Program Tx lane latency optimal setting*/
-	for (i = 0; i < intel_crtc->config->lane_count; i++) {
+	for (i = 0; i < crtc_state->lane_count; i++) {
 		/* Set the upar bit */
-		if (intel_crtc->config->lane_count == 1)
+		if (crtc_state->lane_count == 1)
 			data = 0x0;
 		else
 			data = (i == 1) ? 0x0 : 0x1;
@@ -896,13 +895,13 @@ void chv_phy_pre_encoder_enable(struct intel_encoder *encoder)
 	}
 
 	/* Data lane stagger programming */
-	if (intel_crtc->config->port_clock > 270000)
+	if (crtc_state->port_clock > 270000)
 		stagger = 0x18;
-	else if (intel_crtc->config->port_clock > 135000)
+	else if (crtc_state->port_clock > 135000)
 		stagger = 0xd;
-	else if (intel_crtc->config->port_clock > 67500)
+	else if (crtc_state->port_clock > 67500)
 		stagger = 0x7;
-	else if (intel_crtc->config->port_clock > 33750)
+	else if (crtc_state->port_clock > 33750)
 		stagger = 0x4;
 	else
 		stagger = 0x2;
@@ -911,7 +910,7 @@ void chv_phy_pre_encoder_enable(struct intel_encoder *encoder)
 	val |= DPIO_TX2_STAGGER_MASK(0x1f);
 	vlv_dpio_write(dev_priv, pipe, VLV_PCS01_DW11(ch), val);
 
-	if (intel_crtc->config->lane_count > 2) {
+	if (crtc_state->lane_count > 2) {
 		val = vlv_dpio_read(dev_priv, pipe, VLV_PCS23_DW11(ch));
 		val |= DPIO_TX2_STAGGER_MASK(0x1f);
 		vlv_dpio_write(dev_priv, pipe, VLV_PCS23_DW11(ch), val);
@@ -924,7 +923,7 @@ void chv_phy_pre_encoder_enable(struct intel_encoder *encoder)
 		       DPIO_TX1_STAGGER_MULT(6) |
 		       DPIO_TX2_STAGGER_MULT(0));
 
-	if (intel_crtc->config->lane_count > 2) {
+	if (crtc_state->lane_count > 2) {
 		vlv_dpio_write(dev_priv, pipe, VLV_PCS23_DW12(ch),
 			       DPIO_LANESTAGGER_STRAP(stagger) |
 			       DPIO_LANESTAGGER_STRAP_OVRD |
@@ -934,7 +933,7 @@ void chv_phy_pre_encoder_enable(struct intel_encoder *encoder)
 	}
 
 	/* Deassert data lane reset */
-	chv_data_lane_soft_reset(encoder, false);
+	chv_data_lane_soft_reset(encoder, crtc_state, false);
 
 	mutex_unlock(&dev_priv->sb_lock);
 }
@@ -950,10 +949,11 @@ void chv_phy_release_cl2_override(struct intel_encoder *encoder)
 	}
 }
 
-void chv_phy_post_pll_disable(struct intel_encoder *encoder)
+void chv_phy_post_pll_disable(struct intel_encoder *encoder,
+			      const struct intel_crtc_state *old_crtc_state)
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-	enum pipe pipe = to_intel_crtc(encoder->base.crtc)->pipe;
+	enum pipe pipe = to_intel_crtc(old_crtc_state->base.crtc)->pipe;
 	u32 val;
 
 	mutex_lock(&dev_priv->sb_lock);
@@ -991,7 +991,7 @@ void vlv_set_phy_signal_level(struct intel_encoder *encoder,
 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
 	struct intel_digital_port *dport = enc_to_dig_port(&encoder->base);
 	enum dpio_channel port = vlv_dport_to_channel(dport);
-	int pipe = intel_crtc->pipe;
+	enum pipe pipe = intel_crtc->pipe;
 
 	mutex_lock(&dev_priv->sb_lock);
 	vlv_dpio_write(dev_priv, pipe, VLV_TX_DW5(port), 0x00000000);
@@ -1009,15 +1009,14 @@ void vlv_set_phy_signal_level(struct intel_encoder *encoder,
 	mutex_unlock(&dev_priv->sb_lock);
 }
 
-void vlv_phy_pre_pll_enable(struct intel_encoder *encoder)
+void vlv_phy_pre_pll_enable(struct intel_encoder *encoder,
+			    const struct intel_crtc_state *crtc_state)
 {
 	struct intel_digital_port *dport = enc_to_dig_port(&encoder->base);
-	struct drm_device *dev = encoder->base.dev;
-	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct intel_crtc *intel_crtc =
-		to_intel_crtc(encoder->base.crtc);
+	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->base.crtc);
 	enum dpio_channel port = vlv_dport_to_channel(dport);
-	int pipe = intel_crtc->pipe;
+	enum pipe pipe = crtc->pipe;
 
 	/* Program Tx lane resets to default */
 	mutex_lock(&dev_priv->sb_lock);
@@ -1037,15 +1036,15 @@ void vlv_phy_pre_pll_enable(struct intel_encoder *encoder)
 	mutex_unlock(&dev_priv->sb_lock);
 }
 
-void vlv_phy_pre_encoder_enable(struct intel_encoder *encoder)
+void vlv_phy_pre_encoder_enable(struct intel_encoder *encoder,
+				const struct intel_crtc_state *crtc_state)
 {
 	struct intel_dp *intel_dp = enc_to_intel_dp(&encoder->base);
 	struct intel_digital_port *dport = dp_to_dig_port(intel_dp);
-	struct drm_device *dev = encoder->base.dev;
-	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
+	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->base.crtc);
 	enum dpio_channel port = vlv_dport_to_channel(dport);
-	int pipe = intel_crtc->pipe;
+	enum pipe pipe = crtc->pipe;
 	u32 val;
 
 	mutex_lock(&dev_priv->sb_lock);
@@ -1067,14 +1066,14 @@ void vlv_phy_pre_encoder_enable(struct intel_encoder *encoder)
 	mutex_unlock(&dev_priv->sb_lock);
 }
 
-void vlv_phy_reset_lanes(struct intel_encoder *encoder)
+void vlv_phy_reset_lanes(struct intel_encoder *encoder,
+			 const struct intel_crtc_state *old_crtc_state)
 {
 	struct intel_digital_port *dport = enc_to_dig_port(&encoder->base);
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-	struct intel_crtc *intel_crtc =
-		to_intel_crtc(encoder->base.crtc);
+	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->base.crtc);
 	enum dpio_channel port = vlv_dport_to_channel(dport);
-	int pipe = intel_crtc->pipe;
+	enum pipe pipe = crtc->pipe;
 
 	mutex_lock(&dev_priv->sb_lock);
 	vlv_dpio_write(dev_priv, pipe, VLV_PCS_DW0(port), 0x00000000);

@@ -77,27 +77,57 @@ static unsigned char edid_get_byte(struct intel_vgpu *vgpu)
 	return chr;
 }
 
+static inline int cnp_get_port_from_gmbus0(u32 gmbus0)
+{
+	int port_select = gmbus0 & _GMBUS_PIN_SEL_MASK;
+	int port = -EINVAL;
+
+	if (port_select == GMBUS_PIN_1_BXT)
+		port = PORT_B;
+	else if (port_select == GMBUS_PIN_2_BXT)
+		port = PORT_C;
+	else if (port_select == GMBUS_PIN_3_BXT)
+		port = PORT_D;
+	else if (port_select == GMBUS_PIN_4_CNP)
+		port = PORT_E;
+	return port;
+}
+
+static inline int bxt_get_port_from_gmbus0(u32 gmbus0)
+{
+	int port_select = gmbus0 & _GMBUS_PIN_SEL_MASK;
+	int port = -EINVAL;
+
+	if (port_select == GMBUS_PIN_1_BXT)
+		port = PORT_B;
+	else if (port_select == GMBUS_PIN_2_BXT)
+		port = PORT_C;
+	else if (port_select == GMBUS_PIN_3_BXT)
+		port = PORT_D;
+	return port;
+}
+
 static inline int get_port_from_gmbus0(u32 gmbus0)
 {
 	int port_select = gmbus0 & _GMBUS_PIN_SEL_MASK;
 	int port = -EINVAL;
 
-	if (port_select == 2)
+	if (port_select == GMBUS_PIN_VGADDC)
 		port = PORT_E;
-	else if (port_select == 4)
+	else if (port_select == GMBUS_PIN_DPC)
 		port = PORT_C;
-	else if (port_select == 5)
+	else if (port_select == GMBUS_PIN_DPB)
 		port = PORT_B;
-	else if (port_select == 6)
+	else if (port_select == GMBUS_PIN_DPD)
 		port = PORT_D;
 	return port;
 }
 
 static void reset_gmbus_controller(struct intel_vgpu *vgpu)
 {
-	vgpu_vreg(vgpu, PCH_GMBUS2) = GMBUS_HW_RDY;
+	vgpu_vreg_t(vgpu, PCH_GMBUS2) = GMBUS_HW_RDY;
 	if (!vgpu->display.i2c_edid.edid_available)
-		vgpu_vreg(vgpu, PCH_GMBUS2) |= GMBUS_SATOER;
+		vgpu_vreg_t(vgpu, PCH_GMBUS2) |= GMBUS_SATOER;
 	vgpu->display.i2c_edid.gmbus.phase = GMBUS_IDLE_PHASE;
 }
 
@@ -105,6 +135,7 @@ static void reset_gmbus_controller(struct intel_vgpu *vgpu)
 static int gmbus0_mmio_write(struct intel_vgpu *vgpu,
 			unsigned int offset, void *p_data, unsigned int bytes)
 {
+	struct drm_i915_private *dev_priv = vgpu->gvt->dev_priv;
 	int port, pin_select;
 
 	memcpy(&vgpu_vreg(vgpu, offset), p_data, bytes);
@@ -116,23 +147,28 @@ static int gmbus0_mmio_write(struct intel_vgpu *vgpu,
 	if (pin_select == 0)
 		return 0;
 
-	port = get_port_from_gmbus0(pin_select);
+	if (IS_BROXTON(dev_priv))
+		port = bxt_get_port_from_gmbus0(pin_select);
+	else if (IS_COFFEELAKE(dev_priv))
+		port = cnp_get_port_from_gmbus0(pin_select);
+	else
+		port = get_port_from_gmbus0(pin_select);
 	if (WARN_ON(port < 0))
 		return 0;
 
 	vgpu->display.i2c_edid.state = I2C_GMBUS;
 	vgpu->display.i2c_edid.gmbus.phase = GMBUS_IDLE_PHASE;
 
-	vgpu_vreg(vgpu, PCH_GMBUS2) &= ~GMBUS_ACTIVE;
-	vgpu_vreg(vgpu, PCH_GMBUS2) |= GMBUS_HW_RDY | GMBUS_HW_WAIT_PHASE;
+	vgpu_vreg_t(vgpu, PCH_GMBUS2) &= ~GMBUS_ACTIVE;
+	vgpu_vreg_t(vgpu, PCH_GMBUS2) |= GMBUS_HW_RDY | GMBUS_HW_WAIT_PHASE;
 
 	if (intel_vgpu_has_monitor_on_port(vgpu, port) &&
 			!intel_vgpu_port_is_dp(vgpu, port)) {
 		vgpu->display.i2c_edid.port = port;
 		vgpu->display.i2c_edid.edid_available = true;
-		vgpu_vreg(vgpu, PCH_GMBUS2) &= ~GMBUS_SATOER;
+		vgpu_vreg_t(vgpu, PCH_GMBUS2) &= ~GMBUS_SATOER;
 	} else
-		vgpu_vreg(vgpu, PCH_GMBUS2) |= GMBUS_SATOER;
+		vgpu_vreg_t(vgpu, PCH_GMBUS2) |= GMBUS_SATOER;
 	return 0;
 }
 
@@ -159,8 +195,8 @@ static int gmbus1_mmio_write(struct intel_vgpu *vgpu, unsigned int offset,
 		 * 2) HW_RDY bit asserted
 		 */
 		if (wvalue & GMBUS_SW_CLR_INT) {
-			vgpu_vreg(vgpu, PCH_GMBUS2) &= ~GMBUS_INT;
-			vgpu_vreg(vgpu, PCH_GMBUS2) |= GMBUS_HW_RDY;
+			vgpu_vreg_t(vgpu, PCH_GMBUS2) &= ~GMBUS_INT;
+			vgpu_vreg_t(vgpu, PCH_GMBUS2) |= GMBUS_HW_RDY;
 		}
 
 		/* For virtualization, we suppose that HW is always ready,
@@ -208,7 +244,7 @@ static int gmbus1_mmio_write(struct intel_vgpu *vgpu, unsigned int offset,
 				 * visible in gmbus interface)
 				 */
 				i2c_edid->gmbus.phase = GMBUS_IDLE_PHASE;
-				vgpu_vreg(vgpu, PCH_GMBUS2) &= ~GMBUS_ACTIVE;
+				vgpu_vreg_t(vgpu, PCH_GMBUS2) &= ~GMBUS_ACTIVE;
 			}
 			break;
 		case NIDX_NS_W:
@@ -220,7 +256,7 @@ static int gmbus1_mmio_write(struct intel_vgpu *vgpu, unsigned int offset,
 			 * START (-->INDEX) -->DATA
 			 */
 			i2c_edid->gmbus.phase = GMBUS_DATA_PHASE;
-			vgpu_vreg(vgpu, PCH_GMBUS2) |= GMBUS_ACTIVE;
+			vgpu_vreg_t(vgpu, PCH_GMBUS2) |= GMBUS_ACTIVE;
 			break;
 		default:
 			gvt_vgpu_err("Unknown/reserved GMBUS cycle detected!\n");
@@ -256,7 +292,7 @@ static int gmbus3_mmio_read(struct intel_vgpu *vgpu, unsigned int offset,
 	u32 reg_data = 0;
 
 	/* Data can only be recevied if previous settings correct */
-	if (vgpu_vreg(vgpu, PCH_GMBUS1) & GMBUS_SLAVE_READ) {
+	if (vgpu_vreg_t(vgpu, PCH_GMBUS1) & GMBUS_SLAVE_READ) {
 		if (byte_left <= 0) {
 			memcpy(p_data, &vgpu_vreg(vgpu, offset), bytes);
 			return 0;
@@ -322,6 +358,9 @@ static int gmbus2_mmio_write(struct intel_vgpu *vgpu, unsigned int offset,
 /**
  * intel_gvt_i2c_handle_gmbus_read - emulate gmbus register mmio read
  * @vgpu: a vGPU
+ * @offset: reg offset
+ * @p_data: data return buffer
+ * @bytes: access data length
  *
  * This function is used to emulate gmbus register mmio read
  *
@@ -347,6 +386,9 @@ int intel_gvt_i2c_handle_gmbus_read(struct intel_vgpu *vgpu,
 /**
  * intel_gvt_i2c_handle_gmbus_write - emulate gmbus register mmio write
  * @vgpu: a vGPU
+ * @offset: reg offset
+ * @p_data: data return buffer
+ * @bytes: access data length
  *
  * This function is used to emulate gmbus register mmio write
  *
@@ -419,6 +461,9 @@ static inline int get_aux_ch_reg(unsigned int offset)
 /**
  * intel_gvt_i2c_handle_aux_ch_write - emulate AUX channel register write
  * @vgpu: a vGPU
+ * @port_idx: port index
+ * @offset: reg offset
+ * @p_data: write ptr
  *
  * This function is used to emulate AUX channel register write
  *

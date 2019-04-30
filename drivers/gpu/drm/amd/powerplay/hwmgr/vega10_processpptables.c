@@ -53,7 +53,7 @@ static const void *get_powerplay_table(struct pp_hwmgr *hwmgr)
 
 	if (!table_address) {
 		table_address = (ATOM_Vega10_POWERPLAYTABLE *)
-				cgs_atom_get_data_table(hwmgr->device, index,
+				smu_atom_get_data_table(hwmgr->adev, index,
 						&size, &frev, &crev);
 
 		hwmgr->soft_pp_table = table_address;	/*Cache the result in RAM.*/
@@ -123,6 +123,7 @@ static int init_thermal_controller(
 	const Vega10_PPTable_Generic_SubTable_Header *header;
 	const ATOM_Vega10_Fan_Table *fan_table_v1;
 	const ATOM_Vega10_Fan_Table_V2 *fan_table_v2;
+	const ATOM_Vega10_Fan_Table_V3 *fan_table_v3;
 
 	thermal_controller = (ATOM_Vega10_Thermal_Controller *)
 			(((unsigned long)powerplay_table) +
@@ -207,7 +208,7 @@ static int init_thermal_controller(
 				le16_to_cpu(fan_table_v1->usFanStopTemperature);
 		hwmgr->thermal_controller.advanceFanControlParameters.usZeroRPMStartTemperature =
 				le16_to_cpu(fan_table_v1->usFanStartTemperature);
-	} else if (header->ucRevId > 10) {
+	} else if (header->ucRevId == 0xb) {
 		fan_table_v2 = (ATOM_Vega10_Fan_Table_V2 *)header;
 
 		hwmgr->thermal_controller.fanInfo.ucTachometerPulsesPerRevolution =
@@ -251,7 +252,54 @@ static int init_thermal_controller(
 				le16_to_cpu(fan_table_v2->usFanStopTemperature);
 		hwmgr->thermal_controller.advanceFanControlParameters.usZeroRPMStartTemperature =
 				le16_to_cpu(fan_table_v2->usFanStartTemperature);
+	} else if (header->ucRevId > 0xb) {
+		fan_table_v3 = (ATOM_Vega10_Fan_Table_V3 *)header;
+
+		hwmgr->thermal_controller.fanInfo.ucTachometerPulsesPerRevolution =
+				fan_table_v3->ucFanParameters & ATOM_VEGA10_PP_FANPARAMETERS_TACHOMETER_PULSES_PER_REVOLUTION_MASK;
+		hwmgr->thermal_controller.fanInfo.ulMinRPM = fan_table_v3->ucFanMinRPM * 100UL;
+		hwmgr->thermal_controller.fanInfo.ulMaxRPM = fan_table_v3->ucFanMaxRPM * 100UL;
+		phm_cap_set(hwmgr->platform_descriptor.platformCaps,
+				PHM_PlatformCaps_MicrocodeFanControl);
+		hwmgr->thermal_controller.advanceFanControlParameters.usFanOutputSensitivity =
+				le16_to_cpu(fan_table_v3->usFanOutputSensitivity);
+		hwmgr->thermal_controller.advanceFanControlParameters.usMaxFanRPM =
+				fan_table_v3->ucFanMaxRPM * 100UL;
+		hwmgr->thermal_controller.advanceFanControlParameters.usFanRPMMaxLimit =
+				le16_to_cpu(fan_table_v3->usThrottlingRPM);
+		hwmgr->thermal_controller.advanceFanControlParameters.ulMinFanSCLKAcousticLimit =
+				le16_to_cpu(fan_table_v3->usFanAcousticLimitRpm);
+		hwmgr->thermal_controller.advanceFanControlParameters.usTMax =
+				le16_to_cpu(fan_table_v3->usTargetTemperature);
+		hwmgr->thermal_controller.advanceFanControlParameters.usPWMMin =
+				le16_to_cpu(fan_table_v3->usMinimumPWMLimit);
+		hwmgr->thermal_controller.advanceFanControlParameters.ulTargetGfxClk =
+				le16_to_cpu(fan_table_v3->usTargetGfxClk);
+		hwmgr->thermal_controller.advanceFanControlParameters.usFanGainEdge =
+				le16_to_cpu(fan_table_v3->usFanGainEdge);
+		hwmgr->thermal_controller.advanceFanControlParameters.usFanGainHotspot =
+				le16_to_cpu(fan_table_v3->usFanGainHotspot);
+		hwmgr->thermal_controller.advanceFanControlParameters.usFanGainLiquid =
+				le16_to_cpu(fan_table_v3->usFanGainLiquid);
+		hwmgr->thermal_controller.advanceFanControlParameters.usFanGainVrVddc =
+				le16_to_cpu(fan_table_v3->usFanGainVrVddc);
+		hwmgr->thermal_controller.advanceFanControlParameters.usFanGainVrMvdd =
+				le16_to_cpu(fan_table_v3->usFanGainVrMvdd);
+		hwmgr->thermal_controller.advanceFanControlParameters.usFanGainPlx =
+				le16_to_cpu(fan_table_v3->usFanGainPlx);
+		hwmgr->thermal_controller.advanceFanControlParameters.usFanGainHbm =
+				le16_to_cpu(fan_table_v3->usFanGainHbm);
+
+		hwmgr->thermal_controller.advanceFanControlParameters.ucEnableZeroRPM =
+				fan_table_v3->ucEnableZeroRPM;
+		hwmgr->thermal_controller.advanceFanControlParameters.usZeroRPMStopTemperature =
+				le16_to_cpu(fan_table_v3->usFanStopTemperature);
+		hwmgr->thermal_controller.advanceFanControlParameters.usZeroRPMStartTemperature =
+				le16_to_cpu(fan_table_v3->usFanStartTemperature);
+		hwmgr->thermal_controller.advanceFanControlParameters.usMGpuThrottlingRPMLimit =
+				le16_to_cpu(fan_table_v3->usMGpuThrottlingRPM);
 	}
+
 	return 0;
 }
 
@@ -287,12 +335,6 @@ static int init_over_drive_limits(
 	hwmgr->platform_descriptor.maxOverdriveVDDC = 0;
 	hwmgr->platform_descriptor.overdriveVDDCStep = 0;
 
-	if (hwmgr->platform_descriptor.overdriveLimit.engineClock > 0 &&
-		hwmgr->platform_descriptor.overdriveLimit.memoryClock > 0) {
-		phm_cap_set(hwmgr->platform_descriptor.platformCaps,
-			PHM_PlatformCaps_ACOverdriveSupport);
-	}
-
 	return 0;
 }
 
@@ -311,8 +353,7 @@ static int get_mm_clock_voltage_table(
 	table_size = sizeof(uint32_t) +
 			sizeof(phm_ppt_v1_mm_clock_voltage_dependency_record) *
 			mm_dependency_table->ucNumEntries;
-	mm_table = (phm_ppt_v1_mm_clock_voltage_dependency_table *)
-			kzalloc(table_size, GFP_KERNEL);
+	mm_table = kzalloc(table_size, GFP_KERNEL);
 
 	if (!mm_table)
 		return -ENOMEM;
@@ -478,23 +519,23 @@ static int get_tdp_table(
 					le16_to_cpu(power_tune_table_v2->usLoadLineResistance);
 	} else {
 		power_tune_table_v3 = (ATOM_Vega10_PowerTune_Table_V3 *)table;
-		tdp_table->usMaximumPowerDeliveryLimit   = power_tune_table_v3->usSocketPowerLimit;
-		tdp_table->usTDC                         = power_tune_table_v3->usTdcLimit;
-		tdp_table->usEDCLimit                    = power_tune_table_v3->usEdcLimit;
-		tdp_table->usSoftwareShutdownTemp        = power_tune_table_v3->usSoftwareShutdownTemp;
-		tdp_table->usTemperatureLimitTedge       = power_tune_table_v3->usTemperatureLimitTedge;
-		tdp_table->usTemperatureLimitHotspot     = power_tune_table_v3->usTemperatureLimitHotSpot;
-		tdp_table->usTemperatureLimitLiquid1     = power_tune_table_v3->usTemperatureLimitLiquid1;
-		tdp_table->usTemperatureLimitLiquid2     = power_tune_table_v3->usTemperatureLimitLiquid2;
-		tdp_table->usTemperatureLimitHBM         = power_tune_table_v3->usTemperatureLimitHBM;
-		tdp_table->usTemperatureLimitVrVddc      = power_tune_table_v3->usTemperatureLimitVrSoc;
-		tdp_table->usTemperatureLimitVrMvdd      = power_tune_table_v3->usTemperatureLimitVrMem;
-		tdp_table->usTemperatureLimitPlx         = power_tune_table_v3->usTemperatureLimitPlx;
+		tdp_table->usMaximumPowerDeliveryLimit   = le16_to_cpu(power_tune_table_v3->usSocketPowerLimit);
+		tdp_table->usTDC                         = le16_to_cpu(power_tune_table_v3->usTdcLimit);
+		tdp_table->usEDCLimit                    = le16_to_cpu(power_tune_table_v3->usEdcLimit);
+		tdp_table->usSoftwareShutdownTemp        = le16_to_cpu(power_tune_table_v3->usSoftwareShutdownTemp);
+		tdp_table->usTemperatureLimitTedge       = le16_to_cpu(power_tune_table_v3->usTemperatureLimitTedge);
+		tdp_table->usTemperatureLimitHotspot     = le16_to_cpu(power_tune_table_v3->usTemperatureLimitHotSpot);
+		tdp_table->usTemperatureLimitLiquid1     = le16_to_cpu(power_tune_table_v3->usTemperatureLimitLiquid1);
+		tdp_table->usTemperatureLimitLiquid2     = le16_to_cpu(power_tune_table_v3->usTemperatureLimitLiquid2);
+		tdp_table->usTemperatureLimitHBM         = le16_to_cpu(power_tune_table_v3->usTemperatureLimitHBM);
+		tdp_table->usTemperatureLimitVrVddc      = le16_to_cpu(power_tune_table_v3->usTemperatureLimitVrSoc);
+		tdp_table->usTemperatureLimitVrMvdd      = le16_to_cpu(power_tune_table_v3->usTemperatureLimitVrMem);
+		tdp_table->usTemperatureLimitPlx         = le16_to_cpu(power_tune_table_v3->usTemperatureLimitPlx);
 		tdp_table->ucLiquid1_I2C_address         = power_tune_table_v3->ucLiquid1_I2C_address;
 		tdp_table->ucLiquid2_I2C_address         = power_tune_table_v3->ucLiquid2_I2C_address;
-		tdp_table->usBoostStartTemperature       = power_tune_table_v3->usBoostStartTemperature;
-		tdp_table->usBoostStopTemperature        = power_tune_table_v3->usBoostStopTemperature;
-		tdp_table->ulBoostClock                  = power_tune_table_v3->ulBoostClock;
+		tdp_table->usBoostStartTemperature       = le16_to_cpu(power_tune_table_v3->usBoostStartTemperature);
+		tdp_table->usBoostStopTemperature        = le16_to_cpu(power_tune_table_v3->usBoostStopTemperature);
+		tdp_table->ulBoostClock                  = le32_to_cpu(power_tune_table_v3->ulBoostClock);
 
 		get_scl_sda_value(power_tune_table_v3->ucLiquid_I2C_Line, &scl, &sda);
 
@@ -539,8 +580,7 @@ static int get_socclk_voltage_dependency_table(
 			sizeof(phm_ppt_v1_clock_voltage_dependency_record) *
 			clk_dep_table->ucNumEntries;
 
-	clk_table = (phm_ppt_v1_clock_voltage_dependency_table *)
-			kzalloc(table_size, GFP_KERNEL);
+	clk_table = kzalloc(table_size, GFP_KERNEL);
 
 	if (!clk_table)
 		return -ENOMEM;
@@ -574,8 +614,7 @@ static int get_mclk_voltage_dependency_table(
 			sizeof(phm_ppt_v1_clock_voltage_dependency_record) *
 			mclk_dep_table->ucNumEntries;
 
-	mclk_table = (phm_ppt_v1_clock_voltage_dependency_table *)
-			kzalloc(table_size, GFP_KERNEL);
+	mclk_table = kzalloc(table_size, GFP_KERNEL);
 
 	if (!mclk_table)
 		return -ENOMEM;
@@ -616,8 +655,7 @@ static int get_gfxclk_voltage_dependency_table(
 			sizeof(phm_ppt_v1_clock_voltage_dependency_record) *
 			clk_dep_table->ucNumEntries;
 
-	clk_table = (struct phm_ppt_v1_clock_voltage_dependency_table *)
-			kzalloc(table_size, GFP_KERNEL);
+	clk_table = kzalloc(table_size, GFP_KERNEL);
 
 	if (!clk_table)
 		return -ENOMEM;
@@ -683,8 +721,7 @@ static int get_pix_clk_voltage_dependency_table(
 			sizeof(phm_ppt_v1_clock_voltage_dependency_record) *
 			clk_dep_table->ucNumEntries;
 
-	clk_table = (struct phm_ppt_v1_clock_voltage_dependency_table *)
-			kzalloc(table_size, GFP_KERNEL);
+	clk_table = kzalloc(table_size, GFP_KERNEL);
 
 	if (!clk_table)
 		return -ENOMEM;
@@ -713,9 +750,9 @@ static int get_dcefclk_voltage_dependency_table(
 	uint8_t num_entries;
 	struct phm_ppt_v1_clock_voltage_dependency_table
 				*clk_table;
-	struct cgs_system_info sys_info = {0};
 	uint32_t dev_id;
 	uint32_t rev_id;
+	struct amdgpu_device *adev = hwmgr->adev;
 
 	PP_ASSERT_WITH_CODE((clk_dep_table->ucNumEntries != 0),
 			"Invalid PowerPlay Table!", return -1);
@@ -726,15 +763,8 @@ static int get_dcefclk_voltage_dependency_table(
  * This DPM level was added to support 3DPM monitors @ 4K120Hz
  *
  */
-	sys_info.size = sizeof(struct cgs_system_info);
-	sys_info.info_id = CGS_SYSTEM_INFO_PCIE_DEV;
-	cgs_query_system_info(hwmgr->device, &sys_info);
-	dev_id = (uint32_t)sys_info.value;
-
-	sys_info.size = sizeof(struct cgs_system_info);
-	sys_info.info_id = CGS_SYSTEM_INFO_PCIE_REV;
-	cgs_query_system_info(hwmgr->device, &sys_info);
-	rev_id = (uint32_t)sys_info.value;
+	dev_id = adev->pdev->device;
+	rev_id = adev->pdev->revision;
 
 	if (dev_id == 0x6863 && rev_id == 0 &&
 		clk_dep_table->entries[clk_dep_table->ucNumEntries - 1].ulClk < 90000)
@@ -748,8 +778,7 @@ static int get_dcefclk_voltage_dependency_table(
 			sizeof(phm_ppt_v1_clock_voltage_dependency_record) *
 			num_entries;
 
-	clk_table = (struct phm_ppt_v1_clock_voltage_dependency_table *)
-			kzalloc(table_size, GFP_KERNEL);
+	clk_table = kzalloc(table_size, GFP_KERNEL);
 
 	if (!clk_table)
 		return -ENOMEM;
@@ -792,8 +821,7 @@ static int get_pcie_table(struct pp_hwmgr *hwmgr,
 			sizeof(struct phm_ppt_v1_pcie_record) *
 			atom_pcie_table->ucNumEntries;
 
-	pcie_table = (struct phm_ppt_v1_pcie_table *)
-			kzalloc(table_size, GFP_KERNEL);
+	pcie_table = kzalloc(table_size, GFP_KERNEL);
 
 	if (!pcie_table)
 		return -ENOMEM;
@@ -1046,10 +1074,9 @@ static int get_vddc_lookup_table(
 	table_size = sizeof(uint32_t) +
 			sizeof(phm_ppt_v1_voltage_lookup_record) * max_levels;
 
-	table = (phm_ppt_v1_voltage_lookup_table *)
-			kzalloc(table_size, GFP_KERNEL);
+	table = kzalloc(table_size, GFP_KERNEL);
 
-	if (NULL == table)
+	if (table == NULL)
 		return -ENOMEM;
 
 	table->count = vddc_lookup_pp_tables->ucNumEntries;
@@ -1158,12 +1185,12 @@ int vega10_pp_tables_initialize(struct pp_hwmgr *hwmgr)
 
 	hwmgr->pptable = kzalloc(sizeof(struct phm_ppt_v2_information), GFP_KERNEL);
 
-	PP_ASSERT_WITH_CODE((NULL != hwmgr->pptable),
+	PP_ASSERT_WITH_CODE((hwmgr->pptable != NULL),
 			    "Failed to allocate hwmgr->pptable!", return -ENOMEM);
 
 	powerplay_table = get_powerplay_table(hwmgr);
 
-	PP_ASSERT_WITH_CODE((NULL != powerplay_table),
+	PP_ASSERT_WITH_CODE((powerplay_table != NULL),
 		"Missing PowerPlay Table!", return -1);
 
 	result = check_powerplay_tables(hwmgr, powerplay_table);
@@ -1202,7 +1229,6 @@ int vega10_pp_tables_initialize(struct pp_hwmgr *hwmgr)
 
 static int vega10_pp_tables_uninitialize(struct pp_hwmgr *hwmgr)
 {
-	int result = 0;
 	struct phm_ppt_v2_information *pp_table_info =
 			(struct phm_ppt_v2_information *)(hwmgr->pptable);
 
@@ -1245,7 +1271,7 @@ static int vega10_pp_tables_uninitialize(struct pp_hwmgr *hwmgr)
 	kfree(hwmgr->pptable);
 	hwmgr->pptable = NULL;
 
-	return result;
+	return 0;
 }
 
 const struct pp_table_func vega10_pptable_funcs = {
@@ -1258,7 +1284,7 @@ int vega10_get_number_of_powerplay_table_entries(struct pp_hwmgr *hwmgr)
 	const ATOM_Vega10_State_Array *state_arrays;
 	const ATOM_Vega10_POWERPLAYTABLE *pp_table = get_powerplay_table(hwmgr);
 
-	PP_ASSERT_WITH_CODE((NULL != pp_table),
+	PP_ASSERT_WITH_CODE((pp_table != NULL),
 			"Missing PowerPlay Table!", return -1);
 	PP_ASSERT_WITH_CODE((pp_table->sHeader.format_revision >=
 			ATOM_Vega10_TABLE_REVISION_VEGA10),

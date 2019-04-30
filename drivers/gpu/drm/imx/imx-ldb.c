@@ -1,16 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * i.MX drm driver - LVDS display bridge
  *
  * Copyright (C) 2012 Sascha Hauer, Pengutronix
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -20,9 +12,9 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_fb_helper.h>
-#include <drm/drm_crtc_helper.h>
 #include <drm/drm_of.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_probe_helper.h>
 #include <linux/mfd/syscon.h>
 #include <linux/mfd/syscon/imx6q-iomuxc-gpr.h>
 #include <linux/of_device.h>
@@ -143,7 +135,7 @@ static int imx_ldb_connector_get_modes(struct drm_connector *connector)
 		imx_ldb_ch->edid = drm_get_edid(connector, imx_ldb_ch->ddc);
 
 	if (imx_ldb_ch->edid) {
-		drm_mode_connector_update_edid_property(connector,
+		drm_connector_update_edid_property(connector,
 							imx_ldb_ch->edid);
 		num_modes = drm_add_edid_modes(connector, imx_ldb_ch->edid);
 	}
@@ -471,8 +463,7 @@ static int imx_ldb_register(struct drm_device *drm,
 		drm_connector_init(drm, &imx_ldb_ch->connector,
 				&imx_ldb_connector_funcs,
 				DRM_MODE_CONNECTOR_LVDS);
-		drm_mode_connector_attach_encoder(&imx_ldb_ch->connector,
-				encoder);
+		drm_connector_attach_encoder(&imx_ldb_ch->connector, encoder);
 	}
 
 	if (imx_ldb_ch->panel) {

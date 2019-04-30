@@ -20,9 +20,9 @@
 #include <linux/of_device.h>
 
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_crtc_helper.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_of.h>
+#include <drm/drm_probe_helper.h>
 #include <drm/drmP.h>
 
 #include <sound/hdmi-codec.h>
@@ -108,6 +108,7 @@ static int zx_hdmi_config_video_vsi(struct zx_hdmi *hdmi,
 	int ret;
 
 	ret = drm_hdmi_vendor_infoframe_from_display_mode(&frame.vendor.hdmi,
+							  &hdmi->connector,
 							  mode);
 	if (ret) {
 		DRM_DEV_ERROR(hdmi->dev, "failed to get vendor infoframe: %d\n",
@@ -124,7 +125,9 @@ static int zx_hdmi_config_video_avi(struct zx_hdmi *hdmi,
 	union hdmi_infoframe frame;
 	int ret;
 
-	ret = drm_hdmi_avi_infoframe_from_display_mode(&frame.avi, mode, false);
+	ret = drm_hdmi_avi_infoframe_from_display_mode(&frame.avi,
+						       &hdmi->connector,
+						       mode);
 	if (ret) {
 		DRM_DEV_ERROR(hdmi->dev, "failed to get avi infoframe: %d\n",
 			      ret);
@@ -271,7 +274,7 @@ static int zx_hdmi_connector_get_modes(struct drm_connector *connector)
 
 	hdmi->sink_is_hdmi = drm_detect_hdmi_monitor(edid);
 	hdmi->sink_has_audio = drm_detect_monitor_audio(edid);
-	drm_mode_connector_update_edid_property(connector, edid);
+	drm_connector_update_edid_property(connector, edid);
 	ret = drm_add_edid_modes(connector, edid);
 	kfree(edid);
 
@@ -325,7 +328,7 @@ static int zx_hdmi_register(struct drm_device *drm, struct zx_hdmi *hdmi)
 	drm_connector_helper_add(&hdmi->connector,
 				 &zx_hdmi_connector_helper_funcs);
 
-	drm_mode_connector_attach_encoder(&hdmi->connector, encoder);
+	drm_connector_attach_encoder(&hdmi->connector, encoder);
 
 	return 0;
 }

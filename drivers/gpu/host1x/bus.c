@@ -15,8 +15,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <linux/debugfs.h>
 #include <linux/host1x.h>
 #include <linux/of.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/of_device.h>
 
@@ -211,8 +213,7 @@ int host1x_device_init(struct host1x_device *device)
 				dev_err(&device->dev,
 					"failed to initialize %s: %d\n",
 					dev_name(client->dev), err);
-				mutex_unlock(&device->clients_lock);
-				return err;
+				goto teardown;
 			}
 		}
 	}
@@ -220,6 +221,14 @@ int host1x_device_init(struct host1x_device *device)
 	mutex_unlock(&device->clients_lock);
 
 	return 0;
+
+teardown:
+	list_for_each_entry_continue_reverse(client, &device->clients, list)
+		if (client->ops->exit)
+			client->ops->exit(client);
+
+	mutex_unlock(&device->clients_lock);
+	return err;
 }
 EXPORT_SYMBOL(host1x_device_init);
 
@@ -307,6 +316,11 @@ static int host1x_device_match(struct device *dev, struct device_driver *drv)
 	return strcmp(dev_name(dev), drv->name) == 0;
 }
 
+static int host1x_dma_configure(struct device *dev)
+{
+	return of_dma_configure(dev, dev->of_node, true);
+}
+
 static const struct dev_pm_ops host1x_device_pm_ops = {
 	.suspend = pm_generic_suspend,
 	.resume = pm_generic_resume,
@@ -319,6 +333,7 @@ static const struct dev_pm_ops host1x_device_pm_ops = {
 struct bus_type host1x_bus_type = {
 	.name = "host1x",
 	.match = host1x_device_match,
+	.dma_configure = host1x_dma_configure,
 	.pm = &host1x_device_pm_ops,
 };
 
@@ -403,11 +418,12 @@ static int host1x_device_add(struct host1x *host1x,
 	device->dev.coherent_dma_mask = host1x->dev->coherent_dma_mask;
 	device->dev.dma_mask = &device->dev.coherent_dma_mask;
 	dev_set_name(&device->dev, "%s", driver->driver.name);
-	of_dma_configure(&device->dev, host1x->dev->of_node);
 	device->dev.release = host1x_device_release;
 	device->dev.of_node = host1x->dev->of_node;
 	device->dev.bus = &host1x_bus_type;
 	device->dev.parent = host1x->dev;
+
+	of_dma_configure(&device->dev, host1x->dev->of_node, true);
 
 	err = host1x_device_parse_dt(device, driver);
 	if (err < 0) {
@@ -486,6 +502,36 @@ static void host1x_detach_driver(struct host1x *host1x,
 	mutex_unlock(&host1x->devices_lock);
 }
 
+static int host1x_devices_show(struct seq_file *s, void *data)
+{
+	struct host1x *host1x = s->private;
+	struct host1x_device *device;
+
+	mutex_lock(&host1x->devices_lock);
+
+	list_for_each_entry(device, &host1x->devices, list) {
+		struct host1x_subdev *subdev;
+
+		seq_printf(s, "%s\n", dev_name(&device->dev));
+
+		mutex_lock(&device->subdevs_lock);
+
+		list_for_each_entry(subdev, &device->active, list)
+			seq_printf(s, "  %pOFf: %s\n", subdev->np,
+				   dev_name(subdev->client->dev));
+
+		list_for_each_entry(subdev, &device->subdevs, list)
+			seq_printf(s, "  %pOFf:\n", subdev->np);
+
+		mutex_unlock(&device->subdevs_lock);
+	}
+
+	mutex_unlock(&host1x->devices_lock);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(host1x_devices);
+
 /**
  * host1x_register() - register a host1x controller
  * @host1x: host1x controller
@@ -508,6 +554,9 @@ int host1x_register(struct host1x *host1x)
 		host1x_attach_driver(host1x, driver);
 
 	mutex_unlock(&drivers_lock);
+
+	debugfs_create_file("devices", S_IRUGO, host1x->debugfs, host1x,
+			    &host1x_devices_fops);
 
 	return 0;
 }

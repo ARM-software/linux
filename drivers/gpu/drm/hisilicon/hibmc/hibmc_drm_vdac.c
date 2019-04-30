@@ -17,7 +17,7 @@
  */
 
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_crtc_helper.h>
+#include <drm/drm_probe_helper.h>
 
 #include "hibmc_drm_drv.h"
 #include "hibmc_drm_regs.h"
@@ -27,23 +27,16 @@ static int hibmc_connector_get_modes(struct drm_connector *connector)
 	return drm_add_modes_noedid(connector, 800, 600);
 }
 
-static int hibmc_connector_mode_valid(struct drm_connector *connector,
+static enum drm_mode_status hibmc_connector_mode_valid(struct drm_connector *connector,
 				      struct drm_display_mode *mode)
 {
 	return MODE_OK;
-}
-
-static struct drm_encoder *
-hibmc_connector_best_encoder(struct drm_connector *connector)
-{
-	return drm_encoder_find(connector->dev, connector->encoder_ids[0]);
 }
 
 static const struct drm_connector_helper_funcs
 	hibmc_connector_helper_funcs = {
 	.get_modes = hibmc_connector_get_modes,
 	.mode_valid = hibmc_connector_mode_valid,
-	.best_encoder = hibmc_connector_best_encoder,
 };
 
 static const struct drm_connector_funcs hibmc_connector_funcs = {
@@ -133,7 +126,7 @@ int hibmc_vdac_init(struct hibmc_drm_private *priv)
 	}
 
 	drm_encoder_helper_add(encoder, &hibmc_encoder_helper_funcs);
-	drm_mode_connector_attach_encoder(connector, encoder);
+	drm_connector_attach_encoder(connector, encoder);
 
 	return 0;
 }

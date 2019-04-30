@@ -54,6 +54,9 @@ struct device;
 
 struct dma_buf_export_info;
 struct dma_buf;
+struct dma_buf_attachment;
+
+enum dma_data_direction;
 
 struct drm_device;
 struct drm_gem_object;
@@ -67,6 +70,7 @@ struct dma_buf *drm_gem_prime_export(struct drm_device *dev,
 int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 			       struct drm_file *file_priv, uint32_t handle, uint32_t flags,
 			       int *prime_fd);
+int drm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
 struct drm_gem_object *drm_gem_prime_import(struct drm_device *dev,
 					    struct dma_buf *dma_buf);
 
@@ -79,6 +83,18 @@ int drm_gem_prime_fd_to_handle(struct drm_device *dev,
 struct dma_buf *drm_gem_dmabuf_export(struct drm_device *dev,
 				      struct dma_buf_export_info *exp_info);
 void drm_gem_dmabuf_release(struct dma_buf *dma_buf);
+int drm_gem_map_attach(struct dma_buf *dma_buf,
+		       struct dma_buf_attachment *attach);
+void drm_gem_map_detach(struct dma_buf *dma_buf,
+			struct dma_buf_attachment *attach);
+struct sg_table *drm_gem_map_dma_buf(struct dma_buf_attachment *attach,
+				     enum dma_data_direction dir);
+void drm_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
+			   struct sg_table *sgt,
+			   enum dma_data_direction dir);
+void *drm_gem_dmabuf_vmap(struct dma_buf *dma_buf);
+void drm_gem_dmabuf_vunmap(struct dma_buf *dma_buf, void *vaddr);
+int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma);
 
 int drm_prime_sg_to_page_addr_arrays(struct sg_table *sgt, struct page **pages,
 				     dma_addr_t *addrs, int max_pages);

@@ -32,8 +32,11 @@
 
 struct drm_fb_helper;
 
+#include <drm/drm_client.h>
 #include <drm/drm_crtc.h>
+#include <drm/drm_device.h>
 #include <linux/kgdb.h>
+#include <linux/vgaarb.h>
 
 enum mode_set_atomic {
 	LEAVE_ATOMIC_MODE_SET,
@@ -48,6 +51,7 @@ struct drm_fb_helper_crtc {
 	struct drm_mode_set mode_set;
 	struct drm_display_mode *desired_mode;
 	int x, y;
+	int rotation;
 };
 
 /**
@@ -64,10 +68,8 @@ struct drm_fb_helper_crtc {
  * according to the largest width/height (so it is large enough for all CRTCs
  * to scanout).  But the fbdev width/height is sized to the minimum width/
  * height of all the displays.  This ensures that fbcon fits on the smallest
- * of the attached displays.
- *
- * So what is passed to drm_fb_helper_fill_var() should be fb_width/fb_height,
- * rather than the surface size.
+ * of the attached displays. fb_width/fb_height is used by
+ * drm_fb_helper_fill_info() to fill out the &fb_info.var structure.
  */
 struct drm_fb_helper_surface_size {
 	u32 fb_width;
@@ -100,29 +102,6 @@ struct drm_fb_helper_funcs {
 	 */
 	int (*fb_probe)(struct drm_fb_helper *helper,
 			struct drm_fb_helper_surface_size *sizes);
-
-	/**
-	 * @initial_config:
-	 *
-	 * Driver callback to setup an initial fbdev display configuration.
-	 * Drivers can use this callback to tell the fbdev emulation what the
-	 * preferred initial configuration is. This is useful to implement
-	 * smooth booting where the fbdev (and subsequently all userspace) never
-	 * changes the mode, but always inherits the existing configuration.
-	 *
-	 * This callback is optional.
-	 *
-	 * RETURNS:
-	 *
-	 * The driver should return true if a suitable initial configuration has
-	 * been filled out and false when the fbdev helper should fall back to
-	 * the default probing logic.
-	 */
-	bool (*initial_config)(struct drm_fb_helper *fb_helper,
-			       struct drm_fb_helper_crtc **crtcs,
-			       struct drm_display_mode **modes,
-			       struct drm_fb_offset *offsets,
-			       bool *enabled, int width, int height);
 };
 
 struct drm_fb_helper_connector {
@@ -152,12 +131,33 @@ struct drm_fb_helper_connector {
  * operations.
  */
 struct drm_fb_helper {
+	/**
+	 * @client:
+	 *
+	 * DRM client used by the generic fbdev emulation.
+	 */
+	struct drm_client_dev client;
+
+	/**
+	 * @buffer:
+	 *
+	 * Framebuffer used by the generic fbdev emulation.
+	 */
+	struct drm_client_buffer *buffer;
+
 	struct drm_framebuffer *fb;
 	struct drm_device *dev;
 	int crtc_count;
 	struct drm_fb_helper_crtc *crtc_info;
 	int connector_count;
 	int connector_info_alloc_count;
+	/**
+	 * @sw_rotations:
+	 * Bitmask of all rotations requested for panel-orientation which
+	 * could not be handled in hardware. If only one bit is set
+	 * fbdev->fbcon_rotate_hint gets set to the requested rotation.
+	 */
+	int sw_rotations;
 	/**
 	 * @connector_info:
 	 *
@@ -225,6 +225,12 @@ struct drm_fb_helper {
 	int preferred_bpp;
 };
 
+static inline struct drm_fb_helper *
+drm_fb_helper_from_client(struct drm_client_dev *client)
+{
+	return container_of(client, struct drm_fb_helper, client);
+}
+
 /**
  * define DRM_FB_HELPER_DEFAULT_OPS - helper define for drm drivers
  *
@@ -258,15 +264,15 @@ int drm_fb_helper_restore_fbdev_mode_unlocked(struct drm_fb_helper *fb_helper);
 
 struct fb_info *drm_fb_helper_alloc_fbi(struct drm_fb_helper *fb_helper);
 void drm_fb_helper_unregister_fbi(struct drm_fb_helper *fb_helper);
-void drm_fb_helper_fill_var(struct fb_info *info, struct drm_fb_helper *fb_helper,
-			    uint32_t fb_width, uint32_t fb_height);
-void drm_fb_helper_fill_fix(struct fb_info *info, uint32_t pitch,
-			    uint32_t depth);
+void drm_fb_helper_fill_info(struct fb_info *info,
+			     struct drm_fb_helper *fb_helper,
+			     struct drm_fb_helper_surface_size *sizes);
 
 void drm_fb_helper_unlink_fbi(struct drm_fb_helper *fb_helper);
 
 void drm_fb_helper_deferred_io(struct fb_info *info,
 			       struct list_head *pagelist);
+int drm_fb_helper_defio_init(struct drm_fb_helper *fb_helper);
 
 ssize_t drm_fb_helper_sys_read(struct fb_info *info, char __user *buf,
 			       size_t count, loff_t *ppos);
@@ -310,6 +316,20 @@ drm_pick_cmdline_mode(struct drm_fb_helper_connector *fb_helper_conn);
 int drm_fb_helper_add_one_connector(struct drm_fb_helper *fb_helper, struct drm_connector *connector);
 int drm_fb_helper_remove_one_connector(struct drm_fb_helper *fb_helper,
 				       struct drm_connector *connector);
+
+int drm_fb_helper_fbdev_setup(struct drm_device *dev,
+			      struct drm_fb_helper *fb_helper,
+			      const struct drm_fb_helper_funcs *funcs,
+			      unsigned int preferred_bpp,
+			      unsigned int max_conn_count);
+void drm_fb_helper_fbdev_teardown(struct drm_device *dev);
+
+void drm_fb_helper_lastclose(struct drm_device *dev);
+void drm_fb_helper_output_poll_changed(struct drm_device *dev);
+
+int drm_fb_helper_generic_probe(struct drm_fb_helper *fb_helper,
+				struct drm_fb_helper_surface_size *sizes);
+int drm_fbdev_generic_setup(struct drm_device *dev, unsigned int preferred_bpp);
 #else
 static inline void drm_fb_helper_prepare(struct drm_device *dev,
 					struct drm_fb_helper *helper,
@@ -321,11 +341,17 @@ static inline int drm_fb_helper_init(struct drm_device *dev,
 		       struct drm_fb_helper *helper,
 		       int max_conn)
 {
+	/* So drivers can use it to free the struct */
+	helper->dev = dev;
+	dev->fb_helper = helper;
+
 	return 0;
 }
 
 static inline void drm_fb_helper_fini(struct drm_fb_helper *helper)
 {
+	if (helper && helper->dev)
+		helper->dev->fb_helper = NULL;
 }
 
 static inline int drm_fb_helper_blank(int blank, struct fb_info *info)
@@ -366,14 +392,10 @@ static inline void drm_fb_helper_unregister_fbi(struct drm_fb_helper *fb_helper)
 {
 }
 
-static inline void drm_fb_helper_fill_var(struct fb_info *info,
-					  struct drm_fb_helper *fb_helper,
-					  uint32_t fb_width, uint32_t fb_height)
-{
-}
-
-static inline void drm_fb_helper_fill_fix(struct fb_info *info, uint32_t pitch,
-					  uint32_t depth)
+static inline void
+drm_fb_helper_fill_info(struct fb_info *info,
+			struct drm_fb_helper *fb_helper,
+			struct drm_fb_helper_surface_size *sizes)
 {
 }
 
@@ -396,6 +418,11 @@ static inline void drm_fb_helper_unlink_fbi(struct drm_fb_helper *fb_helper)
 static inline void drm_fb_helper_deferred_io(struct fb_info *info,
 					     struct list_head *pagelist)
 {
+}
+
+static inline int drm_fb_helper_defio_init(struct drm_fb_helper *fb_helper)
+{
+	return -ENODEV;
 }
 
 static inline ssize_t drm_fb_helper_sys_read(struct fb_info *info,
@@ -507,8 +534,57 @@ drm_fb_helper_remove_one_connector(struct drm_fb_helper *fb_helper,
 	return 0;
 }
 
+static inline int
+drm_fb_helper_fbdev_setup(struct drm_device *dev,
+			  struct drm_fb_helper *fb_helper,
+			  const struct drm_fb_helper_funcs *funcs,
+			  unsigned int preferred_bpp,
+			  unsigned int max_conn_count)
+{
+	/* So drivers can use it to free the struct */
+	dev->fb_helper = fb_helper;
+
+	return 0;
+}
+
+static inline void drm_fb_helper_fbdev_teardown(struct drm_device *dev)
+{
+	dev->fb_helper = NULL;
+}
+
+static inline void drm_fb_helper_lastclose(struct drm_device *dev)
+{
+}
+
+static inline void drm_fb_helper_output_poll_changed(struct drm_device *dev)
+{
+}
+
+static inline int
+drm_fb_helper_generic_probe(struct drm_fb_helper *fb_helper,
+			    struct drm_fb_helper_surface_size *sizes)
+{
+	return 0;
+}
+
+static inline int
+drm_fbdev_generic_setup(struct drm_device *dev, unsigned int preferred_bpp)
+{
+	return 0;
+}
+
 #endif
 
+/**
+ * drm_fb_helper_remove_conflicting_framebuffers - remove firmware-configured framebuffers
+ * @a: memory range, users of which are to be removed
+ * @name: requesting driver name
+ * @primary: also kick vga16fb if present
+ *
+ * This function removes framebuffer devices (initialized by firmware/bootloader)
+ * which use memory range described by @a. If @a is NULL all such devices are
+ * removed.
+ */
 static inline int
 drm_fb_helper_remove_conflicting_framebuffers(struct apertures_struct *a,
 					      const char *name, bool primary)
@@ -518,6 +594,37 @@ drm_fb_helper_remove_conflicting_framebuffers(struct apertures_struct *a,
 #else
 	return 0;
 #endif
+}
+
+/**
+ * drm_fb_helper_remove_conflicting_pci_framebuffers - remove firmware-configured framebuffers for PCI devices
+ * @pdev: PCI device
+ * @resource_id: index of PCI BAR configuring framebuffer memory
+ * @name: requesting driver name
+ *
+ * This function removes framebuffer devices (eg. initialized by firmware)
+ * using memory range configured for @pdev's BAR @resource_id.
+ *
+ * The function assumes that PCI device with shadowed ROM drives a primary
+ * display and so kicks out vga16fb.
+ */
+static inline int
+drm_fb_helper_remove_conflicting_pci_framebuffers(struct pci_dev *pdev,
+						  int resource_id,
+						  const char *name)
+{
+	int ret = 0;
+
+	/*
+	 * WARNING: Apparently we must kick fbdev drivers before vgacon,
+	 * otherwise the vga fbdev driver falls over.
+	 */
+#if IS_REACHABLE(CONFIG_FB)
+	ret = remove_conflicting_pci_framebuffers(pdev, resource_id, name);
+#endif
+	if (ret == 0)
+		ret = vga_remove_vgacon(pdev);
+	return ret;
 }
 
 #endif

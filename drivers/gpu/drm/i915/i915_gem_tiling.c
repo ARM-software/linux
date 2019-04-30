@@ -27,7 +27,6 @@
 
 #include <linux/string.h>
 #include <linux/bitops.h>
-#include <drm/drmP.h>
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 
@@ -87,7 +86,7 @@ u32 i915_gem_fence_size(struct drm_i915_private *i915,
 	}
 
 	/* Previous chips need a power-of-two fence region when tiling */
-	if (IS_GEN3(i915))
+	if (IS_GEN(i915, 3))
 		ggtt_size = 1024*1024;
 	else
 		ggtt_size = 512*1024;
@@ -162,7 +161,7 @@ i915_tiling_ok(struct drm_i915_gem_object *obj,
 			return false;
 	}
 
-	if (IS_GEN2(i915) ||
+	if (IS_GEN(i915, 2) ||
 	    (tiling == I915_TILING_Y && HAS_128_BYTE_Y_TILING(i915)))
 		tile_width = 128;
 	else
@@ -205,10 +204,7 @@ i915_gem_object_fence_prepare(struct drm_i915_gem_object *obj,
 	if (tiling_mode == I915_TILING_NONE)
 		return 0;
 
-	list_for_each_entry(vma, &obj->vma_list, obj_link) {
-		if (!i915_vma_is_ggtt(vma))
-			break;
-
+	for_each_ggtt_vma(vma, obj) {
 		if (i915_vma_fence_prepare(vma, tiling_mode, stride))
 			continue;
 
@@ -269,7 +265,7 @@ i915_gem_object_set_tiling(struct drm_i915_gem_object *obj,
 	 * due to the change in swizzling.
 	 */
 	mutex_lock(&obj->mm.lock);
-	if (obj->mm.pages &&
+	if (i915_gem_object_has_pages(obj) &&
 	    obj->mm.madv == I915_MADV_WILLNEED &&
 	    i915->quirks & QUIRK_PIN_SWIZZLED_PAGES) {
 		if (tiling == I915_TILING_NONE) {
@@ -285,10 +281,7 @@ i915_gem_object_set_tiling(struct drm_i915_gem_object *obj,
 	}
 	mutex_unlock(&obj->mm.lock);
 
-	list_for_each_entry(vma, &obj->vma_list, obj_link) {
-		if (!i915_vma_is_ggtt(vma))
-			break;
-
+	for_each_ggtt_vma(vma, obj) {
 		vma->fence_size =
 			i915_gem_fence_size(i915, vma->size, tiling, stride);
 		vma->fence_alignment =
@@ -308,11 +301,11 @@ i915_gem_object_set_tiling(struct drm_i915_gem_object *obj,
 	/* Try to preallocate memory required to save swizzling on put-pages */
 	if (i915_gem_object_needs_bit17_swizzle(obj)) {
 		if (!obj->bit_17) {
-			obj->bit_17 = kcalloc(BITS_TO_LONGS(obj->base.size >> PAGE_SHIFT),
-					      sizeof(long), GFP_KERNEL);
+			obj->bit_17 = bitmap_zalloc(obj->base.size >> PAGE_SHIFT,
+						    GFP_KERNEL);
 		}
 	} else {
-		kfree(obj->bit_17);
+		bitmap_free(obj->bit_17);
 		obj->bit_17 = NULL;
 	}
 
@@ -344,6 +337,15 @@ i915_gem_set_tiling_ioctl(struct drm_device *dev, void *data,
 	obj = i915_gem_object_lookup(file, args->handle);
 	if (!obj)
 		return -ENOENT;
+
+	/*
+	 * The tiling mode of proxy objects is handled by its generator, and
+	 * not allowed to be changed by userspace.
+	 */
+	if (i915_gem_object_is_proxy(obj)) {
+		err = -ENXIO;
+		goto err;
+	}
 
 	if (!i915_tiling_ok(obj, args->tiling_mode, args->stride)) {
 		err = -EINVAL;

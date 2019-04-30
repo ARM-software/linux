@@ -50,11 +50,10 @@
  * Zero on success, negative error code if failed
  */
 static inline int intel_gvt_hypervisor_host_init(struct device *dev,
-			void *gvt, const void *ops)
+						 void *gvt, const void *ops)
 {
-	/* optional to provide */
 	if (!intel_gvt_host.mpt->host_init)
-		return 0;
+		return -ENODEV;
 
 	return intel_gvt_host.mpt->host_init(dev, gvt, ops);
 }
@@ -62,14 +61,13 @@ static inline int intel_gvt_hypervisor_host_init(struct device *dev,
 /**
  * intel_gvt_hypervisor_host_exit - exit GVT-g host side
  */
-static inline void intel_gvt_hypervisor_host_exit(struct device *dev,
-			void *gvt)
+static inline void intel_gvt_hypervisor_host_exit(struct device *dev)
 {
 	/* optional to provide */
 	if (!intel_gvt_host.mpt->host_exit)
 		return;
 
-	intel_gvt_host.mpt->host_exit(dev, gvt);
+	intel_gvt_host.mpt->host_exit(dev);
 }
 
 /**
@@ -101,7 +99,7 @@ static inline void intel_gvt_hypervisor_detach_vgpu(struct intel_vgpu *vgpu)
 	if (!intel_gvt_host.mpt->detach_vgpu)
 		return;
 
-	intel_gvt_host.mpt->detach_vgpu(vgpu->handle);
+	intel_gvt_host.mpt->detach_vgpu(vgpu);
 }
 
 #define MSI_CAP_CONTROL(offset) (offset + 2)
@@ -154,52 +152,31 @@ static inline unsigned long intel_gvt_hypervisor_virt_to_mfn(void *p)
 }
 
 /**
- * intel_gvt_hypervisor_set_wp_page - set a guest page to write-protected
+ * intel_gvt_hypervisor_enable_page_track - track a guest page
  * @vgpu: a vGPU
- * @p: intel_vgpu_guest_page
+ * @gfn: the gfn of guest
  *
  * Returns:
  * Zero on success, negative error code if failed.
  */
-static inline int intel_gvt_hypervisor_set_wp_page(struct intel_vgpu *vgpu,
-		struct intel_vgpu_guest_page *p)
+static inline int intel_gvt_hypervisor_enable_page_track(
+		struct intel_vgpu *vgpu, unsigned long gfn)
 {
-	int ret;
-
-	if (p->writeprotection)
-		return 0;
-
-	ret = intel_gvt_host.mpt->set_wp_page(vgpu->handle, p->gfn);
-	if (ret)
-		return ret;
-	p->writeprotection = true;
-	atomic_inc(&vgpu->gtt.n_write_protected_guest_page);
-	return 0;
+	return intel_gvt_host.mpt->enable_page_track(vgpu->handle, gfn);
 }
 
 /**
- * intel_gvt_hypervisor_unset_wp_page - remove the write-protection of a
- * guest page
+ * intel_gvt_hypervisor_disable_page_track - untrack a guest page
  * @vgpu: a vGPU
- * @p: intel_vgpu_guest_page
+ * @gfn: the gfn of guest
  *
  * Returns:
  * Zero on success, negative error code if failed.
  */
-static inline int intel_gvt_hypervisor_unset_wp_page(struct intel_vgpu *vgpu,
-		struct intel_vgpu_guest_page *p)
+static inline int intel_gvt_hypervisor_disable_page_track(
+		struct intel_vgpu *vgpu, unsigned long gfn)
 {
-	int ret;
-
-	if (!p->writeprotection)
-		return 0;
-
-	ret = intel_gvt_host.mpt->unset_wp_page(vgpu->handle, p->gfn);
-	if (ret)
-		return ret;
-	p->writeprotection = false;
-	atomic_dec(&vgpu->gtt.n_write_protected_guest_page);
-	return 0;
+	return intel_gvt_host.mpt->disable_page_track(vgpu->handle, gfn);
 }
 
 /**
@@ -249,6 +226,35 @@ static inline unsigned long intel_gvt_hypervisor_gfn_to_mfn(
 }
 
 /**
+ * intel_gvt_hypervisor_dma_map_guest_page - setup dma map for guest page
+ * @vgpu: a vGPU
+ * @gfn: guest pfn
+ * @size: page size
+ * @dma_addr: retrieve allocated dma addr
+ *
+ * Returns:
+ * 0 on success, negative error code if failed.
+ */
+static inline int intel_gvt_hypervisor_dma_map_guest_page(
+		struct intel_vgpu *vgpu, unsigned long gfn, unsigned long size,
+		dma_addr_t *dma_addr)
+{
+	return intel_gvt_host.mpt->dma_map_guest_page(vgpu->handle, gfn, size,
+						      dma_addr);
+}
+
+/**
+ * intel_gvt_hypervisor_dma_unmap_guest_page - cancel dma map for guest page
+ * @vgpu: a vGPU
+ * @dma_addr: the mapped dma addr
+ */
+static inline void intel_gvt_hypervisor_dma_unmap_guest_page(
+		struct intel_vgpu *vgpu, dma_addr_t dma_addr)
+{
+	intel_gvt_host.mpt->dma_unmap_guest_page(vgpu->handle, dma_addr);
+}
+
+/**
  * intel_gvt_hypervisor_map_gfn_to_mfn - map a GFN region to MFN
  * @vgpu: a vGPU
  * @gfn: guest PFN
@@ -291,5 +297,87 @@ static inline int intel_gvt_hypervisor_set_trap_area(
 
 	return intel_gvt_host.mpt->set_trap_area(vgpu->handle, start, end, map);
 }
+
+/**
+ * intel_gvt_hypervisor_set_opregion - Set opregion for guest
+ * @vgpu: a vGPU
+ *
+ * Returns:
+ * Zero on success, negative error code if failed.
+ */
+static inline int intel_gvt_hypervisor_set_opregion(struct intel_vgpu *vgpu)
+{
+	if (!intel_gvt_host.mpt->set_opregion)
+		return 0;
+
+	return intel_gvt_host.mpt->set_opregion(vgpu);
+}
+
+/**
+ * intel_gvt_hypervisor_set_edid - Set EDID region for guest
+ * @vgpu: a vGPU
+ * @port_num: display port number
+ *
+ * Returns:
+ * Zero on success, negative error code if failed.
+ */
+static inline int intel_gvt_hypervisor_set_edid(struct intel_vgpu *vgpu,
+						int port_num)
+{
+	if (!intel_gvt_host.mpt->set_edid)
+		return 0;
+
+	return intel_gvt_host.mpt->set_edid(vgpu, port_num);
+}
+
+/**
+ * intel_gvt_hypervisor_get_vfio_device - increase vfio device ref count
+ * @vgpu: a vGPU
+ *
+ * Returns:
+ * Zero on success, negative error code if failed.
+ */
+static inline int intel_gvt_hypervisor_get_vfio_device(struct intel_vgpu *vgpu)
+{
+	if (!intel_gvt_host.mpt->get_vfio_device)
+		return 0;
+
+	return intel_gvt_host.mpt->get_vfio_device(vgpu);
+}
+
+/**
+ * intel_gvt_hypervisor_put_vfio_device - decrease vfio device ref count
+ * @vgpu: a vGPU
+ *
+ * Returns:
+ * Zero on success, negative error code if failed.
+ */
+static inline void intel_gvt_hypervisor_put_vfio_device(struct intel_vgpu *vgpu)
+{
+	if (!intel_gvt_host.mpt->put_vfio_device)
+		return;
+
+	intel_gvt_host.mpt->put_vfio_device(vgpu);
+}
+
+/**
+ * intel_gvt_hypervisor_is_valid_gfn - check if a visible gfn
+ * @vgpu: a vGPU
+ * @gfn: guest PFN
+ *
+ * Returns:
+ * true on valid gfn, false on not.
+ */
+static inline bool intel_gvt_hypervisor_is_valid_gfn(
+		struct intel_vgpu *vgpu, unsigned long gfn)
+{
+	if (!intel_gvt_host.mpt->is_valid_gfn)
+		return true;
+
+	return intel_gvt_host.mpt->is_valid_gfn(vgpu->handle, gfn);
+}
+
+int intel_gvt_register_hypervisor(struct intel_gvt_mpt *);
+void intel_gvt_unregister_hypervisor(void);
 
 #endif /* _GVT_MPT_H_ */

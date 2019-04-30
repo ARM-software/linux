@@ -112,7 +112,7 @@ struct drm_gem_cma_object *drm_gem_cma_create(struct drm_device *drm,
 	cma_obj->vaddr = dma_alloc_wc(drm->dev, size, &cma_obj->paddr,
 				      GFP_KERNEL | __GFP_NOWARN);
 	if (!cma_obj->vaddr) {
-		dev_err(drm->dev, "failed to allocate buffer with size %zu\n",
+		dev_dbg(drm->dev, "failed to allocate buffer with size %zu\n",
 			size);
 		ret = -ENOMEM;
 		goto error;
@@ -176,6 +176,7 @@ drm_gem_cma_create_with_handle(struct drm_file *file_priv,
  *
  * This function frees the backing memory of the CMA GEM object, cleans up the
  * GEM object state and frees the memory used to store the object itself.
+ * If the buffer is imported and the virtual address is set, it is released.
  * Drivers using the CMA helpers should set this as their
  * &drm_driver.gem_free_object_unlocked callback.
  */
@@ -189,6 +190,8 @@ void drm_gem_cma_free_object(struct drm_gem_object *gem_obj)
 		dma_free_wc(gem_obj->dev->dev, cma_obj->base.size,
 			    cma_obj->vaddr, cma_obj->paddr);
 	} else if (gem_obj->import_attach) {
+		if (cma_obj->vaddr)
+			dma_buf_vunmap(gem_obj->import_attach->dmabuf, cma_obj->vaddr);
 		drm_prime_gem_destroy(gem_obj, cma_obj->sgt);
 	}
 
@@ -397,31 +400,24 @@ unsigned long drm_gem_cma_get_unmapped_area(struct file *filp,
 EXPORT_SYMBOL_GPL(drm_gem_cma_get_unmapped_area);
 #endif
 
-#ifdef CONFIG_DEBUG_FS
 /**
- * drm_gem_cma_describe - describe a CMA GEM object for debugfs
- * @cma_obj: CMA GEM object
- * @m: debugfs file handle
+ * drm_gem_cma_print_info() - Print &drm_gem_cma_object info for debugfs
+ * @p: DRM printer
+ * @indent: Tab indentation level
+ * @obj: GEM object
  *
- * This function can be used to dump a human-readable representation of the
- * CMA GEM object into a synthetic file.
+ * This function can be used as the &drm_driver->gem_print_info callback.
+ * It prints paddr and vaddr for use in e.g. debugfs output.
  */
-void drm_gem_cma_describe(struct drm_gem_cma_object *cma_obj,
-			  struct seq_file *m)
+void drm_gem_cma_print_info(struct drm_printer *p, unsigned int indent,
+			    const struct drm_gem_object *obj)
 {
-	struct drm_gem_object *obj = &cma_obj->base;
-	uint64_t off;
+	const struct drm_gem_cma_object *cma_obj = to_drm_gem_cma_obj(obj);
 
-	off = drm_vma_node_start(&obj->vma_node);
-
-	seq_printf(m, "%2d (%2d) %08llx %pad %p %zu",
-			obj->name, kref_read(&obj->refcount),
-			off, &cma_obj->paddr, cma_obj->vaddr, obj->size);
-
-	seq_printf(m, "\n");
+	drm_printf_indent(p, indent, "paddr=%pad\n", &cma_obj->paddr);
+	drm_printf_indent(p, indent, "vaddr=%p\n", cma_obj->vaddr);
 }
-EXPORT_SYMBOL_GPL(drm_gem_cma_describe);
-#endif
+EXPORT_SYMBOL(drm_gem_cma_print_info);
 
 /**
  * drm_gem_cma_prime_get_sg_table - provide a scatter/gather table of pinned
@@ -443,7 +439,7 @@ struct sg_table *drm_gem_cma_prime_get_sg_table(struct drm_gem_object *obj)
 
 	sgt = kzalloc(sizeof(*sgt), GFP_KERNEL);
 	if (!sgt)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	ret = dma_get_sgtable(obj->dev->dev, sgt, cma_obj->vaddr,
 			      cma_obj->paddr, obj->size);
@@ -454,7 +450,7 @@ struct sg_table *drm_gem_cma_prime_get_sg_table(struct drm_gem_object *obj)
 
 out:
 	kfree(sgt);
-	return NULL;
+	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL_GPL(drm_gem_cma_prime_get_sg_table);
 
@@ -482,8 +478,26 @@ drm_gem_cma_prime_import_sg_table(struct drm_device *dev,
 {
 	struct drm_gem_cma_object *cma_obj;
 
-	if (sgt->nents != 1)
-		return ERR_PTR(-EINVAL);
+	if (sgt->nents != 1) {
+		/* check if the entries in the sg_table are contiguous */
+		dma_addr_t next_addr = sg_dma_address(sgt->sgl);
+		struct scatterlist *s;
+		unsigned int i;
+
+		for_each_sg(sgt->sgl, s, sgt->nents, i) {
+			/*
+			 * sg_dma_address(s) is only valid for entries
+			 * that have sg_dma_len(s) != 0
+			 */
+			if (!sg_dma_len(s))
+				continue;
+
+			if (sg_dma_address(s) != next_addr)
+				return ERR_PTR(-EINVAL);
+
+			next_addr = sg_dma_address(s) + sg_dma_len(s);
+		}
+	}
 
 	/* Create a CMA GEM buffer. */
 	cma_obj = __drm_gem_cma_create(dev, attach->dmabuf->size);
@@ -564,3 +578,86 @@ void drm_gem_cma_prime_vunmap(struct drm_gem_object *obj, void *vaddr)
 	/* Nothing to do */
 }
 EXPORT_SYMBOL_GPL(drm_gem_cma_prime_vunmap);
+
+static const struct drm_gem_object_funcs drm_cma_gem_default_funcs = {
+	.free = drm_gem_cma_free_object,
+	.print_info = drm_gem_cma_print_info,
+	.get_sg_table = drm_gem_cma_prime_get_sg_table,
+	.vmap = drm_gem_cma_prime_vmap,
+	.vm_ops = &drm_gem_cma_vm_ops,
+};
+
+/**
+ * drm_cma_gem_create_object_default_funcs - Create a CMA GEM object with a
+ *                                           default function table
+ * @dev: DRM device
+ * @size: Size of the object to allocate
+ *
+ * This sets the GEM object functions to the default CMA helper functions.
+ * This function can be used as the &drm_driver.gem_create_object callback.
+ *
+ * Returns:
+ * A pointer to a allocated GEM object or an error pointer on failure.
+ */
+struct drm_gem_object *
+drm_cma_gem_create_object_default_funcs(struct drm_device *dev, size_t size)
+{
+	struct drm_gem_cma_object *cma_obj;
+
+	cma_obj = kzalloc(sizeof(*cma_obj), GFP_KERNEL);
+	if (!cma_obj)
+		return NULL;
+
+	cma_obj->base.funcs = &drm_cma_gem_default_funcs;
+
+	return &cma_obj->base;
+}
+EXPORT_SYMBOL(drm_cma_gem_create_object_default_funcs);
+
+/**
+ * drm_gem_cma_prime_import_sg_table_vmap - PRIME import another driver's
+ *	scatter/gather table and get the virtual address of the buffer
+ * @dev: DRM device
+ * @attach: DMA-BUF attachment
+ * @sgt: Scatter/gather table of pinned pages
+ *
+ * This function imports a scatter/gather table using
+ * drm_gem_cma_prime_import_sg_table() and uses dma_buf_vmap() to get the kernel
+ * virtual address. This ensures that a CMA GEM object always has its virtual
+ * address set. This address is released when the object is freed.
+ *
+ * This function can be used as the &drm_driver.gem_prime_import_sg_table
+ * callback. The DRM_GEM_CMA_VMAP_DRIVER_OPS() macro provides a shortcut to set
+ * the necessary DRM driver operations.
+ *
+ * Returns:
+ * A pointer to a newly created GEM object or an ERR_PTR-encoded negative
+ * error code on failure.
+ */
+struct drm_gem_object *
+drm_gem_cma_prime_import_sg_table_vmap(struct drm_device *dev,
+				       struct dma_buf_attachment *attach,
+				       struct sg_table *sgt)
+{
+	struct drm_gem_cma_object *cma_obj;
+	struct drm_gem_object *obj;
+	void *vaddr;
+
+	vaddr = dma_buf_vmap(attach->dmabuf);
+	if (!vaddr) {
+		DRM_ERROR("Failed to vmap PRIME buffer\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	obj = drm_gem_cma_prime_import_sg_table(dev, attach, sgt);
+	if (IS_ERR(obj)) {
+		dma_buf_vunmap(attach->dmabuf, vaddr);
+		return obj;
+	}
+
+	cma_obj = to_drm_gem_cma_obj(obj);
+	cma_obj->vaddr = vaddr;
+
+	return obj;
+}
+EXPORT_SYMBOL(drm_gem_cma_prime_import_sg_table_vmap);

@@ -31,6 +31,52 @@ struct amdgpu_gtt_mgr {
 	atomic64_t available;
 };
 
+struct amdgpu_gtt_node {
+	struct drm_mm_node node;
+	struct ttm_buffer_object *tbo;
+};
+
+/**
+ * DOC: mem_info_gtt_total
+ *
+ * The amdgpu driver provides a sysfs API for reporting current total size of
+ * the GTT.
+ * The file mem_info_gtt_total is used for this, and returns the total size of
+ * the GTT block, in bytes
+ */
+static ssize_t amdgpu_mem_info_gtt_total_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct drm_device *ddev = dev_get_drvdata(dev);
+	struct amdgpu_device *adev = ddev->dev_private;
+
+	return snprintf(buf, PAGE_SIZE, "%llu\n",
+			(adev->mman.bdev.man[TTM_PL_TT].size) * PAGE_SIZE);
+}
+
+/**
+ * DOC: mem_info_gtt_used
+ *
+ * The amdgpu driver provides a sysfs API for reporting current total amount of
+ * used GTT.
+ * The file mem_info_gtt_used is used for this, and returns the current used
+ * size of the GTT block, in bytes
+ */
+static ssize_t amdgpu_mem_info_gtt_used_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct drm_device *ddev = dev_get_drvdata(dev);
+	struct amdgpu_device *adev = ddev->dev_private;
+
+	return snprintf(buf, PAGE_SIZE, "%llu\n",
+			amdgpu_gtt_mgr_usage(&adev->mman.bdev.man[TTM_PL_TT]));
+}
+
+static DEVICE_ATTR(mem_info_gtt_total, S_IRUGO,
+	           amdgpu_mem_info_gtt_total_show, NULL);
+static DEVICE_ATTR(mem_info_gtt_used, S_IRUGO,
+	           amdgpu_mem_info_gtt_used_show, NULL);
+
 /**
  * amdgpu_gtt_mgr_init - init GTT manager and DRM MM
  *
@@ -45,17 +91,30 @@ static int amdgpu_gtt_mgr_init(struct ttm_mem_type_manager *man,
 	struct amdgpu_device *adev = amdgpu_ttm_adev(man->bdev);
 	struct amdgpu_gtt_mgr *mgr;
 	uint64_t start, size;
+	int ret;
 
 	mgr = kzalloc(sizeof(*mgr), GFP_KERNEL);
 	if (!mgr)
 		return -ENOMEM;
 
 	start = AMDGPU_GTT_MAX_TRANSFER_SIZE * AMDGPU_GTT_NUM_TRANSFER_WINDOWS;
-	size = (adev->mc.gart_size >> PAGE_SHIFT) - start;
+	size = (adev->gmc.gart_size >> PAGE_SHIFT) - start;
 	drm_mm_init(&mgr->mm, start, size);
 	spin_lock_init(&mgr->lock);
 	atomic64_set(&mgr->available, p_size);
 	man->priv = mgr;
+
+	ret = device_create_file(adev->dev, &dev_attr_mem_info_gtt_total);
+	if (ret) {
+		DRM_ERROR("Failed to create device file mem_info_gtt_total\n");
+		return ret;
+	}
+	ret = device_create_file(adev->dev, &dev_attr_mem_info_gtt_used);
+	if (ret) {
+		DRM_ERROR("Failed to create device file mem_info_gtt_used\n");
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -69,33 +128,32 @@ static int amdgpu_gtt_mgr_init(struct ttm_mem_type_manager *man,
  */
 static int amdgpu_gtt_mgr_fini(struct ttm_mem_type_manager *man)
 {
+	struct amdgpu_device *adev = amdgpu_ttm_adev(man->bdev);
 	struct amdgpu_gtt_mgr *mgr = man->priv;
-
 	spin_lock(&mgr->lock);
-	if (!drm_mm_clean(&mgr->mm)) {
-		spin_unlock(&mgr->lock);
-		return -EBUSY;
-	}
-
 	drm_mm_takedown(&mgr->mm);
 	spin_unlock(&mgr->lock);
 	kfree(mgr);
 	man->priv = NULL;
+
+	device_remove_file(adev->dev, &dev_attr_mem_info_gtt_total);
+	device_remove_file(adev->dev, &dev_attr_mem_info_gtt_used);
+
 	return 0;
 }
 
 /**
- * amdgpu_gtt_mgr_is_allocated - Check if mem has address space
+ * amdgpu_gtt_mgr_has_gart_addr - Check if mem has address space
  *
  * @mem: the mem object to check
  *
  * Check if a mem object has already address space allocated.
  */
-bool amdgpu_gtt_mgr_is_allocated(struct ttm_mem_reg *mem)
+bool amdgpu_gtt_mgr_has_gart_addr(struct ttm_mem_reg *mem)
 {
-	struct drm_mm_node *node = mem->mm_node;
+	struct amdgpu_gtt_node *node = mem->mm_node;
 
-	return (node->start != AMDGPU_BO_INVALID_OFFSET);
+	return (node->node.start != AMDGPU_BO_INVALID_OFFSET);
 }
 
 /**
@@ -115,12 +173,12 @@ static int amdgpu_gtt_mgr_alloc(struct ttm_mem_type_manager *man,
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(man->bdev);
 	struct amdgpu_gtt_mgr *mgr = man->priv;
-	struct drm_mm_node *node = mem->mm_node;
+	struct amdgpu_gtt_node *node = mem->mm_node;
 	enum drm_mm_insert_mode mode;
 	unsigned long fpfn, lpfn;
 	int r;
 
-	if (amdgpu_gtt_mgr_is_allocated(mem))
+	if (amdgpu_gtt_mgr_has_gart_addr(mem))
 		return 0;
 
 	if (place)
@@ -138,13 +196,13 @@ static int amdgpu_gtt_mgr_alloc(struct ttm_mem_type_manager *man,
 		mode = DRM_MM_INSERT_HIGH;
 
 	spin_lock(&mgr->lock);
-	r = drm_mm_insert_node_in_range(&mgr->mm, node,
-					mem->num_pages, mem->page_alignment, 0,
-					fpfn, lpfn, mode);
+	r = drm_mm_insert_node_in_range(&mgr->mm, &node->node, mem->num_pages,
+					mem->page_alignment, 0, fpfn, lpfn,
+					mode);
 	spin_unlock(&mgr->lock);
 
 	if (!r)
-		mem->start = node->start;
+		mem->start = node->node.start;
 
 	return r;
 }
@@ -165,11 +223,12 @@ static int amdgpu_gtt_mgr_new(struct ttm_mem_type_manager *man,
 			      struct ttm_mem_reg *mem)
 {
 	struct amdgpu_gtt_mgr *mgr = man->priv;
-	struct drm_mm_node *node;
+	struct amdgpu_gtt_node *node;
 	int r;
 
 	spin_lock(&mgr->lock);
-	if (atomic64_read(&mgr->available) < mem->num_pages) {
+	if ((&tbo->mem == mem || tbo->mem.mem_type != TTM_PL_TT) &&
+	    atomic64_read(&mgr->available) < mem->num_pages) {
 		spin_unlock(&mgr->lock);
 		return 0;
 	}
@@ -182,8 +241,9 @@ static int amdgpu_gtt_mgr_new(struct ttm_mem_type_manager *man,
 		goto err_out;
 	}
 
-	node->start = AMDGPU_BO_INVALID_OFFSET;
-	node->size = mem->num_pages;
+	node->node.start = AMDGPU_BO_INVALID_OFFSET;
+	node->node.size = mem->num_pages;
+	node->tbo = tbo;
 	mem->mm_node = node;
 
 	if (place->fpfn || place->lpfn || place->flags & TTM_PL_FLAG_TOPDOWN) {
@@ -195,7 +255,7 @@ static int amdgpu_gtt_mgr_new(struct ttm_mem_type_manager *man,
 			goto err_out;
 		}
 	} else {
-		mem->start = node->start;
+		mem->start = node->node.start;
 	}
 
 	return 0;
@@ -219,14 +279,14 @@ static void amdgpu_gtt_mgr_del(struct ttm_mem_type_manager *man,
 			       struct ttm_mem_reg *mem)
 {
 	struct amdgpu_gtt_mgr *mgr = man->priv;
-	struct drm_mm_node *node = mem->mm_node;
+	struct amdgpu_gtt_node *node = mem->mm_node;
 
 	if (!node)
 		return;
 
 	spin_lock(&mgr->lock);
-	if (node->start != AMDGPU_BO_INVALID_OFFSET)
-		drm_mm_remove_node(node);
+	if (node->node.start != AMDGPU_BO_INVALID_OFFSET)
+		drm_mm_remove_node(&node->node);
 	spin_unlock(&mgr->lock);
 	atomic64_add(mem->num_pages, &mgr->available);
 
@@ -244,8 +304,28 @@ static void amdgpu_gtt_mgr_del(struct ttm_mem_type_manager *man,
 uint64_t amdgpu_gtt_mgr_usage(struct ttm_mem_type_manager *man)
 {
 	struct amdgpu_gtt_mgr *mgr = man->priv;
+	s64 result = man->size - atomic64_read(&mgr->available);
 
-	return (u64)(man->size - atomic64_read(&mgr->available)) * PAGE_SIZE;
+	return (result > 0 ? result : 0) * PAGE_SIZE;
+}
+
+int amdgpu_gtt_mgr_recover(struct ttm_mem_type_manager *man)
+{
+	struct amdgpu_gtt_mgr *mgr = man->priv;
+	struct amdgpu_gtt_node *node;
+	struct drm_mm_node *mm_node;
+	int r = 0;
+
+	spin_lock(&mgr->lock);
+	drm_mm_for_each_node(mm_node, &mgr->mm) {
+		node = container_of(mm_node, struct amdgpu_gtt_node, node);
+		r = amdgpu_ttm_recover_gart(node->tbo);
+		if (r)
+			break;
+	}
+	spin_unlock(&mgr->lock);
+
+	return r;
 }
 
 /**
@@ -265,7 +345,7 @@ static void amdgpu_gtt_mgr_debug(struct ttm_mem_type_manager *man,
 	drm_mm_print(&mgr->mm, printer);
 	spin_unlock(&mgr->lock);
 
-	drm_printf(printer, "man size:%llu pages, gtt available:%llu pages, usage:%lluMB\n",
+	drm_printf(printer, "man size:%llu pages, gtt available:%lld pages, usage:%lluMB\n",
 		   man->size, (u64)atomic64_read(&mgr->available),
 		   amdgpu_gtt_mgr_usage(man) >> 20);
 }

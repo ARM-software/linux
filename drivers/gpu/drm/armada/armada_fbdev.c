@@ -10,7 +10,6 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-#include <drm/drmP.h>
 #include <drm/drm_fb_helper.h>
 #include "armada_crtc.h"
 #include "armada_drm.h"
@@ -25,7 +24,7 @@ static /*const*/ struct fb_ops armada_fb_ops = {
 	.fb_imageblit	= drm_fb_helper_cfb_imageblit,
 };
 
-static int armada_fb_create(struct drm_fb_helper *fbh,
+static int armada_fbdev_create(struct drm_fb_helper *fbh,
 	struct drm_fb_helper_surface_size *sizes)
 {
 	struct drm_device *dev = fbh->dev;
@@ -52,13 +51,13 @@ static int armada_fb_create(struct drm_fb_helper *fbh,
 
 	ret = armada_gem_linear_back(dev, obj);
 	if (ret) {
-		drm_gem_object_unreference_unlocked(&obj->obj);
+		drm_gem_object_put_unlocked(&obj->obj);
 		return ret;
 	}
 
 	ptr = armada_gem_map_object(dev, obj);
 	if (!ptr) {
-		drm_gem_object_unreference_unlocked(&obj->obj);
+		drm_gem_object_put_unlocked(&obj->obj);
 		return -ENOMEM;
 	}
 
@@ -68,7 +67,7 @@ static int armada_fb_create(struct drm_fb_helper *fbh,
 	 * A reference is now held by the framebuffer object if
 	 * successful, otherwise this drops the ref for the error path.
 	 */
-	drm_gem_object_unreference_unlocked(&obj->obj);
+	drm_gem_object_put_unlocked(&obj->obj);
 
 	if (IS_ERR(dfb))
 		return PTR_ERR(dfb);
@@ -79,8 +78,6 @@ static int armada_fb_create(struct drm_fb_helper *fbh,
 		goto err_fballoc;
 	}
 
-	strlcpy(info->fix.id, "armada-drmfb", sizeof(info->fix.id));
-	info->par = fbh;
 	info->fbops = &armada_fb_ops;
 	info->fix.smem_start = obj->phys_addr;
 	info->fix.smem_len = obj->obj.size;
@@ -88,9 +85,7 @@ static int armada_fb_create(struct drm_fb_helper *fbh,
 	info->screen_base = ptr;
 	fbh->fb = &dfb->fb;
 
-	drm_fb_helper_fill_fix(info, dfb->fb.pitches[0],
-			       dfb->fb.format->depth);
-	drm_fb_helper_fill_var(info, fbh, sizes->fb_width, sizes->fb_height);
+	drm_fb_helper_fill_info(info, fbh, sizes);
 
 	DRM_DEBUG_KMS("allocated %dx%d %dbpp fb: 0x%08llx\n",
 		dfb->fb.width, dfb->fb.height, dfb->fb.format->cpp[0] * 8,
@@ -109,7 +104,7 @@ static int armada_fb_probe(struct drm_fb_helper *fbh,
 	int ret = 0;
 
 	if (!fbh->fb) {
-		ret = armada_fb_create(fbh, sizes);
+		ret = armada_fbdev_create(fbh, sizes);
 		if (ret == 0)
 			ret = 1;
 	}
@@ -158,14 +153,6 @@ int armada_fbdev_init(struct drm_device *dev)
  err_fb_helper:
 	priv->fbdev = NULL;
 	return ret;
-}
-
-void armada_fbdev_lastclose(struct drm_device *dev)
-{
-	struct armada_private *priv = dev->dev_private;
-
-	if (priv->fbdev)
-		drm_fb_helper_restore_fbdev_mode_unlocked(priv->fbdev);
 }
 
 void armada_fbdev_fini(struct drm_device *dev)

@@ -1,7 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) STMicroelectronics SA 2014
  * Author: Vincent Abriou <vincent.abriou@st.com> for STMicroelectronics.
- * License terms:  GNU General Public License (GPL), version 2
  */
 
 #include <linux/clk.h>
@@ -15,8 +15,8 @@
 
 #include <drm/drmP.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_crtc_helper.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_probe_helper.h>
 
 #include <sound/hdmi-codec.h>
 
@@ -434,7 +434,8 @@ static int hdmi_avi_infoframe_config(struct sti_hdmi *hdmi)
 
 	DRM_DEBUG_DRIVER("\n");
 
-	ret = drm_hdmi_avi_infoframe_from_display_mode(&infoframe, mode, false);
+	ret = drm_hdmi_avi_infoframe_from_display_mode(&infoframe,
+						       hdmi->drm_connector, mode);
 	if (ret < 0) {
 		DRM_ERROR("failed to setup AVI infoframe: %d\n", ret);
 		return ret;
@@ -515,7 +516,9 @@ static int hdmi_vendor_infoframe_config(struct sti_hdmi *hdmi)
 
 	DRM_DEBUG_DRIVER("\n");
 
-	ret = drm_hdmi_vendor_infoframe_from_display_mode(&infoframe, mode);
+	ret = drm_hdmi_vendor_infoframe_from_display_mode(&infoframe,
+							  hdmi->drm_connector,
+							  mode);
 	if (ret < 0) {
 		/*
 		 * Going into that statement does not means vendor infoframe
@@ -915,8 +918,8 @@ static void sti_hdmi_pre_enable(struct drm_bridge *bridge)
 }
 
 static void sti_hdmi_set_mode(struct drm_bridge *bridge,
-		struct drm_display_mode *mode,
-		struct drm_display_mode *adjusted_mode)
+			      const struct drm_display_mode *mode,
+			      const struct drm_display_mode *adjusted_mode)
 {
 	struct sti_hdmi *hdmi = bridge->driver_private;
 	int ret;
@@ -975,8 +978,7 @@ static int sti_hdmi_connector_get_modes(struct drm_connector *connector)
 	cec_notifier_set_phys_addr_from_edid(hdmi->notifier, edid);
 
 	count = drm_add_edid_modes(connector, edid);
-	drm_mode_connector_update_edid_property(connector, edid);
-	drm_edid_to_eld(connector, edid);
+	drm_connector_update_edid_property(connector, edid);
 
 	kfree(edid);
 	return count;
@@ -1289,7 +1291,7 @@ static int sti_hdmi_bind(struct device *dev, struct device *master, void *data)
 
 	hdmi->drm_connector = drm_connector;
 
-	err = drm_mode_connector_attach_encoder(drm_connector, encoder);
+	err = drm_connector_attach_encoder(drm_connector, encoder);
 	if (err) {
 		DRM_ERROR("Failed to attach a connector to a encoder\n");
 		goto err_sysfs;
@@ -1314,7 +1316,6 @@ static int sti_hdmi_bind(struct device *dev, struct device *master, void *data)
 	return 0;
 
 err_sysfs:
-	drm_bridge_remove(bridge);
 	hdmi->drm_connector = NULL;
 	return -EINVAL;
 }
@@ -1414,6 +1415,11 @@ static int sti_hdmi_probe(struct platform_device *pdev)
 	init_waitqueue_head(&hdmi->wait_event);
 
 	hdmi->irq = platform_get_irq_byname(pdev, "irq");
+	if (hdmi->irq < 0) {
+		DRM_ERROR("Cannot get HDMI irq\n");
+		ret = hdmi->irq;
+		goto release_adapter;
+	}
 
 	ret = devm_request_threaded_irq(dev, hdmi->irq, hdmi_irq,
 			hdmi_irq_thread, IRQF_ONESHOT, dev_name(dev), hdmi);

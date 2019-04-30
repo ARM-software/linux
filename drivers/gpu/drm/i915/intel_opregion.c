@@ -30,10 +30,12 @@
 #include <linux/firmware.h>
 #include <acpi/video.h>
 
-#include <drm/drmP.h>
 #include <drm/i915_drm.h>
+
 #include "i915_drv.h"
 #include "intel_drv.h"
+#include "intel_opregion.h"
+#include "intel_panel.h"
 
 #define OPREGION_HEADER_OFFSET 0
 #define OPREGION_ACPI_OFFSET   0x100
@@ -53,7 +55,12 @@
 struct opregion_header {
 	u8 signature[16];
 	u32 size;
-	u32 opregion_ver;
+	struct {
+		u8 rsvd;
+		u8 revision;
+		u8 minor;
+		u8 major;
+	}  __packed over;
 	u8 bios_ver[32];
 	u8 vbios_ver[16];
 	u8 driver_ver[16];
@@ -117,7 +124,8 @@ struct opregion_asle {
 	u64 fdss;
 	u32 fdsp;
 	u32 stat;
-	u64 rvda;	/* Physical address of raw vbt data */
+	u64 rvda;	/* Physical (2.0) or relative from opregion (2.1+)
+			 * address of raw VBT data. */
 	u32 rvds;	/* Size of raw vbt data */
 	u8 rsvd[58];
 } __packed;
@@ -367,7 +375,7 @@ int intel_opregion_notify_encoder(struct intel_encoder *intel_encoder,
 	if (intel_encoder->type == INTEL_OUTPUT_DSI)
 		port = 0;
 	else
-		port = intel_ddi_get_encoder_port(intel_encoder);
+		port = intel_encoder->port;
 
 	if (port == PORT_E)  {
 		port = 0;
@@ -383,7 +391,7 @@ int intel_opregion_notify_encoder(struct intel_encoder *intel_encoder,
 	case INTEL_OUTPUT_ANALOG:
 		type = DISPLAY_TYPE_CRT;
 		break;
-	case INTEL_OUTPUT_UNKNOWN:
+	case INTEL_OUTPUT_DDI:
 	case INTEL_OUTPUT_DP:
 	case INTEL_OUTPUT_HDMI:
 	case INTEL_OUTPUT_DP_MST:
@@ -606,16 +614,16 @@ void intel_opregion_asle_intr(struct drm_i915_private *dev_priv)
 #define ACPI_EV_LID            (1<<1)
 #define ACPI_EV_DOCK           (1<<2)
 
-static struct intel_opregion *system_opregion;
-
+/*
+ * The only video events relevant to opregion are 0x80. These indicate either a
+ * docking event, lid switch or display switch request. In Linux, these are
+ * handled by the dock, button and video drivers.
+ */
 static int intel_opregion_video_event(struct notifier_block *nb,
 				      unsigned long val, void *data)
 {
-	/* The only video events relevant to opregion are 0x80. These indicate
-	   either a docking event, lid switch or display switch request. In
-	   Linux, these are handled by the dock, button and video drivers.
-	*/
-
+	struct intel_opregion *opregion = container_of(nb, struct intel_opregion,
+						       acpi_notifier);
 	struct acpi_bus_event *event = data;
 	struct opregion_acpi *acpi;
 	int ret = NOTIFY_OK;
@@ -623,10 +631,7 @@ static int intel_opregion_video_event(struct notifier_block *nb,
 	if (strcmp(event->device_class, ACPI_VIDEO_CLASS) != 0)
 		return NOTIFY_DONE;
 
-	if (!system_opregion)
-		return NOTIFY_DONE;
-
-	acpi = system_opregion->acpi;
+	acpi = opregion->acpi;
 
 	if (event->type == 0x80 && ((acpi->cevt & 1) == 0))
 		ret = NOTIFY_BAD;
@@ -635,10 +640,6 @@ static int intel_opregion_video_event(struct notifier_block *nb,
 
 	return ret;
 }
-
-static struct notifier_block intel_opregion_notifier = {
-	.notifier_call = intel_opregion_video_event,
-};
 
 /*
  * Initialise the DIDL field in opregion. This passes a list of devices to
@@ -778,70 +779,6 @@ static void intel_setup_cadls(struct drm_i915_private *dev_priv)
 		opregion->acpi->cadl[i] = 0;
 }
 
-void intel_opregion_register(struct drm_i915_private *dev_priv)
-{
-	struct intel_opregion *opregion = &dev_priv->opregion;
-
-	if (!opregion->header)
-		return;
-
-	if (opregion->acpi) {
-		intel_didl_outputs(dev_priv);
-		intel_setup_cadls(dev_priv);
-
-		/* Notify BIOS we are ready to handle ACPI video ext notifs.
-		 * Right now, all the events are handled by the ACPI video module.
-		 * We don't actually need to do anything with them. */
-		opregion->acpi->csts = 0;
-		opregion->acpi->drdy = 1;
-
-		system_opregion = opregion;
-		register_acpi_notifier(&intel_opregion_notifier);
-	}
-
-	if (opregion->asle) {
-		opregion->asle->tche = ASLE_TCHE_BLC_EN;
-		opregion->asle->ardy = ASLE_ARDY_READY;
-	}
-}
-
-void intel_opregion_unregister(struct drm_i915_private *dev_priv)
-{
-	struct intel_opregion *opregion = &dev_priv->opregion;
-
-	if (!opregion->header)
-		return;
-
-	if (opregion->asle)
-		opregion->asle->ardy = ASLE_ARDY_NOT_READY;
-
-	cancel_work_sync(&dev_priv->opregion.asle_work);
-
-	if (opregion->acpi) {
-		opregion->acpi->drdy = 0;
-
-		system_opregion = NULL;
-		unregister_acpi_notifier(&intel_opregion_notifier);
-	}
-
-	/* just clear all opregion memory pointers now */
-	memunmap(opregion->header);
-	if (opregion->rvda) {
-		memunmap(opregion->rvda);
-		opregion->rvda = NULL;
-	}
-	if (opregion->vbt_firmware) {
-		kfree(opregion->vbt_firmware);
-		opregion->vbt_firmware = NULL;
-	}
-	opregion->header = NULL;
-	opregion->acpi = NULL;
-	opregion->swsci = NULL;
-	opregion->asle = NULL;
-	opregion->vbt = NULL;
-	opregion->lid_state = NULL;
-}
-
 static void swsci_setup(struct drm_i915_private *dev_priv)
 {
 	struct intel_opregion *opregion = &dev_priv->opregion;
@@ -921,7 +858,7 @@ static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv)
 {
 	struct intel_opregion *opregion = &dev_priv->opregion;
 	const struct firmware *fw = NULL;
-	const char *name = i915.vbt_firmware;
+	const char *name = i915_modparams.vbt_firmware;
 	int ret;
 
 	if (!name || !*name)
@@ -994,6 +931,11 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 	opregion->header = base;
 	opregion->lid_state = base + ACPI_CLID;
 
+	DRM_DEBUG_DRIVER("ACPI OpRegion version %u.%u.%u\n",
+			 opregion->header->over.major,
+			 opregion->header->over.minor,
+			 opregion->header->over.revision);
+
 	mboxes = opregion->header->mboxes;
 	if (mboxes & MBOX_ACPI) {
 		DRM_DEBUG_DRIVER("Public ACPI methods supported\n");
@@ -1022,11 +964,26 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 	if (dmi_check_system(intel_no_opregion_vbt))
 		goto out;
 
-	if (opregion->header->opregion_ver >= 2 && opregion->asle &&
+	if (opregion->header->over.major >= 2 && opregion->asle &&
 	    opregion->asle->rvda && opregion->asle->rvds) {
-		opregion->rvda = memremap(opregion->asle->rvda,
-					  opregion->asle->rvds,
+		resource_size_t rvda = opregion->asle->rvda;
+
+		/*
+		 * opregion 2.0: rvda is the physical VBT address.
+		 *
+		 * opregion 2.1+: rvda is unsigned, relative offset from
+		 * opregion base, and should never point within opregion.
+		 */
+		if (opregion->header->over.major > 2 ||
+		    opregion->header->over.minor >= 1) {
+			WARN_ON(rvda < OPREGION_SIZE);
+
+			rvda += asls;
+		}
+
+		opregion->rvda = memremap(rvda, opregion->asle->rvds,
 					  MEMREMAP_WB);
+
 		vbt = opregion->rvda;
 		vbt_size = opregion->asle->rvds;
 		if (intel_bios_is_valid_vbt(vbt, vbt_size)) {
@@ -1036,6 +993,8 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 			goto out;
 		} else {
 			DRM_DEBUG_KMS("Invalid VBT in ACPI OpRegion (RVDA)\n");
+			memunmap(opregion->rvda);
+			opregion->rvda = NULL;
 		}
 	}
 
@@ -1119,4 +1078,98 @@ intel_opregion_get_panel_type(struct drm_i915_private *dev_priv)
 	}
 
 	return ret - 1;
+}
+
+void intel_opregion_register(struct drm_i915_private *i915)
+{
+	struct intel_opregion *opregion = &i915->opregion;
+
+	if (!opregion->header)
+		return;
+
+	if (opregion->acpi) {
+		opregion->acpi_notifier.notifier_call =
+			intel_opregion_video_event;
+		register_acpi_notifier(&opregion->acpi_notifier);
+	}
+
+	intel_opregion_resume(i915);
+}
+
+void intel_opregion_resume(struct drm_i915_private *i915)
+{
+	struct intel_opregion *opregion = &i915->opregion;
+
+	if (!opregion->header)
+		return;
+
+	if (opregion->acpi) {
+		intel_didl_outputs(i915);
+		intel_setup_cadls(i915);
+
+		/*
+		 * Notify BIOS we are ready to handle ACPI video ext notifs.
+		 * Right now, all the events are handled by the ACPI video
+		 * module. We don't actually need to do anything with them.
+		 */
+		opregion->acpi->csts = 0;
+		opregion->acpi->drdy = 1;
+	}
+
+	if (opregion->asle) {
+		opregion->asle->tche = ASLE_TCHE_BLC_EN;
+		opregion->asle->ardy = ASLE_ARDY_READY;
+	}
+
+	intel_opregion_notify_adapter(i915, PCI_D0);
+}
+
+void intel_opregion_suspend(struct drm_i915_private *i915, pci_power_t state)
+{
+	struct intel_opregion *opregion = &i915->opregion;
+
+	if (!opregion->header)
+		return;
+
+	intel_opregion_notify_adapter(i915, state);
+
+	if (opregion->asle)
+		opregion->asle->ardy = ASLE_ARDY_NOT_READY;
+
+	cancel_work_sync(&i915->opregion.asle_work);
+
+	if (opregion->acpi)
+		opregion->acpi->drdy = 0;
+}
+
+void intel_opregion_unregister(struct drm_i915_private *i915)
+{
+	struct intel_opregion *opregion = &i915->opregion;
+
+	intel_opregion_suspend(i915, PCI_D1);
+
+	if (!opregion->header)
+		return;
+
+	if (opregion->acpi_notifier.notifier_call) {
+		unregister_acpi_notifier(&opregion->acpi_notifier);
+		opregion->acpi_notifier.notifier_call = NULL;
+	}
+
+	/* just clear all opregion memory pointers now */
+	memunmap(opregion->header);
+	if (opregion->rvda) {
+		memunmap(opregion->rvda);
+		opregion->rvda = NULL;
+	}
+	if (opregion->vbt_firmware) {
+		kfree(opregion->vbt_firmware);
+		opregion->vbt_firmware = NULL;
+	}
+	opregion->header = NULL;
+	opregion->acpi = NULL;
+	opregion->swsci = NULL;
+	opregion->asle = NULL;
+	opregion->vbt = NULL;
+	opregion->lid_state = NULL;
 }

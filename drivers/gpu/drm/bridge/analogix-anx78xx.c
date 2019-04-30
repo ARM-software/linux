@@ -31,9 +31,9 @@
 #include <drm/drmP.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc.h>
-#include <drm/drm_crtc_helper.h>
 #include <drm/drm_dp_helper.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_probe_helper.h>
 
 #include "analogix-anx78xx.h"
 
@@ -969,16 +969,14 @@ static int anx78xx_get_modes(struct drm_connector *connector)
 		goto unlock;
 	}
 
-	err = drm_mode_connector_update_edid_property(connector,
-						      anx78xx->edid);
+	err = drm_connector_update_edid_property(connector,
+						 anx78xx->edid);
 	if (err) {
 		DRM_ERROR("Failed to update EDID property: %d\n", err);
 		goto unlock;
 	}
 
 	num_modes = drm_add_edid_modes(connector, anx78xx->edid);
-	/* Store the ELD */
-	drm_edid_to_eld(connector, anx78xx->edid);
 
 unlock:
 	mutex_unlock(&anx78xx->lock);
@@ -1050,8 +1048,8 @@ static int anx78xx_bridge_attach(struct drm_bridge *bridge)
 
 	anx78xx->connector.polled = DRM_CONNECTOR_POLL_HPD;
 
-	err = drm_mode_connector_attach_encoder(&anx78xx->connector,
-						bridge->encoder);
+	err = drm_connector_attach_encoder(&anx78xx->connector,
+					   bridge->encoder);
 	if (err) {
 		DRM_ERROR("Failed to link up connector to encoder: %d\n", err);
 		return err;
@@ -1084,8 +1082,8 @@ static void anx78xx_bridge_disable(struct drm_bridge *bridge)
 }
 
 static void anx78xx_bridge_mode_set(struct drm_bridge *bridge,
-				    struct drm_display_mode *mode,
-				    struct drm_display_mode *adjusted_mode)
+				const struct drm_display_mode *mode,
+				const struct drm_display_mode *adjusted_mode)
 {
 	struct anx78xx *anx78xx = bridge_to_anx78xx(bridge);
 	struct hdmi_avi_infoframe frame;
@@ -1096,8 +1094,9 @@ static void anx78xx_bridge_mode_set(struct drm_bridge *bridge,
 
 	mutex_lock(&anx78xx->lock);
 
-	err = drm_hdmi_avi_infoframe_from_display_mode(&frame, adjusted_mode,
-						       false);
+	err = drm_hdmi_avi_infoframe_from_display_mode(&frame,
+						       &anx78xx->connector,
+						       adjusted_mode);
 	if (err) {
 		DRM_ERROR("Failed to setup AVI infoframe: %d\n", err);
 		goto unlock;
@@ -1303,8 +1302,7 @@ static void unregister_i2c_dummy_clients(struct anx78xx *anx78xx)
 	unsigned int i;
 
 	for (i = 0; i < ARRAY_SIZE(anx78xx->i2c_dummy); i++)
-		if (anx78xx->i2c_dummy[i])
-			i2c_unregister_device(anx78xx->i2c_dummy[i]);
+		i2c_unregister_device(anx78xx->i2c_dummy[i]);
 }
 
 static const struct regmap_config anx78xx_regmap_config = {

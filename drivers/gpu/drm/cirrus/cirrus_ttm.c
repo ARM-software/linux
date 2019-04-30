@@ -36,63 +36,6 @@ cirrus_bdev(struct ttm_bo_device *bd)
 	return container_of(bd, struct cirrus_device, ttm.bdev);
 }
 
-static int
-cirrus_ttm_mem_global_init(struct drm_global_reference *ref)
-{
-	return ttm_mem_global_init(ref->object);
-}
-
-static void
-cirrus_ttm_mem_global_release(struct drm_global_reference *ref)
-{
-	ttm_mem_global_release(ref->object);
-}
-
-static int cirrus_ttm_global_init(struct cirrus_device *cirrus)
-{
-	struct drm_global_reference *global_ref;
-	int r;
-
-	global_ref = &cirrus->ttm.mem_global_ref;
-	global_ref->global_type = DRM_GLOBAL_TTM_MEM;
-	global_ref->size = sizeof(struct ttm_mem_global);
-	global_ref->init = &cirrus_ttm_mem_global_init;
-	global_ref->release = &cirrus_ttm_mem_global_release;
-	r = drm_global_item_ref(global_ref);
-	if (r != 0) {
-		DRM_ERROR("Failed setting up TTM memory accounting "
-			  "subsystem.\n");
-		return r;
-	}
-
-	cirrus->ttm.bo_global_ref.mem_glob =
-		cirrus->ttm.mem_global_ref.object;
-	global_ref = &cirrus->ttm.bo_global_ref.ref;
-	global_ref->global_type = DRM_GLOBAL_TTM_BO;
-	global_ref->size = sizeof(struct ttm_bo_global);
-	global_ref->init = &ttm_bo_global_init;
-	global_ref->release = &ttm_bo_global_release;
-	r = drm_global_item_ref(global_ref);
-	if (r != 0) {
-		DRM_ERROR("Failed setting up TTM BO subsystem.\n");
-		drm_global_item_unref(&cirrus->ttm.mem_global_ref);
-		return r;
-	}
-	return 0;
-}
-
-static void
-cirrus_ttm_global_release(struct cirrus_device *cirrus)
-{
-	if (cirrus->ttm.mem_global_ref.release == NULL)
-		return;
-
-	drm_global_item_unref(&cirrus->ttm.bo_global_ref.ref);
-	drm_global_item_unref(&cirrus->ttm.mem_global_ref);
-	cirrus->ttm.mem_global_ref.release = NULL;
-}
-
-
 static void cirrus_bo_ttm_destroy(struct ttm_buffer_object *tbo)
 {
 	struct cirrus_bo *bo;
@@ -199,9 +142,8 @@ static struct ttm_backend_func cirrus_tt_backend_func = {
 };
 
 
-static struct ttm_tt *cirrus_ttm_tt_create(struct ttm_bo_device *bdev,
-				 unsigned long size, uint32_t page_flags,
-				 struct page *dummy_read_page)
+static struct ttm_tt *cirrus_ttm_tt_create(struct ttm_buffer_object *bo,
+					   uint32_t page_flags)
 {
 	struct ttm_tt *tt;
 
@@ -209,27 +151,15 @@ static struct ttm_tt *cirrus_ttm_tt_create(struct ttm_bo_device *bdev,
 	if (tt == NULL)
 		return NULL;
 	tt->func = &cirrus_tt_backend_func;
-	if (ttm_tt_init(tt, bdev, size, page_flags, dummy_read_page)) {
+	if (ttm_tt_init(tt, bo, page_flags)) {
 		kfree(tt);
 		return NULL;
 	}
 	return tt;
 }
 
-static int cirrus_ttm_tt_populate(struct ttm_tt *ttm)
-{
-	return ttm_pool_populate(ttm);
-}
-
-static void cirrus_ttm_tt_unpopulate(struct ttm_tt *ttm)
-{
-	ttm_pool_unpopulate(ttm);
-}
-
 struct ttm_bo_driver cirrus_bo_driver = {
 	.ttm_tt_create = cirrus_ttm_tt_create,
-	.ttm_tt_populate = cirrus_ttm_tt_populate,
-	.ttm_tt_unpopulate = cirrus_ttm_tt_unpopulate,
 	.init_mem_type = cirrus_bo_init_mem_type,
 	.eviction_valuable = ttm_bo_eviction_valuable,
 	.evict_flags = cirrus_bo_evict_flags,
@@ -237,7 +167,6 @@ struct ttm_bo_driver cirrus_bo_driver = {
 	.verify_access = cirrus_bo_verify_access,
 	.io_mem_reserve = &cirrus_ttm_io_mem_reserve,
 	.io_mem_free = &cirrus_ttm_io_mem_free,
-	.io_mem_pfn = ttm_bo_default_io_mem_pfn,
 };
 
 int cirrus_mm_init(struct cirrus_device *cirrus)
@@ -246,15 +175,9 @@ int cirrus_mm_init(struct cirrus_device *cirrus)
 	struct drm_device *dev = cirrus->dev;
 	struct ttm_bo_device *bdev = &cirrus->ttm.bdev;
 
-	ret = cirrus_ttm_global_init(cirrus);
-	if (ret)
-		return ret;
-
 	ret = ttm_bo_device_init(&cirrus->ttm.bdev,
-				 cirrus->ttm.bo_global_ref.ref.object,
 				 &cirrus_bo_driver,
 				 dev->anon_inode->i_mapping,
-				 DRM_FILE_PAGE_OFFSET,
 				 true);
 	if (ret) {
 		DRM_ERROR("Error initialising bo driver; %d\n", ret);
@@ -286,8 +209,6 @@ void cirrus_mm_fini(struct cirrus_device *cirrus)
 		return;
 
 	ttm_bo_device_release(&cirrus->ttm.bdev);
-
-	cirrus_ttm_global_release(cirrus);
 
 	arch_phys_wc_del(cirrus->fb_mtrr);
 	cirrus->fb_mtrr = 0;
@@ -342,7 +263,7 @@ int cirrus_bo_create(struct drm_device *dev, int size, int align,
 
 	ret = ttm_bo_init(&cirrus->ttm.bdev, &cirrusbo->bo, size,
 			  ttm_bo_type_device, &cirrusbo->placement,
-			  align >> PAGE_SHIFT, false, NULL, acc_size,
+			  align >> PAGE_SHIFT, false, acc_size,
 			  NULL, NULL, cirrus_bo_ttm_destroy);
 	if (ret)
 		return ret;
@@ -358,6 +279,7 @@ static inline u64 cirrus_bo_gpu_offset(struct cirrus_bo *bo)
 
 int cirrus_bo_pin(struct cirrus_bo *bo, u32 pl_flag, u64 *gpu_addr)
 {
+	struct ttm_operation_ctx ctx = { false, false };
 	int i, ret;
 
 	if (bo->pin_count) {
@@ -369,7 +291,7 @@ int cirrus_bo_pin(struct cirrus_bo *bo, u32 pl_flag, u64 *gpu_addr)
 	cirrus_ttm_placement(bo, pl_flag);
 	for (i = 0; i < bo->placement.num_placement; i++)
 		bo->placements[i].flags |= TTM_PL_FLAG_NO_EVICT;
-	ret = ttm_bo_validate(&bo->bo, &bo->placement, false, false);
+	ret = ttm_bo_validate(&bo->bo, &bo->placement, &ctx);
 	if (ret)
 		return ret;
 
@@ -381,6 +303,7 @@ int cirrus_bo_pin(struct cirrus_bo *bo, u32 pl_flag, u64 *gpu_addr)
 
 int cirrus_bo_push_sysram(struct cirrus_bo *bo)
 {
+	struct ttm_operation_ctx ctx = { false, false };
 	int i, ret;
 	if (!bo->pin_count) {
 		DRM_ERROR("unpin bad %p\n", bo);
@@ -397,7 +320,7 @@ int cirrus_bo_push_sysram(struct cirrus_bo *bo)
 	for (i = 0; i < bo->placement.num_placement ; i++)
 		bo->placements[i].flags |= TTM_PL_FLAG_NO_EVICT;
 
-	ret = ttm_bo_validate(&bo->bo, &bo->placement, false, false);
+	ret = ttm_bo_validate(&bo->bo, &bo->placement, &ctx);
 	if (ret) {
 		DRM_ERROR("pushing to VRAM failed\n");
 		return ret;
@@ -407,13 +330,8 @@ int cirrus_bo_push_sysram(struct cirrus_bo *bo)
 
 int cirrus_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-	struct drm_file *file_priv;
-	struct cirrus_device *cirrus;
+	struct drm_file *file_priv = filp->private_data;
+	struct cirrus_device *cirrus = file_priv->minor->dev->dev_private;
 
-	if (unlikely(vma->vm_pgoff < DRM_FILE_PAGE_OFFSET))
-		return -EINVAL;
-
-	file_priv = filp->private_data;
-	cirrus = file_priv->minor->dev->dev_private;
 	return ttm_bo_mmap(filp, vma, &cirrus->ttm.bdev);
 }

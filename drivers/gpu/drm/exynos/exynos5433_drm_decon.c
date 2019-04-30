@@ -21,18 +21,19 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
-#include <video/exynos5433_decon.h>
-
 #include "exynos_drm_drv.h"
 #include "exynos_drm_crtc.h"
 #include "exynos_drm_fb.h"
 #include "exynos_drm_plane.h"
-#include "exynos_drm_iommu.h"
+#include "regs-decon5433.h"
 
 #define DSD_CFG_MUX 0x1004
 #define DSD_CFG_MUX_TE_UNMASK_GLOBAL BIT(13)
 
-#define WINDOWS_NR	3
+#define WINDOWS_NR	5
+#define PRIMARY_WIN	2
+#define CURSON_WIN	4
+
 #define MIN_FB_WIDTH_FOR_16WORD_BURST	128
 
 #define I80_HW_TRG	(1 << 0)
@@ -44,6 +45,9 @@ static const char * const decon_clks_name[] = {
 	"aclk_smmu_decon0x",
 	"aclk_xiu_decon0x",
 	"pclk_smmu_decon0x",
+	"aclk_smmu_decon1x",
+	"aclk_xiu_decon1x",
+	"pclk_smmu_decon1x",
 	"sclk_decon_vclk",
 	"sclk_decon_eclk",
 };
@@ -75,9 +79,16 @@ static const uint32_t decon_formats[] = {
 };
 
 static const enum drm_plane_type decon_win_types[WINDOWS_NR] = {
-	DRM_PLANE_TYPE_PRIMARY,
-	DRM_PLANE_TYPE_OVERLAY,
-	DRM_PLANE_TYPE_CURSOR,
+	[PRIMARY_WIN] = DRM_PLANE_TYPE_PRIMARY,
+	[CURSON_WIN] = DRM_PLANE_TYPE_CURSOR,
+};
+
+static const unsigned int capabilities[WINDOWS_NR] = {
+	0,
+	EXYNOS_DRM_PLANE_CAP_WIN_BLEND | EXYNOS_DRM_PLANE_CAP_PIX_BLEND,
+	EXYNOS_DRM_PLANE_CAP_WIN_BLEND | EXYNOS_DRM_PLANE_CAP_PIX_BLEND,
+	EXYNOS_DRM_PLANE_CAP_WIN_BLEND | EXYNOS_DRM_PLANE_CAP_PIX_BLEND,
+	EXYNOS_DRM_PLANE_CAP_WIN_BLEND | EXYNOS_DRM_PLANE_CAP_PIX_BLEND,
 };
 
 static inline void decon_set_bits(struct decon_context *ctx, u32 reg, u32 mask,
@@ -177,7 +188,7 @@ static void decon_setup_trigger(struct decon_context *ctx)
 
 	if (regmap_update_bits(ctx->sysreg, DSD_CFG_MUX,
 			       DSD_CFG_MUX_TE_UNMASK_GLOBAL, ~0))
-		DRM_ERROR("Cannot update sysreg.\n");
+		DRM_DEV_ERROR(ctx->dev, "Cannot update sysreg.\n");
 }
 
 static void decon_commit(struct exynos_drm_crtc *crtc)
@@ -248,10 +259,75 @@ static void decon_commit(struct exynos_drm_crtc *crtc)
 	decon_set_bits(ctx, DECON_UPDATE, STANDALONE_UPDATE_F, ~0);
 }
 
+static void decon_win_set_bldeq(struct decon_context *ctx, unsigned int win,
+				unsigned int alpha, unsigned int pixel_alpha)
+{
+	u32 mask = BLENDERQ_A_FUNC_F(0xf) | BLENDERQ_B_FUNC_F(0xf);
+	u32 val = 0;
+
+	switch (pixel_alpha) {
+	case DRM_MODE_BLEND_PIXEL_NONE:
+	case DRM_MODE_BLEND_COVERAGE:
+		val |= BLENDERQ_A_FUNC_F(BLENDERQ_ALPHA_A);
+		val |= BLENDERQ_B_FUNC_F(BLENDERQ_ONE_MINUS_ALPHA_A);
+		break;
+	case DRM_MODE_BLEND_PREMULTI:
+	default:
+		if (alpha != DRM_BLEND_ALPHA_OPAQUE) {
+			val |= BLENDERQ_A_FUNC_F(BLENDERQ_ALPHA0);
+			val |= BLENDERQ_B_FUNC_F(BLENDERQ_ONE_MINUS_ALPHA_A);
+		} else {
+			val |= BLENDERQ_A_FUNC_F(BLENDERQ_ONE);
+			val |= BLENDERQ_B_FUNC_F(BLENDERQ_ONE_MINUS_ALPHA_A);
+		}
+		break;
+	}
+	decon_set_bits(ctx, DECON_BLENDERQx(win), mask, val);
+}
+
+static void decon_win_set_bldmod(struct decon_context *ctx, unsigned int win,
+				 unsigned int alpha, unsigned int pixel_alpha)
+{
+	u32 win_alpha = alpha >> 8;
+	u32 val = 0;
+
+	switch (pixel_alpha) {
+	case DRM_MODE_BLEND_PIXEL_NONE:
+		break;
+	case DRM_MODE_BLEND_COVERAGE:
+	case DRM_MODE_BLEND_PREMULTI:
+	default:
+		val |= WINCONx_ALPHA_SEL_F;
+		val |= WINCONx_BLD_PIX_F;
+		val |= WINCONx_ALPHA_MUL_F;
+		break;
+	}
+	decon_set_bits(ctx, DECON_WINCONx(win), WINCONx_BLEND_MODE_MASK, val);
+
+	if (alpha != DRM_BLEND_ALPHA_OPAQUE) {
+		val = VIDOSD_Wx_ALPHA_R_F(win_alpha) |
+		      VIDOSD_Wx_ALPHA_G_F(win_alpha) |
+		      VIDOSD_Wx_ALPHA_B_F(win_alpha);
+		decon_set_bits(ctx, DECON_VIDOSDxC(win),
+			       VIDOSDxC_ALPHA0_RGB_MASK, val);
+		decon_set_bits(ctx, DECON_BLENDCON, BLEND_NEW, BLEND_NEW);
+	}
+}
+
 static void decon_win_set_pixfmt(struct decon_context *ctx, unsigned int win,
 				 struct drm_framebuffer *fb)
 {
+	struct exynos_drm_plane plane = ctx->planes[win];
+	struct exynos_drm_plane_state *state =
+		to_exynos_plane_state(plane.base.state);
+	unsigned int alpha = state->base.alpha;
+	unsigned int pixel_alpha;
 	unsigned long val;
+
+	if (fb->format->has_alpha)
+		pixel_alpha = state->base.pixel_blend_mode;
+	else
+		pixel_alpha = DRM_MODE_BLEND_PIXEL_NONE;
 
 	val = readl(ctx->addr + DECON_WINCONx(win));
 	val &= WINCONx_ENWIN_F;
@@ -275,12 +351,12 @@ static void decon_win_set_pixfmt(struct decon_context *ctx, unsigned int win,
 	case DRM_FORMAT_ARGB8888:
 	default:
 		val |= WINCONx_BPPMODE_32BPP_A8888;
-		val |= WINCONx_WSWP_F | WINCONx_BLD_PIX_F | WINCONx_ALPHA_SEL_F;
+		val |= WINCONx_WSWP_F;
 		val |= WINCONx_BURSTLEN_16WORD;
 		break;
 	}
 
-	DRM_DEBUG_KMS("cpp = %u\n", fb->format->cpp[0]);
+	DRM_DEV_DEBUG_KMS(ctx->dev, "cpp = %u\n", fb->format->cpp[0]);
 
 	/*
 	 * In case of exynos, setting dma-burst to 16Word causes permanent
@@ -294,8 +370,12 @@ static void decon_win_set_pixfmt(struct decon_context *ctx, unsigned int win,
 		val &= ~WINCONx_BURSTLEN_MASK;
 		val |= WINCONx_BURSTLEN_8WORD;
 	}
+	decon_set_bits(ctx, DECON_WINCONx(win), ~WINCONx_BLEND_MODE_MASK, val);
 
-	writel(val, ctx->addr + DECON_WINCONx(win));
+	if (win > 0) {
+		decon_win_set_bldmod(ctx, win, alpha, pixel_alpha);
+		decon_win_set_bldeq(ctx, win, alpha, pixel_alpha);
+	}
 }
 
 static void decon_shadow_protect(struct decon_context *ctx, bool protect)
@@ -481,8 +561,6 @@ static void decon_clear_channels(struct exynos_drm_crtc *crtc)
 	struct decon_context *ctx = crtc->ctx;
 	int win, i, ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
 	for (i = 0; i < ARRAY_SIZE(decon_clks_name); i++) {
 		ret = clk_prepare_enable(ctx->clks[i]);
 		if (ret < 0)
@@ -544,12 +622,11 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 	ctx->drm_dev = drm_dev;
 
 	for (win = ctx->first_win; win < WINDOWS_NR; win++) {
-		int tmp = (win == ctx->first_win) ? 0 : win;
-
 		ctx->configs[win].pixel_formats = decon_formats;
 		ctx->configs[win].num_pixel_formats = ARRAY_SIZE(decon_formats);
-		ctx->configs[win].zpos = win;
-		ctx->configs[win].type = decon_win_types[tmp];
+		ctx->configs[win].zpos = win - ctx->first_win;
+		ctx->configs[win].type = decon_win_types[win];
+		ctx->configs[win].capabilities = capabilities[win];
 
 		ret = exynos_plane_init(drm_dev, &ctx->planes[win], win,
 					&ctx->configs[win]);
@@ -557,7 +634,7 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 			return ret;
 	}
 
-	exynos_plane = &ctx->planes[ctx->first_win];
+	exynos_plane = &ctx->planes[PRIMARY_WIN];
 	out_type = (ctx->out_type & IFTYPE_HDMI) ? EXYNOS_DISPLAY_TYPE_HDMI
 						  : EXYNOS_DISPLAY_TYPE_LCD;
 	ctx->crtc = exynos_drm_crtc_create(drm_dev, &exynos_plane->base,
@@ -567,7 +644,7 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 
 	decon_clear_channels(ctx->crtc);
 
-	return drm_iommu_attach_device(drm_dev, dev);
+	return exynos_drm_register_dma(drm_dev, dev);
 }
 
 static void decon_unbind(struct device *dev, struct device *master, void *data)
@@ -577,7 +654,7 @@ static void decon_unbind(struct device *dev, struct device *master, void *data)
 	decon_disable(ctx->crtc);
 
 	/* detach this sub driver from iommu mapping if supported. */
-	drm_iommu_detach_device(ctx->drm_dev, ctx->dev);
+	exynos_drm_unregister_dma(ctx->drm_dev, ctx->dev);
 }
 
 static const struct component_ops decon_component_ops = {
@@ -662,6 +739,8 @@ err:
 static const struct dev_pm_ops exynos5433_decon_pm_ops = {
 	SET_RUNTIME_PM_OPS(exynos5433_decon_suspend, exynos5433_decon_resume,
 			   NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+				     pm_runtime_force_resume)
 };
 
 static const struct of_device_id exynos5433_decon_driver_dt_match[] = {
@@ -735,11 +814,6 @@ static int exynos5433_decon_probe(struct platform_device *pdev)
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(dev, "cannot find IO resource\n");
-		return -ENXIO;
-	}
-
 	ctx->addr = devm_ioremap_resource(dev, res);
 	if (IS_ERR(ctx->addr)) {
 		dev_err(dev, "ioremap failed\n");

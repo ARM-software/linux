@@ -15,25 +15,25 @@
  */
 
 #include <linux/clk.h>
-#include <drm/drm_crtc_helper.h>
-#include <drm/drm_fb_cma_helper.h>
-#include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_debugfs.h>
+#include <drm/drm_device.h>
+#include <drm/drm_drv.h>
+#include <drm/drm_fb_cma_helper.h>
+#include <drm/drm_fb_helper.h>
+#include <drm/drm_gem_cma_helper.h>
+#include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_probe_helper.h>
+#include <linux/dma-mapping.h>
+#include <linux/module.h>
 #include <linux/of_reserved_mem.h>
+#include <linux/platform_device.h>
 
 #include "arcpgu.h"
 #include "arcpgu_regs.h"
 
-static void arcpgu_fb_output_poll_changed(struct drm_device *dev)
-{
-	struct arcpgu_drm_private *arcpgu = dev->dev_private;
-
-	drm_fbdev_cma_hotplug_event(arcpgu->fbdev);
-}
-
 static const struct drm_mode_config_funcs arcpgu_drm_modecfg_funcs = {
-	.fb_create  = drm_fb_cma_create,
-	.output_poll_changed = arcpgu_fb_output_poll_changed,
+	.fb_create  = drm_gem_fb_create,
 	.atomic_check = drm_atomic_helper_check,
 	.atomic_commit = drm_atomic_helper_commit,
 };
@@ -49,13 +49,6 @@ static void arcpgu_setup_mode_config(struct drm_device *drm)
 }
 
 DEFINE_DRM_GEM_CMA_FOPS(arcpgu_drm_ops);
-
-static void arcpgu_lastclose(struct drm_device *drm)
-{
-	struct arcpgu_drm_private *arcpgu = drm->dev_private;
-
-	drm_fbdev_cma_restore_mode(arcpgu->fbdev);
-}
 
 static int arcpgu_load(struct drm_device *drm)
 {
@@ -112,27 +105,14 @@ static int arcpgu_load(struct drm_device *drm)
 	drm_mode_config_reset(drm);
 	drm_kms_helper_poll_init(drm);
 
-	arcpgu->fbdev = drm_fbdev_cma_init(drm, 16,
-					   drm->mode_config.num_connector);
-	if (IS_ERR(arcpgu->fbdev)) {
-		ret = PTR_ERR(arcpgu->fbdev);
-		arcpgu->fbdev = NULL;
-		return -ENODEV;
-	}
-
 	platform_set_drvdata(pdev, drm);
 	return 0;
 }
 
 static int arcpgu_unload(struct drm_device *drm)
 {
-	struct arcpgu_drm_private *arcpgu = drm->dev_private;
-
-	if (arcpgu->fbdev) {
-		drm_fbdev_cma_fini(arcpgu->fbdev);
-		arcpgu->fbdev = NULL;
-	}
 	drm_kms_helper_poll_fini(drm);
+	drm_atomic_helper_shutdown(drm);
 	drm_mode_config_cleanup(drm);
 
 	return 0;
@@ -154,7 +134,6 @@ static int arcpgu_show_pxlclock(struct seq_file *m, void *arg)
 
 static struct drm_info_list arcpgu_debugfs_list[] = {
 	{ "clocks", arcpgu_show_pxlclock, 0 },
-	{ "fb", drm_fb_cma_debugfs_show, 0 },
 };
 
 static int arcpgu_debugfs_init(struct drm_minor *minor)
@@ -167,7 +146,6 @@ static int arcpgu_debugfs_init(struct drm_minor *minor)
 static struct drm_driver arcpgu_drm_driver = {
 	.driver_features = DRIVER_MODESET | DRIVER_GEM | DRIVER_PRIME |
 			   DRIVER_ATOMIC,
-	.lastclose = arcpgu_lastclose,
 	.name = "arcpgu",
 	.desc = "ARC PGU Controller",
 	.date = "20160219",
@@ -179,6 +157,7 @@ static struct drm_driver arcpgu_drm_driver = {
 	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
 	.gem_free_object_unlocked = drm_gem_cma_free_object,
+	.gem_print_info = drm_gem_cma_print_info,
 	.gem_vm_ops = &drm_gem_cma_vm_ops,
 	.gem_prime_export = drm_gem_prime_export,
 	.gem_prime_import = drm_gem_prime_import,
@@ -209,13 +188,15 @@ static int arcpgu_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_unload;
 
+	drm_fbdev_generic_setup(drm, 16);
+
 	return 0;
 
 err_unload:
 	arcpgu_unload(drm);
 
 err_unref:
-	drm_dev_unref(drm);
+	drm_dev_put(drm);
 
 	return ret;
 }
@@ -226,7 +207,7 @@ static int arcpgu_remove(struct platform_device *pdev)
 
 	drm_dev_unregister(drm);
 	arcpgu_unload(drm);
-	drm_dev_unref(drm);
+	drm_dev_put(drm);
 
 	return 0;
 }
