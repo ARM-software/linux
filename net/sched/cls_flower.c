@@ -319,7 +319,7 @@ static void __fl_delete(struct tcf_proto *tp, struct cls_fl_filter *f)
 {
 	struct cls_fl_head *head = rtnl_dereference(tp->root);
 
-	idr_remove_ext(&head->handle_idr, f->handle);
+	idr_remove(&head->handle_idr, f->handle);
 	list_del_rcu(&f->list);
 	if (!tc_skip_hw(f->flags))
 		fl_hw_destroy_filter(tp, f);
@@ -1008,7 +1008,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 
 errout_idr:
 	if (!fold)
-		idr_remove_ext(&head->handle_idr, fnew->handle);
+		idr_remove(&head->handle_idr, fnew->handle);
 errout:
 	tcf_exts_destroy(&fnew->exts);
 	kfree(fnew);
