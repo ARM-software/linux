@@ -189,6 +189,46 @@ static void d71_layer_update_fb(struct komeda_component *c,
 	malidp_write32(reg, LAYER_FMT, kfb->format_caps->hw_id);
 }
 
+static u32 d71_layer_update_color(struct drm_plane_state *st,
+				  u32 __iomem *reg,
+				  struct komeda_color_state *color_st,
+				  u32 *mask)
+{
+	struct komeda_coeffs_table *igamma = color_st->igamma;
+	struct komeda_coeffs_table *fgamma = color_st->fgamma;
+	u32 ctrl = 0, v = 0;
+
+	if (!st->color_mgmt_changed)
+		return 0;
+
+	*mask |= L_IT | L_R2R | L_FT;
+
+	if (igamma) {
+		komeda_coeffs_update(igamma);
+		ctrl |= L_IT;
+		v = L_ITSEL(igamma->hw_id);
+	}
+
+	if (st->ctm) {
+		u32 ctm_coeffs[KOMEDA_N_CTM_COEFFS];
+
+		drm_ctm_to_coeffs(st->ctm, ctm_coeffs);
+		malidp_write_group(reg, LAYER_RGB_RGB_COEFF0,
+				   ARRAY_SIZE(ctm_coeffs),
+				   ctm_coeffs);
+		ctrl |= L_R2R; /* enable RGB2RGB conversion */
+	}
+
+	if (fgamma) {
+		komeda_coeffs_update(fgamma);
+		ctrl |= L_FT;
+		v |= L_FTSEL(fgamma->hw_id);
+	}
+
+	malidp_write32(reg, LAYER_LT_COEFFTAB, v);
+	return ctrl;
+}
+
 static void d71_layer_disable(struct komeda_component *c)
 {
 	malidp_write32_mask(c->reg, BLK_CONTROL, L_EN, 0);
@@ -260,6 +300,8 @@ static void d71_layer_update(struct komeda_component *c,
 	}
 
 	malidp_write32(reg, BLK_IN_SIZE, HV_SIZE(st->hsize, st->vsize));
+
+	ctrl |= d71_layer_update_color(plane_st, reg, &st->color_st, &ctrl_mask);
 
 	if (kfb->is_va)
 		ctrl |= L_TBU_EN;
@@ -364,6 +406,12 @@ static int d71_layer_init(struct d71_dev *d71,
 		layer->layer_type = KOMEDA_FMT_RICH_LAYER;
 	else
 		layer->layer_type = KOMEDA_FMT_SIMPLE_LAYER;
+
+	layer->color_mgr.igamma_mgr = d71->glb_lt_mgr;
+	if (layer_info & L_INFO_CM) {
+		layer->color_mgr.has_ctm = true;
+		layer->color_mgr.fgamma_mgr = d71->glb_lt_mgr;
+	}
 
 	set_range(&layer->hsize_in, 4, d71->max_line_size);
 	set_range(&layer->vsize_in, 4, d71->max_vsize);
@@ -1140,6 +1188,21 @@ static int d71_timing_ctrlr_init(struct d71_dev *d71,
 	return 0;
 }
 
+static void d71_gamma_update(struct komeda_coeffs_table *table)
+{
+	malidp_write_group(table->reg, GLB_LT_COEFF_DATA,
+			   GLB_LT_COEFF_NUM, table->coeffs);
+}
+
+static int d71_lt_coeff_init(struct d71_dev *d71,
+			     struct block_header *blk, u32 __iomem *reg)
+{
+	struct komeda_coeffs_manager *mgr = d71->glb_lt_mgr;
+	int hw_id = BLOCK_INFO_TYPE_ID(blk->block_info);
+
+	return komeda_coeffs_add(mgr, hw_id, reg, d71_gamma_update);
+}
+
 int d71_probe_block(struct d71_dev *d71,
 		    struct block_header *blk, u32 __iomem *reg)
 {
@@ -1202,6 +1265,7 @@ int d71_probe_block(struct d71_dev *d71,
 		break;
 
 	case D71_BLK_TYPE_GLB_LT_COEFF:
+		err = d71_lt_coeff_init(d71, blk, reg);
 		break;
 
 	case D71_BLK_TYPE_GLB_SCL_COEFF:

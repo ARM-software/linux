@@ -19,11 +19,14 @@ komeda_component_state_reset(struct komeda_component_state *st)
 static struct drm_private_state *
 komeda_layer_atomic_duplicate_state(struct drm_private_obj *obj)
 {
+	struct komeda_layer_state *old = to_layer_st(priv_to_comp_st(obj->state));
 	struct komeda_layer_state *st;
 
 	st = kmemdup(obj->state, sizeof(*st), GFP_KERNEL);
 	if (!st)
 		return NULL;
+
+	komeda_color_duplicate_state(&st->color_st, &old->color_st);
 
 	komeda_component_state_reset(&st->base);
 	__drm_atomic_helper_private_obj_duplicate_state(obj, &st->base.obj);
@@ -37,6 +40,7 @@ komeda_layer_atomic_destroy_state(struct drm_private_obj *obj,
 {
 	struct komeda_layer_state *st = to_layer_st(priv_to_comp_st(state));
 
+	komeda_color_cleanup_state(&st->color_st);
 	kfree(st);
 }
 

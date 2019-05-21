@@ -10,6 +10,7 @@
 #include <linux/types.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include "komeda_color_mgmt.h"
 #include "malidp_utils.h"
 
 #define KOMEDA_MAX_PIPELINES		2
@@ -226,6 +227,7 @@ struct komeda_layer {
 	struct komeda_component base;
 	/* accepted h/v input range before rotation */
 	struct malidp_range hsize_in, vsize_in;
+	struct komeda_color_manager color_mgr;
 	u32 layer_type; /* RICH, SIMPLE or WB */
 	u32 supported_rots;
 	/* komeda supports layer split which splits a whole image to two parts
@@ -238,7 +240,7 @@ struct komeda_layer {
 
 struct komeda_layer_state {
 	struct komeda_component_state base;
-	/* layer specific configuration state */
+	struct komeda_color_state color_st;
 	u16 hsize, vsize;
 	u32 rot;
 	u16 afbc_crop_l;

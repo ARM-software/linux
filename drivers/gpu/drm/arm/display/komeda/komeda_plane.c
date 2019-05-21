@@ -11,6 +11,7 @@
 #include "komeda_dev.h"
 #include "komeda_kms.h"
 #include "komeda_framebuffer.h"
+#include "komeda_color_mgmt.h"
 
 static int
 komeda_plane_init_data_flow(struct drm_plane_state *st,
@@ -250,6 +251,7 @@ static int komeda_plane_add(struct komeda_kms_dev *kms,
 {
 	struct komeda_dev *mdev = kms->base.dev_private;
 	struct komeda_component *c = &layer->base;
+	struct komeda_color_manager *color_mgr;
 	struct komeda_plane *kplane;
 	struct drm_plane *plane;
 	u32 *formats, n_formats = 0;
@@ -305,6 +307,16 @@ static int komeda_plane_add(struct komeda_kms_dev *kms,
 			DRM_COLOR_YCBCR_LIMITED_RANGE);
 	if (err)
 		goto cleanup;
+
+	err = drm_plane_color_create_prop(plane->dev, plane);
+	if (err)
+		goto cleanup;
+
+	color_mgr = &layer->color_mgr;
+	drm_plane_enable_color_mgmt(plane,
+			color_mgr->igamma_mgr ? KOMEDA_COLOR_LUT_SIZE : 0,
+			color_mgr->has_ctm,
+			color_mgr->fgamma_mgr ? KOMEDA_COLOR_LUT_SIZE : 0);
 
 	err = drm_plane_create_zpos_property(plane, layer->base.id, 0, 8);
 	if (err)
