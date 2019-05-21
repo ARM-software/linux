@@ -341,7 +341,7 @@ static int d71_enum_resources(struct komeda_dev *mdev)
 	struct komeda_pipeline *pipe;
 	struct block_header blk;
 	u32 __iomem *blk_base;
-	u32 i, value, offset;
+	u32 i, value, offset, coeffs_size;
 	int err;
 
 	d71 = devm_kzalloc(mdev->dev, sizeof(*d71), GFP_KERNEL);
@@ -397,6 +397,9 @@ static int d71_enum_resources(struct komeda_dev *mdev)
 		}
 		d71->pipes[i] = to_d71_pipeline(pipe);
 	}
+
+	coeffs_size = GLB_LT_COEFF_NUM * sizeof(u32);
+	d71->glb_lt_mgr = komeda_coeffs_create_manager(coeffs_size);
 
 	/* loop the register blks and probe */
 	i = 2; /* exclude GCU and PERIPH */

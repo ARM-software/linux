@@ -95,6 +95,21 @@ komeda_pipeline_get_state_and_set_crtc(struct komeda_pipeline *pipe,
 	return st;
 }
 
+static bool komeda_component_is_new_active(struct komeda_component *c,
+					   struct drm_atomic_state *state)
+{
+	struct komeda_pipeline_state *ppl_old_st;
+
+	ppl_old_st = komeda_pipeline_get_old_state(c->pipeline, state);
+	if (IS_ERR(ppl_old_st))
+		return true;
+
+	if (has_bit(c->id, ppl_old_st->active_comps))
+		return false;
+
+	return true;
+}
+
 static struct komeda_component_state *
 komeda_component_get_state(struct komeda_component *c,
 			   struct drm_atomic_state *state)
@@ -280,6 +295,29 @@ komeda_rotate_data_flow(struct komeda_data_flow_cfg *dflow, u32 rot)
 }
 
 static int
+komeda_validate_plane_color(struct komeda_component *c,
+			    struct komeda_color_manager *color_mgr,
+			    struct komeda_color_state *color_st,
+			    struct drm_plane_state *plane_st)
+{
+	int err;
+
+	if (komeda_component_is_new_active(c, plane_st->state))
+		plane_st->color_mgmt_changed = true;
+
+	if (!plane_st->color_mgmt_changed)
+		return 0;
+
+	err = komeda_color_validate(color_mgr, color_st,
+				    plane_st->degamma_lut,
+				    plane_st->gamma_lut);
+	if (err)
+		DRM_DEBUG_ATOMIC("%s validate color failed.\n", c->name);
+
+	return err;
+}
+
+static int
 komeda_layer_check_cfg(struct komeda_layer *layer,
 		       struct komeda_fb *kfb,
 		       struct komeda_data_flow_cfg *dflow)
@@ -361,6 +399,11 @@ komeda_layer_validate(struct komeda_layer *layer,
 	for (i = 0; i < fb->format->num_planes; i++)
 		st->addr[i] = komeda_fb_get_pixel_addr(kfb, dflow->in_x,
 						       dflow->in_y, i);
+
+	err = komeda_validate_plane_color(&layer->base, &layer->color_mgr,
+					  &st->color_st, plane_st);
+	if (err)
+		return err;
 
 	err = komeda_component_validate_private(&layer->base, c_st);
 	if (err)
@@ -1177,7 +1220,7 @@ komeda_pipeline_unbound_components(struct komeda_pipeline *pipe,
 {
 	struct drm_atomic_state *drm_st = new->obj.state;
 	struct komeda_pipeline_state *old = priv_to_pipe_st(pipe->obj.state);
-	struct komeda_component_state *c_st;
+	struct komeda_component_state *st;
 	struct komeda_component *c;
 	u32 disabling_comps, id;
 
@@ -1188,9 +1231,13 @@ komeda_pipeline_unbound_components(struct komeda_pipeline *pipe,
 	/* unbound all disabling component */
 	dp_for_each_set_bit(id, disabling_comps) {
 		c = komeda_pipeline_get_component(pipe, id);
-		c_st = komeda_component_get_state_and_set_user(c,
+		st = komeda_component_get_state_and_set_user(c,
 				drm_st, NULL, new->crtc);
-		WARN_ON(IS_ERR(c_st));
+
+		WARN_ON(IS_ERR(st));
+
+		if (has_bit(id, KOMEDA_PIPELINE_LAYERS))
+			komeda_color_cleanup_state(&to_layer_st(st)->color_st);
 	}
 }
 

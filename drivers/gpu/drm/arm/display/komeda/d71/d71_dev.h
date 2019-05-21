@@ -39,6 +39,8 @@ struct d71_dev {
 	u32 __iomem	*periph_addr;
 
 	struct d71_pipeline *pipes[D71_MAX_PIPELINE];
+	 /* global layer transform coefficient table manager */
+	struct komeda_coeffs_manager *glb_lt_mgr;
 };
 
 #define to_d71_pipeline(x)	container_of(x, struct d71_pipeline, base)
