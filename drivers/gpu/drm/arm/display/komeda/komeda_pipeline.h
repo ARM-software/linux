@@ -326,6 +326,8 @@ struct komeda_improc {
 struct komeda_improc_state {
 	struct komeda_component_state base;
 	u16 hsize, vsize;
+	u32 fgamma_coeffs[KOMEDA_N_GAMMA_COEFFS];
+	u32 ctm_coeffs[KOMEDA_N_CTM_COEFFS];
 };
 
 /* display timing controller */
