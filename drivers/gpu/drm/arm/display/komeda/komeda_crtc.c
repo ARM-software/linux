@@ -71,6 +71,8 @@ komeda_crtc_atomic_check(struct drm_crtc *crtc,
 	if (err)
 		return err;
 
+	drm_crtc_enable_color_mgmt(crtc, 0, true, KOMEDA_COLOR_LUT_SIZE);
+
 	return 0;
 }
 
