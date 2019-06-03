@@ -754,6 +754,55 @@ bool drm_property_replace_blob(struct drm_property_blob **blob,
 }
 EXPORT_SYMBOL(drm_property_replace_blob);
 
+/**
+ * drm_property_replace_blob_from_id - replace existing blob property
+ * @dev: drm device
+ * @blob: a pointer to the member blob to be replaced
+ * @blob_id: id of the new blob property
+ * @expected_size: expected size of the new blob
+ * @expected_elem_size: expected elements count of the new blob
+ * @replaced: true if the blob was in fact replaced
+ * @return 0 on success or error on failure
+ *
+ * This function will replace a blob property with the new blob of given blob
+ * id. If not found the new blob with the blob id or size doesn't meet the
+ * expected, will return on failure.
+ *
+ * Return: 0 when made a replace attempt.
+ */
+int drm_property_replace_blob_from_id(struct drm_device *dev,
+				      struct drm_property_blob **blob,
+				      uint64_t blob_id,
+				      ssize_t expected_size,
+				      ssize_t expected_elem_size,
+				      bool *replaced)
+{
+	struct drm_property_blob *new_blob = NULL;
+
+	if (blob_id != 0) {
+		new_blob = drm_property_lookup_blob(dev, blob_id);
+		if (new_blob == NULL)
+			return -EINVAL;
+
+		if (expected_size > 0 &&
+		    new_blob->length != expected_size) {
+			drm_property_blob_put(new_blob);
+			return -EINVAL;
+		}
+		if (expected_elem_size > 0 &&
+		    new_blob->length % expected_elem_size != 0) {
+			drm_property_blob_put(new_blob);
+			return -EINVAL;
+		}
+	}
+
+	*replaced |= drm_property_replace_blob(blob, new_blob);
+	drm_property_blob_put(new_blob);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_property_replace_blob_from_id);
+
 int drm_mode_getblob_ioctl(struct drm_device *dev,
 			   void *data, struct drm_file *file_priv)
 {

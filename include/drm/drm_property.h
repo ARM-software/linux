@@ -280,6 +280,12 @@ int drm_property_replace_global_blob(struct drm_device *dev,
 				     struct drm_property *prop_holds_id);
 bool drm_property_replace_blob(struct drm_property_blob **blob,
 			       struct drm_property_blob *new_blob);
+int drm_property_replace_blob_from_id(struct drm_device *dev,
+				      struct drm_property_blob **blob,
+				      uint64_t blob_id,
+				      ssize_t expected_size,
+				      ssize_t expected_elem_size,
+				      bool *replaced);
 struct drm_property_blob *drm_property_blob_get(struct drm_property_blob *blob);
 void drm_property_blob_put(struct drm_property_blob *blob);
 
