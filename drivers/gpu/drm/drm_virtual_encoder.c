@@ -173,6 +173,7 @@ static int drm_vencoder_bind(struct device *dev, struct device *master,
 	struct drm_connector *connector;
 	struct drm_device *drm = data;
 	struct drm_bridge *bridge = NULL;
+	struct device_node *np = NULL;
 	u32 crtcs = 0;
 	int ret;
 
@@ -184,10 +185,12 @@ static int drm_vencoder_bind(struct device *dev, struct device *master,
 	connector = &con->connector;
 	encoder = &con->encoder;
 
-	if (dev->of_node) {
-		crtcs = drm_of_find_possible_crtcs(drm, dev->of_node);
-		bridge = of_drm_find_bridge(dev->of_node);
-		con->timings = of_get_display_timings(dev->of_node);
+	np = dev->of_node;
+
+	if (np) {
+		crtcs = drm_of_find_possible_crtcs(drm, np);
+		bridge = of_drm_find_bridge(np);
+		con->timings = of_get_display_timings(np);
 		if (!con->timings) {
 			dev_err(dev, "failed to get display panel timings\n");
 			return ENXIO;
@@ -225,6 +228,9 @@ static int drm_vencoder_bind(struct device *dev, struct device *master,
 	connector->interlace_allowed = false;
 	connector->doublescan_allowed = false;
 	connector->polled = 0;
+
+	if (of_property_read_bool(np, "command_mode"))
+		connector->display_info.command_mode = true;
 
 	ret = drm_connector_init(drm, connector, &drm_virtcon_funcs,
 				 DRM_MODE_CONNECTOR_VIRTUAL);
