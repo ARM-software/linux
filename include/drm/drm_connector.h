@@ -461,6 +461,11 @@ struct drm_display_info {
 	 * @non_desktop: Non desktop display (HMD).
 	 */
 	bool non_desktop;
+
+	/**
+	 * @command_mode: Single frame refresh mode.
+	 */
+	bool command_mode;
 };
 
 int drm_display_info_set_bus_formats(struct drm_display_info *info,
