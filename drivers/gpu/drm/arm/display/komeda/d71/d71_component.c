@@ -1002,6 +1002,7 @@ static void d71_improc_update(struct komeda_component *c,
 			       to_d71_input_id(state, index));
 
 	malidp_write32(reg, BLK_SIZE, HV_SIZE(st->hsize, st->vsize));
+	malidp_write32(reg, IPS_DEPTH, st->color_depth);
 
 	if (crtc_st->color_mgmt_changed) {
 		mask |= IPS_CTRL_FT | IPS_CTRL_RGB;
@@ -1021,8 +1022,17 @@ static void d71_improc_update(struct komeda_component *c,
 		}
 	}
 
-	if (mask)
-		malidp_write32_mask(reg, BLK_CONTROL, mask, ctrl);
+	mask |= IPS_CTRL_YUV | IPS_CTRL_CHD422 | IPS_CTRL_CHD420;
+
+	/* config color format */
+	if (st->color_format == DRM_COLOR_FORMAT_YCRCB420)
+		ctrl |= IPS_CTRL_YUV | IPS_CTRL_CHD422 | IPS_CTRL_CHD420;
+	else if (st->color_format == DRM_COLOR_FORMAT_YCRCB422)
+		ctrl |= IPS_CTRL_YUV | IPS_CTRL_CHD422;
+	else if (st->color_format == DRM_COLOR_FORMAT_YCRCB444)
+		ctrl |= IPS_CTRL_YUV;
+
+	malidp_write32_mask(reg, BLK_CONTROL, mask, ctrl);
 }
 
 static void d71_improc_dump(struct komeda_component *c, struct seq_file *sf)

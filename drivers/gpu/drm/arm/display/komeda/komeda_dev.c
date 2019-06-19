@@ -101,12 +101,34 @@ static struct attribute_group komeda_sysfs_attr_group = {
 	.attrs = komeda_sysfs_entries,
 };
 
+static int to_color_format(const char *str)
+{
+	int format;
+
+	if (!strncmp(str, "RGB444", 7)) {
+		format = DRM_COLOR_FORMAT_RGB444;
+	} else if (!strncmp(str, "YCRCB444", 9)) {
+		format = DRM_COLOR_FORMAT_YCRCB444;
+	} else if (!strncmp(str, "YCRCB422", 9)) {
+		format = DRM_COLOR_FORMAT_YCRCB422;
+	} else if (!strncmp(str, "YCRCB420", 9)) {
+		format = DRM_COLOR_FORMAT_YCRCB420;
+	} else {
+		DRM_WARN("invalid color_format: %s, please set it to RGB444, YCRCB444, YCRCB422 or YCRCB420\n",
+			 str);
+		format = DRM_COLOR_FORMAT_RGB444;
+	}
+
+	return format;
+}
+
 static int komeda_parse_pipe_dt(struct komeda_dev *mdev, struct device_node *np)
 {
 	struct komeda_pipeline *pipe;
 	struct clk *clk;
 	u32 pipe_id;
-	int ret = 0;
+	int ret = 0, color_format;
+	const char *str;
 
 	ret = of_property_read_u32(np, "reg", &pipe_id);
 	if (ret != 0 || pipe_id >= mdev->n_pipelines)
@@ -120,6 +142,14 @@ static int komeda_parse_pipe_dt(struct komeda_dev *mdev, struct device_node *np)
 		return PTR_ERR(clk);
 	}
 	pipe->pxlclk = clk;
+
+	/* fetch DT configured color-format, if not set, use RGB444 */
+	if (!of_property_read_string(np, "color-format", &str))
+		color_format = to_color_format(str);
+	else
+		color_format = DRM_COLOR_FORMAT_RGB444;
+
+	pipe->improc->preferred_color_formats = (color_format << 1) - 1;
 
 	/* enum ports */
 	pipe->of_output_links[0] =

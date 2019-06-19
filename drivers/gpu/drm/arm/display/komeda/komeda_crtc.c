@@ -18,6 +18,33 @@
 #include "komeda_dev.h"
 #include "komeda_kms.h"
 
+void komeda_crtc_get_color_config(struct drm_crtc_state *crtc_st,
+				  u32 *color_depths, u32 *color_formats)
+{
+	struct drm_connector *conn;
+	struct drm_connector_state *conn_st;
+	u32 conn_color_formats = ~0u;
+	int i, min_bpc = 31, conn_bpc = 0;
+
+	for_each_new_connector_in_state(crtc_st->state, conn, conn_st, i) {
+		if (conn_st->crtc != crtc_st->crtc)
+			continue;
+
+		conn_bpc = conn->display_info.bpc ? conn->display_info.bpc : 8;
+		conn_color_formats &= conn->display_info.color_formats;
+
+		if (conn_bpc < min_bpc)
+			min_bpc = conn_bpc;
+	}
+
+	/* connector doesn't config any color_format, use RGB444 as default */
+	if (conn_color_formats == 0)
+		conn_color_formats = DRM_COLOR_FORMAT_RGB444;
+
+	*color_depths = GENMASK(conn_bpc, 0);
+	*color_formats = conn_color_formats;
+}
+
 static void komeda_crtc_update_clock_ratio(struct komeda_crtc_state *kcrtc_st)
 {
 	u64 pxlclk, aclk;
