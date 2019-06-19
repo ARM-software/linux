@@ -786,6 +786,7 @@ komeda_improc_validate(struct komeda_improc *improc,
 		       struct komeda_data_flow_cfg *dflow)
 {
 	struct drm_crtc *crtc = kcrtc_st->base.crtc;
+	struct drm_crtc_state *crtc_st = &kcrtc_st->base;
 	struct komeda_component_state *c_st;
 	struct komeda_improc_state *st;
 
@@ -798,6 +799,36 @@ komeda_improc_validate(struct komeda_improc *improc,
 
 	st->hsize = dflow->in_w;
 	st->vsize = dflow->in_h;
+
+	if (drm_atomic_crtc_needs_modeset(crtc_st)) {
+		u32 output_depths, output_formats;
+		u32 avail_depths, avail_formats;
+
+		komeda_crtc_get_color_config(crtc_st, &output_depths,
+					     &output_formats);
+
+		avail_depths = output_depths & improc->supported_color_depths;
+		if (avail_depths == 0) {
+			DRM_DEBUG_ATOMIC("No available color depths, conn depths: 0x%x & display: 0x%x\n",
+					 output_depths,
+					 improc->supported_color_depths);
+			return -EINVAL;
+		}
+
+		avail_formats = output_formats &
+				improc->supported_color_formats &
+				improc->preferred_color_formats;
+		if (avail_formats == 0) {
+			DRM_DEBUG_ATOMIC("No available color_formats, conn formats 0x%x & display: 0x%x & preferred: 0x%x\n",
+					 output_formats,
+					 improc->supported_color_formats,
+					 improc->preferred_color_formats);
+			return -EINVAL;
+		}
+
+		st->color_depth = __fls(avail_depths);
+		st->color_format = BIT(__fls(avail_formats));
+	}
 
 	if (kcrtc_st->base.color_mgmt_changed) {
 		drm_lut_to_fgamma_coeffs(kcrtc_st->base.gamma_lut,

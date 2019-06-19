@@ -317,6 +317,8 @@ struct komeda_splitter_state {
 struct komeda_improc {
 	struct komeda_component base;
 	u32 supported_color_formats;  /* DRM_RGB/YUV444/YUV420*/
+	/* the preferred order is from MSB to LSB YUV420 --> RGB444 */
+	u32 preferred_color_formats;
 	u32 supported_color_depths; /* BIT(8) | BIT(10)*/
 	u8 supports_degamma : 1;
 	u8 supports_csc : 1;
@@ -325,6 +327,7 @@ struct komeda_improc {
 
 struct komeda_improc_state {
 	struct komeda_component_state base;
+	u8 color_format, color_depth;
 	u16 hsize, vsize;
 	u32 fgamma_coeffs[KOMEDA_N_GAMMA_COEFFS];
 	u32 ctm_coeffs[KOMEDA_N_CTM_COEFFS];
