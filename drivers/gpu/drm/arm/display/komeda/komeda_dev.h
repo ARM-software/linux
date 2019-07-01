@@ -207,4 +207,6 @@ void komeda_dev_destroy(struct komeda_dev *mdev);
 
 struct komeda_dev *dev_to_mdev(struct device *dev);
 
+int komeda_dev_resume(struct komeda_dev *mdev);
+int komeda_dev_suspend(struct komeda_dev *mdev);
 #endif /*_KOMEDA_DEV_H_*/
