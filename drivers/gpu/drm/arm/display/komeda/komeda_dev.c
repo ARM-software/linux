@@ -81,6 +81,7 @@ config_id_show(struct device *dev, struct device_attribute *attr, char *buf)
 	memset(&config_id, 0, sizeof(config_id));
 
 	config_id.max_line_sz = pipe->layers[0]->hsize_in.end;
+	config_id.side_by_side = mdev->side_by_side;
 	config_id.n_pipelines = mdev->n_pipelines;
 	config_id.n_scalers = pipe->n_scalers;
 	config_id.n_layers = pipe->n_layers;
