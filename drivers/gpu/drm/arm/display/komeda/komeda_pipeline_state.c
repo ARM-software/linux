@@ -1405,6 +1405,48 @@ int komeda_build_wb_split_data_flow(struct komeda_layer *wb_layer,
 	return komeda_wb_layer_validate(wb_layer, conn_st, dflow);
 }
 
+/* writeback side by side split data path:
+ *
+ * slave.compiz -> slave.wb_layer - > fb (right-part)
+ * master.compiz -> master.wb_layer -> fb (left-part)
+ */
+int komeda_build_wb_sbs_data_flow(struct komeda_crtc *kcrtc,
+				  struct drm_connector_state *conn_st,
+				  struct komeda_crtc_state *kcrtc_st,
+				  struct komeda_data_flow_cfg *wb_dflow)
+{
+	struct komeda_pipeline *master = kcrtc->master;
+	struct komeda_pipeline *slave = kcrtc->slave;
+	struct komeda_data_flow_cfg m_dflow, s_dflow;
+	int err;
+
+	if (wb_dflow->en_scaling || wb_dflow->en_img_enhancement) {
+		DRM_DEBUG_ATOMIC("sbs doesn't support WB_scaling\n");
+		return -EINVAL;
+	}
+
+	memcpy(&m_dflow, wb_dflow, sizeof(*wb_dflow));
+	memcpy(&s_dflow, wb_dflow, sizeof(*wb_dflow));
+
+	/* master writeout the left part */
+	m_dflow.in_w >>= 1;
+	m_dflow.out_w >>= 1;
+	m_dflow.input.component = &master->compiz->base;
+
+	/* slave writeout the right part */
+	s_dflow.in_w >>= 1;
+	s_dflow.out_w >>= 1;
+	s_dflow.in_x += m_dflow.in_w;
+	s_dflow.out_x += m_dflow.out_w;
+	s_dflow.input.component = &slave->compiz->base;
+
+	err = komeda_wb_layer_validate(master->wb_layer, conn_st, &m_dflow);
+	if (err)
+		return err;
+
+	return komeda_wb_layer_validate(slave->wb_layer, conn_st, &s_dflow);
+}
+
 /* build display output data flow, the data path is:
  * compiz -> improc -> timing_ctrlr
  */

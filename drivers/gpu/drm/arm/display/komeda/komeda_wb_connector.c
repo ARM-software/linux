@@ -37,6 +37,7 @@ komeda_wb_encoder_atomic_check(struct drm_encoder *encoder,
 			       struct drm_crtc_state *crtc_st,
 			       struct drm_connector_state *conn_st)
 {
+	struct komeda_crtc *kcrtc = to_kcrtc(crtc_st->crtc);
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(crtc_st);
 	struct drm_writeback_job *writeback_job = conn_st->writeback_job;
 	struct komeda_layer *wb_layer;
@@ -66,7 +67,10 @@ komeda_wb_encoder_atomic_check(struct drm_encoder *encoder,
 	if (err)
 		return err;
 
-	if (dflow.en_split)
+	if (kcrtc->side_by_side)
+		err = komeda_build_wb_sbs_data_flow(kcrtc,
+				conn_st, kcrtc_st, &dflow);
+	else if (dflow.en_split)
 		err = komeda_build_wb_split_data_flow(wb_layer,
 				conn_st, kcrtc_st, &dflow);
 	else
