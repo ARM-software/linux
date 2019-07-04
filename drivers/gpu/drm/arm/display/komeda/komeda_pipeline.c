@@ -326,12 +326,54 @@ static void komeda_pipeline_assemble(struct komeda_pipeline *pipe)
 struct komeda_pipeline *
 komeda_pipeline_get_slave(struct komeda_pipeline *master)
 {
-	struct komeda_component *slave;
+	struct komeda_dev *mdev = master->mdev;
+	struct komeda_component *comp, *slave;
+	u32 avail_inputs;
 
-	slave = komeda_component_pickup_input(&master->compiz->base,
-					      KOMEDA_PIPELINE_COMPIZS);
+	/* on SBS, slave pipeline merge to master via image processor */
+	if (mdev->side_by_side) {
+		comp = &master->improc->base;
+		avail_inputs = KOMEDA_PIPELINE_IMPROCS;
+	} else {
+		comp = &master->compiz->base;
+		avail_inputs = KOMEDA_PIPELINE_COMPIZS;
+	}
+
+	slave = komeda_component_pickup_input(comp, avail_inputs);
 
 	return slave ? slave->pipeline : NULL;
+}
+
+static int komeda_assemble_side_by_side(struct komeda_dev *mdev)
+{
+	struct komeda_pipeline *master, *slave;
+	int i;
+
+	if (!mdev->side_by_side)
+		return 0;
+
+	if (mdev->side_by_side_master >= mdev->n_pipelines) {
+		DRM_ERROR("DT configured side by side master-%d is invalid.\n",
+			  mdev->side_by_side_master);
+		return -EINVAL;
+	}
+
+	master = mdev->pipelines[mdev->side_by_side_master];
+	slave = komeda_pipeline_get_slave(master);
+	if (!slave || slave->n_layers != master->n_layers) {
+		DRM_ERROR("Current HW doesn't support side by side.\n");
+		return -EINVAL;
+	}
+
+	if (!master->dual_link) {
+		DRM_DEBUG_ATOMIC("SBS can not work without dual link.\n");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < master->n_layers; i++)
+		master->layers[i]->sbs_slave = slave->layers[i];
+
+	return 0;
 }
 
 int komeda_assemble_pipelines(struct komeda_dev *mdev)
@@ -346,7 +388,7 @@ int komeda_assemble_pipelines(struct komeda_dev *mdev)
 		komeda_pipeline_dump(pipe);
 	}
 
-	return 0;
+	return komeda_assemble_side_by_side(mdev);
 }
 
 void komeda_pipeline_dump_register(struct komeda_pipeline *pipe,
