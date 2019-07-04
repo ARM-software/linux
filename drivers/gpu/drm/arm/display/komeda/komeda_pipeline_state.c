@@ -1158,6 +1158,194 @@ int komeda_build_layer_split_data_flow(struct komeda_layer *left,
 	return err;
 }
 
+/* split func will split configuration of master plane to two layer data
+ * flows, which will be fed into master and slave pipeline then.
+ * NOTE: @m_dflow is first used as input argument to pass the configuration of
+ *	 master_plane. when the split is done, @*m_dflow @*s_dflow are the
+ *	 output data flow for pipeline.
+ */
+static int
+komeda_split_sbs_master_data_flow(struct komeda_crtc_state *kcrtc_st,
+				  struct komeda_data_flow_cfg **m_dflow,
+				  struct komeda_data_flow_cfg **s_dflow)
+{
+	struct komeda_data_flow_cfg *master = *m_dflow;
+	struct komeda_data_flow_cfg *slave = *s_dflow;
+	u32 disp_end = master->out_x + master->out_w;
+	u16 boundary;
+
+	pipeline_composition_size(kcrtc_st, &boundary, NULL);
+
+	if (disp_end <= boundary) {
+		/* the master viewport only located in master side, no need
+		 * slave anymore
+		 */
+		*s_dflow = NULL;
+	} else if ((master->out_x < boundary) && (disp_end > boundary)) {
+		/* the master viewport across two pipelines, split it */
+		bool flip_h = has_flip_h(master->rot);
+		bool r90  = drm_rotation_90_or_270(master->rot);
+		u32 src_x = master->in_x;
+		u32 src_y = master->in_y;
+		u32 src_w = master->in_w;
+		u32 src_h = master->in_h;
+
+		if (master->en_scaling || master->en_img_enhancement) {
+			DRM_DEBUG_ATOMIC("sbs doesn't support to split a scaling image.\n");
+			return -EINVAL;
+		}
+
+		memcpy(slave, master, sizeof(*master));
+
+		/* master for left part of display, slave for the right part */
+		/* split the disp_rect */
+		master->out_w = boundary - master->out_x;
+		slave->out_w  = disp_end - boundary;
+		slave->out_x  = 0;
+
+		if (r90) {
+			master->in_h = master->out_w;
+			slave->in_h = slave->out_w;
+
+			if (flip_h)
+				master->in_y = src_y + src_h - master->in_h;
+			else
+				slave->in_y = src_y + src_h - slave->in_h;
+		} else {
+			master->in_w = master->out_w;
+			slave->in_w = slave->out_w;
+
+			/* on flip_h, the left display content from the right-source */
+			if (flip_h)
+				master->in_x = src_w + src_x - master->in_w;
+			else
+				slave->in_x = src_w + src_x - slave->in_w;
+		}
+	} else if (master->out_x >= boundary) {
+		/* disp_rect only locate in right part, move the dflow to slave */
+		master->out_x -= boundary;
+		*s_dflow = master;
+		*m_dflow = NULL;
+	}
+
+	return 0;
+}
+
+static int
+komeda_split_sbs_slave_data_flow(struct komeda_crtc_state *kcrtc_st,
+				 struct komeda_data_flow_cfg *slave)
+{
+	u16 boundary;
+
+	pipeline_composition_size(kcrtc_st, &boundary, NULL);
+
+	if (slave->out_x < boundary) {
+		DRM_DEBUG_ATOMIC("SBS Slave plane is only allowed to configure the right part frame.\n");
+		return -EINVAL;
+	}
+
+	/* slave->disp_rect locate in the right part */
+	slave->out_x -= boundary;
+
+	return 0;
+}
+
+/* On side by side mode, The full display frame will be split to two parts
+ * (Left/Right), and each part will be handled by a single pipeline separately,
+ * master pipeline for left part, slave for right.
+ *
+ * To simplify the usage and implementation, komeda use the following scheme
+ * to do the side by side split
+ * 1. The planes also have been grouped into two classes:
+ *    master-planes and slave-planes.
+ * 2. The master plane can display its image on any location of the final/full
+ *    display frame, komeda will help to split the plane configuration to two
+ *    parts and fed them into master and slave pipelines.
+ * 3. The slave plane only can put its display rect on the right part of the
+ *    final display frame, and its data is only can be fed into the slave
+ *    pipeline.
+ *
+ * From the perspective of resource usage and assignment:
+ * The master plane can use the resources from the master pipeline and slave
+ * pipeline both, but slave plane only can use the slave pipeline resources.
+ *
+ * With such scheme, the usage of master planes are same as the none
+ * side_by_side mode. user can easily skip the slave planes and no need to
+ * consider side_by_side for them.
+ *
+ * NOTE: side_by_side split is occurred on pipeline level which split the plane
+ *	 data flow into pipelines, but the layer split is a pipeline
+ *	 internal split which splits the data flow into pipeline layers.
+ *	 So komeda still supports to apply a further layer split to the sbs
+ *	 split data flow.
+ */
+int komeda_build_layer_sbs_data_flow(struct komeda_layer *layer,
+				     struct komeda_plane_state *kplane_st,
+				     struct komeda_crtc_state *kcrtc_st,
+				     struct komeda_data_flow_cfg *dflow)
+{
+	struct komeda_crtc *kcrtc = to_kcrtc(kcrtc_st->base.crtc);
+	struct drm_plane *plane = kplane_st->base.plane;
+	struct komeda_data_flow_cfg temp, *master_dflow, *slave_dflow;
+	struct komeda_layer *master, *slave;
+	bool master_plane = layer->base.pipeline == kcrtc->master;
+	int err;
+
+	DRM_DEBUG_ATOMIC("SBS prepare %s-[PLANE:%d:%s]: %s.\n",
+			 master_plane ? "Master" : "Slave",
+			 plane->base.id, plane->name,
+			 komeda_data_flow_msg(dflow));
+
+	if (master_plane) {
+		master = layer;
+		slave = layer->sbs_slave;
+		master_dflow = dflow;
+		slave_dflow  = &temp;
+		err = komeda_split_sbs_master_data_flow(kcrtc_st,
+				&master_dflow, &slave_dflow);
+	} else {
+		master = NULL;
+		slave = layer;
+		master_dflow = NULL;
+		slave_dflow = dflow;
+		err = komeda_split_sbs_slave_data_flow(kcrtc_st, slave_dflow);
+	}
+
+	if (err)
+		return err;
+
+	if (master_dflow) {
+		DRM_DEBUG_ATOMIC("SBS Master-%s assigned: %s\n",
+			master->base.name, komeda_data_flow_msg(master_dflow));
+
+		if (master_dflow->en_split)
+			err = komeda_build_layer_split_data_flow(master,
+					kplane_st, kcrtc_st, master_dflow);
+		else
+			err = komeda_build_layer_data_flow(master,
+					kplane_st, kcrtc_st, master_dflow);
+
+		if (err)
+			return err;
+	}
+
+	if (slave_dflow) {
+		DRM_DEBUG_ATOMIC("SBS Slave-%s assigned: %s\n",
+			slave->base.name, komeda_data_flow_msg(slave_dflow));
+
+		if (slave_dflow->en_split)
+			err = komeda_build_layer_split_data_flow(slave,
+					kplane_st, kcrtc_st, slave_dflow);
+		else
+			err = komeda_build_layer_data_flow(slave,
+					kplane_st, kcrtc_st, slave_dflow);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 /* writeback data path: compiz -> scaler -> wb_layer -> memory */
 int komeda_build_wb_data_flow(struct komeda_layer *wb_layer,
 			      struct drm_connector_state *conn_st,
