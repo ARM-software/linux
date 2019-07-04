@@ -362,15 +362,23 @@ komeda_crtc_atomic_flush(struct drm_crtc *crtc,
 	komeda_crtc_do_flush(crtc, old);
 }
 
-/* Returns the minimum frequency of the aclk rate (main engine clock) in Hz */
+/*
+ * Returns the minimum frequency of the aclk rate (main engine clock) in Hz.
+ *
+ * The DPU output can be split into two halves, to stay within the bandwidth
+ * capabilities of the external link (dual-link mode).
+ * In these cases, each output link runs at half the pixel clock rate of the
+ * combined display, and has half the number of pixels.
+ * Beside split the output, the DPU internal pixel processing also can be split
+ * into two halves (LEFT/RIGHT) and handles by two pipelines simultaneously.
+ * So if side by side, the pipeline (main engine clock) also can run at half
+ * the clock rate of the combined display.
+ */
 static unsigned long
 komeda_calc_min_aclk_rate(struct komeda_crtc *kcrtc,
 			  unsigned long pxlclk)
 {
-	/* Once dual-link one display pipeline drives two display outputs,
-	 * the aclk needs run on the double rate of pxlclk
-	 */
-	if (kcrtc->master->dual_link)
+	if (kcrtc->master->dual_link && !kcrtc->side_by_side)
 		return pxlclk * 2;
 	else
 		return pxlclk;

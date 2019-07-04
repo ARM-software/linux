@@ -528,6 +528,7 @@ struct komeda_crtc_state;
 struct komeda_crtc;
 
 void pipeline_composition_size(struct komeda_crtc_state *kcrtc_st,
+			       bool side_by_side,
 			       u16 *hsize, u16 *vsize);
 
 int komeda_build_layer_data_flow(struct komeda_layer *layer,
