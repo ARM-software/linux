@@ -196,6 +196,9 @@ static int komeda_parse_dt(struct device *dev, struct komeda_dev *mdev)
 		}
 	}
 
+	mdev->side_by_side = !of_property_read_u32(np, "side_by_side_master",
+					&mdev->side_by_side_master);
+
 	return ret;
 }
 

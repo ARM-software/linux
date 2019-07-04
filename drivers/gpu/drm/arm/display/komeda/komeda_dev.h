@@ -165,6 +165,15 @@ struct komeda_dev {
 
 	/** @irq: irq number */
 	int irq;
+	/**
+	 * @side_by_side:
+	 *
+	 * on sbs the whole display frame will be split to two halves (1:2),
+	 * master pipeline handles the left part, slave for the right part
+	 */
+	bool side_by_side;
+	/** @side_by_side_master: master pipe id for side by side */
+	int side_by_side_master;
 
 	/** @lock: used to protect dpmode */
 	struct mutex lock;

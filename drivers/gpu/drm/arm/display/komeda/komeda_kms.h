@@ -76,6 +76,9 @@ struct komeda_crtc {
 	 */
 	struct komeda_pipeline *slave;
 
+	/** @side_by_side: if the master and slave works on side by side mode */
+	bool side_by_side;
+
 	/** @slave_planes: komeda slave planes mask */
 	u32 slave_planes;
 

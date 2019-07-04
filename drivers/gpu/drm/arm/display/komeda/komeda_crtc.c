@@ -543,16 +543,21 @@ int komeda_kms_setup_crtcs(struct komeda_kms_dev *kms,
 
 		crtc->master = master;
 		crtc->slave  = komeda_pipeline_get_slave(master);
+		crtc->side_by_side = mdev->side_by_side;
 
 		if (crtc->slave)
 			sprintf(str, "pipe-%d", crtc->slave->id);
 		else
 			sprintf(str, "None");
 
-		DRM_INFO("CRTC-%d: master(pipe-%d) slave(%s).\n",
-			 kms->n_crtcs, master->id, str);
+		DRM_INFO("CRTC-%d: master(pipe-%d) slave(%s) sbs(%s).\n",
+			 kms->n_crtcs, master->id, str,
+			 crtc->side_by_side ? "On" : "Off");
 
 		kms->n_crtcs++;
+
+		if (mdev->side_by_side)
+			break;
 	}
 
 	return 0;
