@@ -158,6 +158,9 @@ static int komeda_wb_connector_add(struct komeda_kms_dev *kms,
 		return -ENOMEM;
 
 	kwb_conn->wb_layer = kcrtc->master->wb_layer;
+	kwb_conn->expected_pipes = BIT(kcrtc->master->id);
+	if (kcrtc->side_by_side)
+		kwb_conn->expected_pipes |= BIT(kcrtc->slave->id);
 
 	wb_conn = &kwb_conn->base;
 	wb_conn->encoder.possible_crtcs = BIT(drm_crtc_index(&kcrtc->base));
