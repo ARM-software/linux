@@ -195,27 +195,28 @@ unlock:
 	return err;
 }
 
-void komeda_crtc_handle_event(struct komeda_crtc   *kcrtc,
+void komeda_crtc_handle_event(struct komeda_crtc *kcrtc,
 			      struct komeda_events *evts)
 {
 	struct drm_crtc *crtc = &kcrtc->base;
+	struct komeda_wb_connector *wb_conn = kcrtc->wb_conn;
 	u32 events = evts->pipes[kcrtc->master->id];
 
 	if (events & KOMEDA_EVENT_VSYNC)
 		drm_crtc_handle_vblank(crtc);
 
-	if (events & KOMEDA_EVENT_EOW) {
-		struct komeda_wb_connector *wb_conn = kcrtc->wb_conn;
-
-		if (wb_conn)
-			drm_writeback_signal_completion(&wb_conn->base, 0);
-		else
-			DRM_WARN("CRTC[%d]: EOW happen but no wb_connector.\n",
-				 drm_crtc_index(&kcrtc->base));
-	}
-	/* will handle it together with the write back support */
+	/* handles writeback event */
 	if (events & KOMEDA_EVENT_EOW)
-		DRM_DEBUG("EOW.\n");
+		wb_conn->complete_pipes |= BIT(kcrtc->master->id);
+
+	if (kcrtc->side_by_side &&
+	    (evts->pipes[kcrtc->slave->id] & KOMEDA_EVENT_EOW))
+		wb_conn->complete_pipes |= BIT(kcrtc->slave->id);
+
+	if (wb_conn->expected_pipes == wb_conn->complete_pipes) {
+		wb_conn->complete_pipes = 0;
+		drm_writeback_signal_completion(&wb_conn->base, 0);
+	}
 
 	if (events & KOMEDA_EVENT_FLIP) {
 		unsigned long flags;
