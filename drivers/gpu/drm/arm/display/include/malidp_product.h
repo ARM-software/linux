@@ -27,7 +27,8 @@ union komeda_config_id {
 			n_scalers:2, /* number of scalers per pipeline */
 			n_layers:3, /* number of layers per pipeline */
 			n_richs:3, /* number of rich layers per pipeline */
-			reserved_bits:6;
+			side_by_side:1, /* if HW works on side_by_side mode */
+			reserved_bits:5;
 	};
 	__u32 value;
 };
