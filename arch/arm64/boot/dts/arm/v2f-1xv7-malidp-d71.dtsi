@@ -5,12 +5,12 @@
 		reg = <0xc00000 0x20000>;
 		interrupts = <0 168 4>;
 		interrupt-names = "DPU";
-		clocks = <&dpu_mclk>, <&dpu_aclk>;
-		clock-names = "mclk", "pclk";
+		clocks = <&dpu_aclk>;
+		clock-names = "aclk";
 
 		pl0: pipeline@0 {
-			clocks = <&fpgaosc2>, <&dpu_aclk>;
-			clock-names = "pxclk", "aclk";
+			clocks = <&fpgaosc2>;
+			clock-names = "pxclk";
 			reg = <0>;
 
 			ports {
@@ -26,8 +26,8 @@
 			};
 		};
 		pl1: pipeline@1 {
-			clocks = <&fpgaosc2>, <&dpu_aclk>;
-			clock-names = "pxclk", "aclk";
+			clocks = <&fpgaosc2>;
+			clock-names = "pxclk";
 			reg = <1>;
 
 			ports {
@@ -43,6 +43,7 @@
 			};
 		};
 	};
+
 	aeu: aeu@c20000 {
 		compatible = "arm,mali-aeu";
 		reg = <0xc20000 0x20000>;

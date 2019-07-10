@@ -14,14 +14,6 @@
 		clock-output-names = "fpga:dpu_aclk";
 	};
 
-	dpu_mclk: dpu_mclk {
-		/* 77.1 MHz derived from 24 MHz reference clock */
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <77100000>;
-		clock-output-names = "fpga:dpu_mclk";
-	};
-
 	dcc_lt {
 		compatible = "arm,vexpress,config-bus";
 		arm,vexpress,site = <2>;
@@ -66,24 +58,6 @@
 		clocks = <&fpgaosc0>;
 		clock-names = "clk_mali";
 		status = "disabled";
-	};
-
-	smmu_fpga0: smmu@c070000 {
-		compatible = "arm,mmu-400", "arm,smmu-v1";
-		reg = <0xc070000 0x10000>;
-		#global-interrupts = <1>;
-		interrupts = <3>, <3>;
-		#iommu-cells = <1>;
-		status = "disabled";
-	};
-
-	smmu_fpga1: smmu@c080000 {
-		compatible = "arm,mmu-400", "arm,smmu-v1";
-		reg = <0xc080000 0x10000>;
-		#global-interrupts = <1>;
-		interrupts = <3>, <3>;
-		status = "disabled";
-		#iommu-cells = <1>;
 	};
 
 	smmu: smmu@e00000 {
