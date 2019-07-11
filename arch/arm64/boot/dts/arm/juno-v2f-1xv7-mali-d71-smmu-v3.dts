@@ -56,17 +56,17 @@
 };
 
 &db_dvi0_in {
-	remote-endpoint = <&dp0_pl0_out>;
+	remote-endpoint = <&dp0_pl0_link0>;
 };
 
 &db_dvi1_in {
-	remote-endpoint = <&dp0_pl1_out>;
+	remote-endpoint = <&dp0_pl1_link0>;
 };
 
-&dp0_pl0_out {
+&dp0_pl0_link0 {
 	remote-endpoint = <&db_dvi0_in>;
 };
 
-&dp0_pl1_out {
+&dp0_pl1_link0 {
 	remote-endpoint = <&db_dvi1_in>;
 };

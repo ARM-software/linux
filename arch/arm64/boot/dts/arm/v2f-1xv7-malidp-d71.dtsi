@@ -13,17 +13,23 @@
 			clock-names = "pxclk";
 			reg = <0>;
 
-			ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
 				#address-cells = <1>;
 				#size-cells = <0>;
-
-				port@0 {
+				dp0_pl0_link0: endpoint@0 {
 					reg = <0>;
-					dp0_pl0_out: endpoint {
 
-					};
+				};
+				dp0_pl0_link1: endpoint@1 {
+					reg = <1>;
 				};
 			};
+
 		};
 		pl1: pipeline@1 {
 			clocks = <&fpgaosc2>;
@@ -36,7 +42,7 @@
 
 				port@0 {
 					reg = <0>;
-					dp0_pl1_out: endpoint {
+					dp0_pl1_link0: endpoint {
 
 					};
 				};
@@ -51,4 +57,41 @@
 		interrupt-names = "AEU";
 		clocks = <&dpu_aclk>;
 		clock-names = "aclk";
+	};
+
+	split_connector: split_connector@c020054 {
+		compatible = "drm,split-connector";
+		reg = <0xc020054 0x4>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				split_connector_in0: endpoint@0 {
+					reg = <0>;
+					remote-endpoint = <&dp0_pl0_link0>;
+				};
+				split_connector_in1: endpoint@1 {
+					reg = <1>;
+					remote-endpoint = <&dp0_pl0_link1>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				split_connector_out0: endpoint@0 {
+					reg = <0>;
+				};
+
+				split_connector_out1: endpoint@1 {
+					reg = <1>;
+				};
+			};
+		};
 	};
