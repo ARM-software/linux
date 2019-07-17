@@ -8,4 +8,3 @@ dtb-$(CONFIG_ARCH_VEXPRESS) += juno-v2f-1xv7-mali-d71-sbs.dtb
 dtb-$(CONFIG_ARCH_VEXPRESS) += juno-v2f-1xv7-mali-d32.dtb
 dtb-$(CONFIG_ARCH_VEXPRESS) += rtsm_ve-aemv8a.dtb
 dtb-$(CONFIG_ARCH_VEXPRESS) += vexpress-v2f-1xv7-ca53x2.dtb
-

@@ -53,10 +53,28 @@
          status = "okay";
       };
 
+/*
 &vencoder_in {
 	remote-endpoint = <&dp0_pl0_link0>;
 };
 
 &dp0_pl0_link0 {
 	remote-endpoint = <&vencoder_in>;
+*/
+
+&vencoder_in1 {
+	remote-endpoint = <&dp0_pl0_link0>;
+};
+
+&dp0_pl0_link0 {
+	remote-endpoint = <&vencoder_in1>;
+};
+
+
+&vencoder_in2 {
+	remote-endpoint = <&dp0_pl1_link0>;
+};
+
+&dp0_pl1_link0 {
+	remote-endpoint = <&vencoder_in2>;
 };
