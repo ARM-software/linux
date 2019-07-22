@@ -9,6 +9,14 @@ the display happens outside the kernel world.
 Required properties:
   - compatible: should be "drm,virtual-encoder"
 
+Optional properties:
+  - command_mode: This is the single frame refresh mode(which can be used on
+    mipi dsi command mode display panels) in which the output is disabled unless
+    the DPU software driver loads another scene while the current frame is being
+    displayed.
+  - vfp-range: This denotes the "variable refresh rate" feature supports enabled.
+    The range value has min and max "vertical front porch" value of the connector.
+
 Required sub-nodes:
   - display-timings: node describing the virtual output timings information,
     as specified in panel/display-timing.txt file.
@@ -23,6 +31,8 @@ Example:
 
 	vencoder {
 		compatible = "drm,virtual-encoder";
+		command_mode = "true";
+		vfp-range = <33 534>;
 		display-timings {
 			native-mode = <&timing1>;
 			timing0: timing@0 {
