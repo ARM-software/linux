@@ -424,10 +424,36 @@ komeda_crtc_mode_valid(struct drm_crtc *crtc, const struct drm_display_mode *m)
 	struct komeda_dev *mdev = crtc->dev->dev_private;
 	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
 	struct komeda_pipeline *master = kcrtc->master;
-	unsigned long min_pxlclk, min_aclk;
+	struct komeda_compiz *compiz = master->compiz;
+	unsigned long min_pxlclk, min_aclk, delta, full_frame;
+	int hdisplay = m->hdisplay;
 
 	if (m->flags & DRM_MODE_FLAG_INTERLACE)
 		return MODE_NO_INTERLACE;
+
+	full_frame = m->htotal * m->vtotal;
+	delta = abs(m->clock * 1000 - m->vrefresh * full_frame);
+	if (m->vrefresh && (delta > full_frame)) {
+		DRM_DEBUG_ATOMIC("mode clock check error!\n");
+		return MODE_CLOCK_RANGE;
+	}
+
+	if (kcrtc->side_by_side)
+		hdisplay /= 2;
+
+	if (!in_range(&compiz->hsize, hdisplay)) {
+		DRM_DEBUG_ATOMIC("hdisplay[%u] is out of range[%u, %u]!\n",
+				 hdisplay, compiz->hsize.start,
+				 compiz->hsize.end);
+		return MODE_BAD_HVALUE;
+	}
+
+	if (!in_range(&compiz->vsize, m->vdisplay)) {
+		DRM_DEBUG_ATOMIC("vdisplay[%u] is out of range[%u, %u]!\n",
+				 m->vdisplay, compiz->vsize.start,
+				 compiz->vsize.end);
+		return MODE_BAD_VVALUE;
+	}
 
 	min_pxlclk = m->clock * 1000;
 	if (master->dual_link)
