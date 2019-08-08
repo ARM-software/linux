@@ -246,6 +246,8 @@ struct komeda_layer {
 	struct malidp_range hsize_in, vsize_in;
 	struct komeda_color_manager color_mgr;
 	u32 layer_type; /* RICH, SIMPLE or WB */
+	u32 line_sz;
+	u32 yuv_line_sz; /* maximum line size for YUV422 and YUV420 */
 	u32 supported_rots;
 	/* komeda supports layer split which splits a whole image to two parts
 	 * left and right and handle them by two individual layer processors
