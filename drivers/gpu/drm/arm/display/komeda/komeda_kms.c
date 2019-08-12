@@ -257,11 +257,36 @@ static int komeda_crtc_prepare_planes(struct drm_crtc *crtc,
 	return 0;
 }
 
+/**
+ * komeda_vrr_match_mode - check if two modes are VRR-compatible.
+ * I.e. if both mode have the same timings except for VFP.
+ */
+static bool komeda_vrr_match_mode(const struct drm_display_mode *mode1,
+				  const struct drm_display_mode *mode2)
+{
+	return drm_mode_match(mode1, mode2,
+			      DRM_MODE_MATCH_CLOCK |
+			      DRM_MODE_MATCH_FLAGS |
+			      DRM_MODE_MATCH_3D_FLAGS|
+			      DRM_MODE_MATCH_ASPECT_RATIO) &&
+		mode1->hdisplay == mode2->hdisplay &&
+		mode1->hsync_start == mode2->hsync_start &&
+		mode1->hsync_end == mode2->hsync_end &&
+		mode1->htotal == mode2->htotal &&
+		mode1->hskew == mode2->hskew &&
+		mode1->vdisplay == mode2->vdisplay &&
+		mode1->vsync_end - mode1->vsync_start ==
+		mode2->vsync_end - mode2->vsync_start &&
+		mode1->vtotal - mode1->vsync_end ==
+		mode2->vtotal - mode2->vsync_end &&
+		mode1->vscan == mode2->vscan;
+}
+
 static int komeda_kms_check(struct drm_device *dev,
 			    struct drm_atomic_state *state)
 {
 	struct drm_crtc *crtc;
-	struct drm_crtc_state *new_crtc_st;
+	struct drm_crtc_state *old_crtc_st, *new_crtc_st;
 	int i, err;
 
 	err = drm_atomic_helper_check_modeset(dev, state);
@@ -272,7 +297,12 @@ static int komeda_kms_check(struct drm_device *dev,
 	 * so need to add all affected_planes (even unchanged) to
 	 * drm_atomic_state.
 	 */
-	for_each_new_crtc_in_state(state, crtc, new_crtc_st, i) {
+	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_st, new_crtc_st, i) {
+		if (new_crtc_st->mode_changed &&
+		    komeda_vrr_match_mode(&old_crtc_st->mode,
+					  &new_crtc_st->mode))
+			new_crtc_st->mode_changed = false;
+
 		err = drm_atomic_add_affected_planes(state, crtc);
 		if (err)
 			return err;
