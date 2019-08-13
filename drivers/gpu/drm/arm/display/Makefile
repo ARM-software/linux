@@ -5,9 +5,11 @@
 ARCH ?= $(shell uname -m)
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
-default: module
+default: strict
 
+strict:
+	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(PWD) CONFIG_DRM_KOMEDA=m W=1 C=1 CF='-fdiagnostic-prefix -D__CHECK_ENDIAN'
 module:
-	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(PWD) CONFIG_DRM_KOMEDA=m CF='-fdiagnostic-prefix -D__CHECK_ENDIAN'
+	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(PWD) CONFIG_DRM_KOMEDA=m
 clean:
 	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(PWD) clean
