@@ -169,14 +169,11 @@ static int vmw_cotable_unscrub(struct vmw_resource *res)
 	} *cmd;
 
 	WARN_ON_ONCE(bo->mem.mem_type != VMW_PL_MOB);
-	lockdep_assert_held(&bo->resv->lock.base);
+	reservation_object_assert_held(bo->base.resv);
 
-	cmd = vmw_fifo_reserve_dx(dev_priv, sizeof(*cmd), SVGA3D_INVALID_ID);
-	if (!cmd) {
-		DRM_ERROR("Failed reserving FIFO space for cotable "
-			  "binding.\n");
+	cmd = VMW_FIFO_RESERVE(dev_priv, sizeof(*cmd));
+	if (!cmd)
 		return -ENOMEM;
-	}
 
 	WARN_ON(vcotbl->ctx->id == SVGA3D_INVALID_ID);
 	WARN_ON(bo->mem.mem_type != VMW_PL_MOB);
@@ -262,12 +259,9 @@ int vmw_cotable_scrub(struct vmw_resource *res, bool readback)
 	if (readback)
 		submit_size += sizeof(*cmd0);
 
-	cmd1 = vmw_fifo_reserve_dx(dev_priv, submit_size, SVGA3D_INVALID_ID);
-	if (!cmd1) {
-		DRM_ERROR("Failed reserving FIFO space for cotable "
-			  "unbinding.\n");
+	cmd1 = VMW_FIFO_RESERVE(dev_priv, submit_size);
+	if (!cmd1)
 		return -ENOMEM;
-	}
 
 	vcotbl->size_read_back = 0;
 	if (readback) {
@@ -317,7 +311,7 @@ static int vmw_cotable_unbind(struct vmw_resource *res,
 		return 0;
 
 	WARN_ON_ONCE(bo->mem.mem_type != VMW_PL_MOB);
-	lockdep_assert_held(&bo->resv->lock.base);
+	reservation_object_assert_held(bo->base.resv);
 
 	mutex_lock(&dev_priv->binding_mutex);
 	if (!vcotbl->scrubbed)
@@ -351,13 +345,10 @@ static int vmw_cotable_readback(struct vmw_resource *res)
 	struct vmw_fence_obj *fence;
 
 	if (!vcotbl->scrubbed) {
-		cmd = vmw_fifo_reserve_dx(dev_priv, sizeof(*cmd),
-					  SVGA3D_INVALID_ID);
-		if (!cmd) {
-			DRM_ERROR("Failed reserving FIFO space for cotable "
-				  "readback.\n");
+		cmd = VMW_FIFO_RESERVE(dev_priv, sizeof(*cmd));
+		if (!cmd)
 			return -ENOMEM;
-		}
+
 		cmd->header.id = SVGA_3D_CMD_DX_READBACK_COTABLE;
 		cmd->header.size = sizeof(cmd->body);
 		cmd->body.cid = vcotbl->ctx->id;
@@ -615,7 +606,7 @@ struct vmw_resource *vmw_cotable_alloc(struct vmw_private *dev_priv,
 	vcotbl->type = type;
 	vcotbl->ctx = ctx;
 
-	vmw_resource_activate(&vcotbl->res, vmw_hw_cotable_destroy);
+	vcotbl->res.hw_destroy = vmw_hw_cotable_destroy;
 
 	return &vcotbl->res;
 

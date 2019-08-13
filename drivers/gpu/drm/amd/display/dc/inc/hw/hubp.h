@@ -28,6 +28,8 @@
 
 #include "mem_input.h"
 
+#define OPP_ID_INVALID 0xf
+
 
 enum cursor_pitch {
 	CURSOR_PITCH_64_PIXELS = 0,
@@ -36,6 +38,9 @@ enum cursor_pitch {
 };
 
 enum cursor_lines_per_chunk {
+#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
+	CURSOR_LINE_PER_CHUNK_1 = 0, /* new for DCN2 */
+#endif
 	CURSOR_LINE_PER_CHUNK_2 = 1,
 	CURSOR_LINE_PER_CHUNK_4,
 	CURSOR_LINE_PER_CHUNK_8,
@@ -62,6 +67,11 @@ struct hubp_funcs {
 			struct _vcs_dpi_display_ttu_regs_st *ttu_regs,
 			struct _vcs_dpi_display_rq_regs_st *rq_regs,
 			struct _vcs_dpi_display_pipe_dest_params_st *pipe_dest);
+
+	void (*hubp_setup_interdependent)(
+			struct hubp *hubp,
+			struct _vcs_dpi_display_dlg_regs_st *dlg_regs,
+			struct _vcs_dpi_display_ttu_regs_st *ttu_regs);
 
 	void (*dcc_control)(struct hubp *hubp, bool enable,
 			bool independent_64b_blks);
@@ -96,7 +106,8 @@ struct hubp_funcs {
 		union plane_size *plane_size,
 		enum dc_rotation_angle rotation,
 		struct dc_plane_dcc_param *dcc,
-		bool horizontal_mirror);
+		bool horizontal_mirror,
+		unsigned int compa_level);
 
 	bool (*hubp_is_flip_pending)(struct hubp *hubp);
 
@@ -120,8 +131,32 @@ struct hubp_funcs {
 	void (*hubp_clk_cntl)(struct hubp *hubp, bool enable);
 	void (*hubp_vtg_sel)(struct hubp *hubp, uint32_t otg_inst);
 	void (*hubp_read_state)(struct hubp *hubp);
+	void (*hubp_clear_underflow)(struct hubp *hubp);
 	void (*hubp_disable_control)(struct hubp *hubp, bool disable_hubp);
 	unsigned int (*hubp_get_underflow_status)(struct hubp *hubp);
+	void (*hubp_init)(struct hubp *hubp);
+
+#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
+	void (*dmdata_set_attributes)(
+			struct hubp *hubp,
+			const struct dc_dmdata_attributes *attr);
+
+	void (*dmdata_load)(
+			struct hubp *hubp,
+			uint32_t dmdata_sw_size,
+			const uint32_t *dmdata_sw_data);
+	bool (*dmdata_status_done)(struct hubp *hubp);
+	void (*hubp_enable_tripleBuffer)(
+		struct hubp *hubp,
+		bool enable);
+
+	bool (*hubp_is_triplebuffer_enabled)(
+		struct hubp *hubp);
+
+	void (*hubp_set_flip_control_surface_gsl)(
+		struct hubp *hubp,
+		bool enable);
+#endif
 
 };
 

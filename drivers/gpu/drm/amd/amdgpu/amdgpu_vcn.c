@@ -26,7 +26,8 @@
 
 #include <linux/firmware.h>
 #include <linux/module.h>
-#include <drm/drmP.h>
+#include <linux/pci.h>
+
 #include <drm/drm.h>
 
 #include "amdgpu.h"
@@ -36,14 +37,21 @@
 #include "soc15_common.h"
 
 #include "vcn/vcn_1_0_offset.h"
+#include "vcn/vcn_1_0_sh_mask.h"
 
 /* 1 second timeout */
 #define VCN_IDLE_TIMEOUT	msecs_to_jiffies(1000)
 
 /* Firmware Names */
 #define FIRMWARE_RAVEN		"amdgpu/raven_vcn.bin"
+#define FIRMWARE_PICASSO	"amdgpu/picasso_vcn.bin"
+#define FIRMWARE_RAVEN2		"amdgpu/raven2_vcn.bin"
+#define FIRMWARE_NAVI10 	"amdgpu/navi10_vcn.bin"
 
 MODULE_FIRMWARE(FIRMWARE_RAVEN);
+MODULE_FIRMWARE(FIRMWARE_PICASSO);
+MODULE_FIRMWARE(FIRMWARE_RAVEN2);
+MODULE_FIRMWARE(FIRMWARE_NAVI10);
 
 static void amdgpu_vcn_idle_work_handler(struct work_struct *work);
 
@@ -59,7 +67,18 @@ int amdgpu_vcn_sw_init(struct amdgpu_device *adev)
 
 	switch (adev->asic_type) {
 	case CHIP_RAVEN:
-		fw_name = FIRMWARE_RAVEN;
+		if (adev->rev_id >= 8)
+			fw_name = FIRMWARE_RAVEN2;
+		else if (adev->pdev->device == 0x15d8)
+			fw_name = FIRMWARE_PICASSO;
+		else
+			fw_name = FIRMWARE_RAVEN;
+		break;
+	case CHIP_NAVI10:
+		fw_name = FIRMWARE_NAVI10;
+		if ((adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) &&
+		    (adev->pg_flags & AMD_PG_SUPPORT_VCN_DPG))
+			adev->vcn.indirect_sram = true;
 		break;
 	default:
 		return -EINVAL;
@@ -111,8 +130,7 @@ int amdgpu_vcn_sw_init(struct amdgpu_device *adev)
 			version_major, version_minor, family_id);
 	}
 
-	bo_size = AMDGPU_VCN_STACK_SIZE + AMDGPU_VCN_HEAP_SIZE
-		  +  AMDGPU_VCN_SESSION_SIZE * 40;
+	bo_size = AMDGPU_VCN_STACK_SIZE + AMDGPU_VCN_CONTEXT_SIZE;
 	if (adev->firmware.load_type != AMDGPU_FW_LOAD_PSP)
 		bo_size += AMDGPU_GPU_PAGE_ALIGN(le32_to_cpu(hdr->ucode_size_bytes) + 8);
 	r = amdgpu_bo_create_kernel(adev, bo_size, PAGE_SIZE,
@@ -123,6 +141,16 @@ int amdgpu_vcn_sw_init(struct amdgpu_device *adev)
 		return r;
 	}
 
+	if (adev->vcn.indirect_sram) {
+		r = amdgpu_bo_create_kernel(adev, 64 * 2 * 4, PAGE_SIZE,
+			    AMDGPU_GEM_DOMAIN_VRAM, &adev->vcn.dpg_sram_bo,
+			    &adev->vcn.dpg_sram_gpu_addr, &adev->vcn.dpg_sram_cpu_addr);
+		if (r) {
+			dev_err(adev->dev, "(%d) failed to allocate DPG bo\n", r);
+			return r;
+		}
+	}
+
 	return 0;
 }
 
@@ -131,6 +159,12 @@ int amdgpu_vcn_sw_fini(struct amdgpu_device *adev)
 	int i;
 
 	kvfree(adev->vcn.saved_bo);
+
+	if (adev->vcn.indirect_sram) {
+		amdgpu_bo_free_kernel(&adev->vcn.dpg_sram_bo,
+			      &adev->vcn.dpg_sram_gpu_addr,
+			      (void **)&adev->vcn.dpg_sram_cpu_addr);
+	}
 
 	amdgpu_bo_free_kernel(&adev->vcn.vcpu_bo,
 			      &adev->vcn.gpu_addr,
@@ -207,17 +241,35 @@ static void amdgpu_vcn_idle_work_handler(struct work_struct *work)
 {
 	struct amdgpu_device *adev =
 		container_of(work, struct amdgpu_device, vcn.idle_work.work);
-	unsigned fences = amdgpu_fence_count_emitted(&adev->vcn.ring_dec);
-	unsigned i;
+	unsigned int fences = 0;
+	unsigned int i;
 
 	for (i = 0; i < adev->vcn.num_enc_rings; ++i) {
 		fences += amdgpu_fence_count_emitted(&adev->vcn.ring_enc[i]);
 	}
 
+	if (adev->pg_flags & AMD_PG_SUPPORT_VCN_DPG)	{
+		struct dpg_pause_state new_state;
+
+		if (fences)
+			new_state.fw_based = VCN_DPG_STATE__PAUSE;
+		else
+			new_state.fw_based = VCN_DPG_STATE__UNPAUSE;
+
+		if (amdgpu_fence_count_emitted(&adev->vcn.ring_jpeg))
+			new_state.jpeg = VCN_DPG_STATE__PAUSE;
+		else
+			new_state.jpeg = VCN_DPG_STATE__UNPAUSE;
+
+		adev->vcn.pause_dpg_mode(adev, &new_state);
+	}
+
 	fences += amdgpu_fence_count_emitted(&adev->vcn.ring_jpeg);
+	fences += amdgpu_fence_count_emitted(&adev->vcn.ring_dec);
 
 	if (fences == 0) {
-		if (adev->pm.dpm_enabled)
+		amdgpu_gfx_off_ctrl(adev, true);
+		if (adev->asic_type < CHIP_NAVI10 && adev->pm.dpm_enabled)
 			amdgpu_dpm_enable_uvd(adev, false);
 		else
 			amdgpu_device_ip_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_VCN,
@@ -233,11 +285,38 @@ void amdgpu_vcn_ring_begin_use(struct amdgpu_ring *ring)
 	bool set_clocks = !cancel_delayed_work_sync(&adev->vcn.idle_work);
 
 	if (set_clocks) {
-		if (adev->pm.dpm_enabled)
+		amdgpu_gfx_off_ctrl(adev, false);
+		if (adev->asic_type < CHIP_NAVI10 && adev->pm.dpm_enabled)
 			amdgpu_dpm_enable_uvd(adev, true);
 		else
 			amdgpu_device_ip_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_VCN,
 							       AMD_PG_STATE_UNGATE);
+	}
+
+	if (adev->pg_flags & AMD_PG_SUPPORT_VCN_DPG)	{
+		struct dpg_pause_state new_state;
+		unsigned int fences = 0;
+		unsigned int i;
+
+		for (i = 0; i < adev->vcn.num_enc_rings; ++i) {
+			fences += amdgpu_fence_count_emitted(&adev->vcn.ring_enc[i]);
+		}
+		if (fences)
+			new_state.fw_based = VCN_DPG_STATE__PAUSE;
+		else
+			new_state.fw_based = VCN_DPG_STATE__UNPAUSE;
+
+		if (amdgpu_fence_count_emitted(&adev->vcn.ring_jpeg))
+			new_state.jpeg = VCN_DPG_STATE__PAUSE;
+		else
+			new_state.jpeg = VCN_DPG_STATE__UNPAUSE;
+
+		if (ring->funcs->type == AMDGPU_RING_TYPE_VCN_ENC)
+			new_state.fw_based = VCN_DPG_STATE__PAUSE;
+		else if (ring->funcs->type == AMDGPU_RING_TYPE_VCN_JPEG)
+			new_state.jpeg = VCN_DPG_STATE__PAUSE;
+
+		adev->vcn.pause_dpg_mode(adev, &new_state);
 	}
 }
 
@@ -253,32 +332,23 @@ int amdgpu_vcn_dec_ring_test_ring(struct amdgpu_ring *ring)
 	unsigned i;
 	int r;
 
-	WREG32(SOC15_REG_OFFSET(UVD, 0, mmUVD_CONTEXT_ID), 0xCAFEDEAD);
+	WREG32(adev->vcn.external.scratch9, 0xCAFEDEAD);
 	r = amdgpu_ring_alloc(ring, 3);
-	if (r) {
-		DRM_ERROR("amdgpu: cp failed to lock ring %d (%d).\n",
-			  ring->idx, r);
+	if (r)
 		return r;
-	}
-	amdgpu_ring_write(ring,
-		PACKET0(SOC15_REG_OFFSET(UVD, 0, mmUVD_CONTEXT_ID), 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.scratch9, 0));
 	amdgpu_ring_write(ring, 0xDEADBEEF);
 	amdgpu_ring_commit(ring);
 	for (i = 0; i < adev->usec_timeout; i++) {
-		tmp = RREG32(SOC15_REG_OFFSET(UVD, 0, mmUVD_CONTEXT_ID));
+		tmp = RREG32(adev->vcn.external.scratch9);
 		if (tmp == 0xDEADBEEF)
 			break;
-		DRM_UDELAY(1);
+		udelay(1);
 	}
 
-	if (i < adev->usec_timeout) {
-		DRM_DEBUG("ring test on %d succeeded in %d usecs\n",
-			 ring->idx, i);
-	} else {
-		DRM_ERROR("amdgpu: ring %d test failed (0x%08X)\n",
-			  ring->idx, tmp);
-		r = -EINVAL;
-	}
+	if (i >= adev->usec_timeout)
+		r = -ETIMEDOUT;
+
 	return r;
 }
 
@@ -299,14 +369,14 @@ static int amdgpu_vcn_dec_send_msg(struct amdgpu_ring *ring,
 
 	ib = &job->ibs[0];
 	addr = amdgpu_bo_gpu_offset(bo);
-	ib->ptr[0] = PACKET0(SOC15_REG_OFFSET(UVD, 0, mmUVD_GPCOM_VCPU_DATA0), 0);
+	ib->ptr[0] = PACKET0(adev->vcn.internal.data0, 0);
 	ib->ptr[1] = addr;
-	ib->ptr[2] = PACKET0(SOC15_REG_OFFSET(UVD, 0, mmUVD_GPCOM_VCPU_DATA1), 0);
+	ib->ptr[2] = PACKET0(adev->vcn.internal.data1, 0);
 	ib->ptr[3] = addr >> 32;
-	ib->ptr[4] = PACKET0(SOC15_REG_OFFSET(UVD, 0, mmUVD_GPCOM_VCPU_CMD), 0);
+	ib->ptr[4] = PACKET0(adev->vcn.internal.cmd, 0);
 	ib->ptr[5] = 0;
 	for (i = 6; i < 16; i += 2) {
-		ib->ptr[i] = PACKET0(SOC15_REG_OFFSET(UVD, 0, mmUVD_NO_OP), 0);
+		ib->ptr[i] = PACKET0(adev->vcn.internal.nop, 0);
 		ib->ptr[i+1] = 0;
 	}
 	ib->length_dw = 16;
@@ -400,30 +470,20 @@ int amdgpu_vcn_dec_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	long r;
 
 	r = amdgpu_vcn_dec_get_create_msg(ring, 1, NULL);
-	if (r) {
-		DRM_ERROR("amdgpu: failed to get create msg (%ld).\n", r);
+	if (r)
 		goto error;
-	}
 
 	r = amdgpu_vcn_dec_get_destroy_msg(ring, 1, &fence);
-	if (r) {
-		DRM_ERROR("amdgpu: failed to get destroy ib (%ld).\n", r);
+	if (r)
 		goto error;
-	}
 
 	r = dma_fence_wait_timeout(fence, false, timeout);
-	if (r == 0) {
-		DRM_ERROR("amdgpu: IB test timed out.\n");
+	if (r == 0)
 		r = -ETIMEDOUT;
-	} else if (r < 0) {
-		DRM_ERROR("amdgpu: fence wait failed (%ld).\n", r);
-	} else {
-		DRM_DEBUG("ib test on ring %d succeeded\n",  ring->idx);
+	else if (r > 0)
 		r = 0;
-	}
 
 	dma_fence_put(fence);
-
 error:
 	return r;
 }
@@ -431,33 +491,27 @@ error:
 int amdgpu_vcn_enc_ring_test_ring(struct amdgpu_ring *ring)
 {
 	struct amdgpu_device *adev = ring->adev;
-	uint32_t rptr = amdgpu_ring_get_rptr(ring);
+	uint32_t rptr;
 	unsigned i;
 	int r;
 
 	r = amdgpu_ring_alloc(ring, 16);
-	if (r) {
-		DRM_ERROR("amdgpu: vcn enc failed to lock ring %d (%d).\n",
-			  ring->idx, r);
+	if (r)
 		return r;
-	}
+
+	rptr = amdgpu_ring_get_rptr(ring);
+
 	amdgpu_ring_write(ring, VCN_ENC_CMD_END);
 	amdgpu_ring_commit(ring);
 
 	for (i = 0; i < adev->usec_timeout; i++) {
 		if (amdgpu_ring_get_rptr(ring) != rptr)
 			break;
-		DRM_UDELAY(1);
+		udelay(1);
 	}
 
-	if (i < adev->usec_timeout) {
-		DRM_DEBUG("ring test on %d succeeded in %d usecs\n",
-			 ring->idx, i);
-	} else {
-		DRM_ERROR("amdgpu: ring %d test failed\n",
-			  ring->idx);
+	if (i >= adev->usec_timeout)
 		r = -ETIMEDOUT;
-	}
 
 	return r;
 }
@@ -572,27 +626,19 @@ int amdgpu_vcn_enc_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	long r;
 
 	r = amdgpu_vcn_enc_get_create_msg(ring, 1, NULL);
-	if (r) {
-		DRM_ERROR("amdgpu: failed to get create msg (%ld).\n", r);
+	if (r)
 		goto error;
-	}
 
 	r = amdgpu_vcn_enc_get_destroy_msg(ring, 1, &fence);
-	if (r) {
-		DRM_ERROR("amdgpu: failed to get destroy ib (%ld).\n", r);
+	if (r)
 		goto error;
-	}
 
 	r = dma_fence_wait_timeout(fence, false, timeout);
-	if (r == 0) {
-		DRM_ERROR("amdgpu: IB test timed out.\n");
+	if (r == 0)
 		r = -ETIMEDOUT;
-	} else if (r < 0) {
-		DRM_ERROR("amdgpu: fence wait failed (%ld).\n", r);
-	} else {
-		DRM_DEBUG("ib test on ring %d succeeded\n", ring->idx);
+	else if (r > 0)
 		r = 0;
-	}
+
 error:
 	dma_fence_put(fence);
 	return r;
@@ -605,35 +651,24 @@ int amdgpu_vcn_jpeg_ring_test_ring(struct amdgpu_ring *ring)
 	unsigned i;
 	int r;
 
-	WREG32(SOC15_REG_OFFSET(UVD, 0, mmUVD_CONTEXT_ID), 0xCAFEDEAD);
+	WREG32(adev->vcn.external.jpeg_pitch, 0xCAFEDEAD);
 	r = amdgpu_ring_alloc(ring, 3);
-
-	if (r) {
-		DRM_ERROR("amdgpu: cp failed to lock ring %d (%d).\n",
-				  ring->idx, r);
+	if (r)
 		return r;
-	}
 
-	amdgpu_ring_write(ring,
-		PACKETJ(SOC15_REG_OFFSET(UVD, 0, mmUVD_CONTEXT_ID), 0, 0, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.jpeg_pitch, 0));
 	amdgpu_ring_write(ring, 0xDEADBEEF);
 	amdgpu_ring_commit(ring);
 
 	for (i = 0; i < adev->usec_timeout; i++) {
-		tmp = RREG32(SOC15_REG_OFFSET(UVD, 0, mmUVD_CONTEXT_ID));
+		tmp = RREG32(adev->vcn.external.jpeg_pitch);
 		if (tmp == 0xDEADBEEF)
 			break;
-		DRM_UDELAY(1);
+		udelay(1);
 	}
 
-	if (i < adev->usec_timeout) {
-		DRM_DEBUG("ring test on %d succeeded in %d usecs\n",
-				  ring->idx, i);
-	} else {
-		DRM_ERROR("amdgpu: ring %d test failed (0x%08X)\n",
-				  ring->idx, tmp);
-		r = -EINVAL;
-	}
+	if (i >= adev->usec_timeout)
+		r = -ETIMEDOUT;
 
 	return r;
 }
@@ -654,7 +689,7 @@ static int amdgpu_vcn_jpeg_set_reg(struct amdgpu_ring *ring, uint32_t handle,
 
 	ib = &job->ibs[0];
 
-	ib->ptr[0] = PACKETJ(SOC15_REG_OFFSET(UVD, 0, mmUVD_JPEG_PITCH), 0, 0, PACKETJ_TYPE0);
+	ib->ptr[0] = PACKETJ(adev->vcn.internal.jpeg_pitch, 0, 0, PACKETJ_TYPE0);
 	ib->ptr[1] = 0xDEADBEEF;
 	for (i = 2; i < 16; i += 2) {
 		ib->ptr[i] = PACKETJ(0, 0, 0, PACKETJ_TYPE6);
@@ -686,38 +721,30 @@ int amdgpu_vcn_jpeg_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	long r = 0;
 
 	r = amdgpu_vcn_jpeg_set_reg(ring, 1, &fence);
-	if (r) {
-		DRM_ERROR("amdgpu: failed to set jpeg register (%ld).\n", r);
+	if (r)
 		goto error;
-	}
 
 	r = dma_fence_wait_timeout(fence, false, timeout);
 	if (r == 0) {
-		DRM_ERROR("amdgpu: IB test timed out.\n");
 		r = -ETIMEDOUT;
 		goto error;
 	} else if (r < 0) {
-		DRM_ERROR("amdgpu: fence wait failed (%ld).\n", r);
 		goto error;
-	} else
+	} else {
 		r = 0;
+	}
 
 	for (i = 0; i < adev->usec_timeout; i++) {
-		tmp = RREG32(SOC15_REG_OFFSET(UVD, 0, mmUVD_JPEG_PITCH));
+		tmp = RREG32(adev->vcn.external.jpeg_pitch);
 		if (tmp == 0xDEADBEEF)
 			break;
-		DRM_UDELAY(1);
+		udelay(1);
 	}
 
-	if (i < adev->usec_timeout)
-		DRM_DEBUG("ib test on ring %d succeeded\n", ring->idx);
-	else {
-		DRM_ERROR("ib test failed (0x%08X)\n", tmp);
-		r = -EINVAL;
-	}
+	if (i >= adev->usec_timeout)
+		r = -ETIMEDOUT;
 
 	dma_fence_put(fence);
-
 error:
 	return r;
 }

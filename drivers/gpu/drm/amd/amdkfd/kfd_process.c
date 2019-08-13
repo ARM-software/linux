@@ -31,6 +31,7 @@
 #include <linux/compat.h>
 #include <linux/mman.h>
 #include <linux/file.h>
+#include "amdgpu_amdkfd.h"
 
 struct mm_struct;
 
@@ -67,6 +68,68 @@ static struct kfd_process *create_process(const struct task_struct *thread,
 static void evict_process_worker(struct work_struct *work);
 static void restore_process_worker(struct work_struct *work);
 
+struct kfd_procfs_tree {
+	struct kobject *kobj;
+};
+
+static struct kfd_procfs_tree procfs;
+
+static ssize_t kfd_procfs_show(struct kobject *kobj, struct attribute *attr,
+			       char *buffer)
+{
+	int val = 0;
+
+	if (strcmp(attr->name, "pasid") == 0) {
+		struct kfd_process *p = container_of(attr, struct kfd_process,
+						     attr_pasid);
+		val = p->pasid;
+	} else {
+		pr_err("Invalid attribute");
+		return -EINVAL;
+	}
+
+	return snprintf(buffer, PAGE_SIZE, "%d\n", val);
+}
+
+static void kfd_procfs_kobj_release(struct kobject *kobj)
+{
+	kfree(kobj);
+}
+
+static const struct sysfs_ops kfd_procfs_ops = {
+	.show = kfd_procfs_show,
+};
+
+static struct kobj_type procfs_type = {
+	.release = kfd_procfs_kobj_release,
+	.sysfs_ops = &kfd_procfs_ops,
+};
+
+void kfd_procfs_init(void)
+{
+	int ret = 0;
+
+	procfs.kobj = kfd_alloc_struct(procfs.kobj);
+	if (!procfs.kobj)
+		return;
+
+	ret = kobject_init_and_add(procfs.kobj, &procfs_type,
+				   &kfd_device->kobj, "proc");
+	if (ret) {
+		pr_warn("Could not create procfs proc folder");
+		/* If we fail to create the procfs, clean up */
+		kfd_procfs_shutdown();
+	}
+}
+
+void kfd_procfs_shutdown(void)
+{
+	if (procfs.kobj) {
+		kobject_del(procfs.kobj);
+		kobject_put(procfs.kobj);
+		procfs.kobj = NULL;
+	}
+}
 
 int kfd_process_create_wq(void)
 {
@@ -100,8 +163,8 @@ static void kfd_process_free_gpuvm(struct kgd_mem *mem,
 {
 	struct kfd_dev *dev = pdd->dev;
 
-	dev->kfd2kgd->unmap_memory_to_gpu(dev->kgd, mem, pdd->vm);
-	dev->kfd2kgd->free_memory_of_gpu(dev->kgd, mem);
+	amdgpu_amdkfd_gpuvm_unmap_memory_from_gpu(dev->kgd, mem, pdd->vm);
+	amdgpu_amdkfd_gpuvm_free_memory_of_gpu(dev->kgd, mem);
 }
 
 /* kfd_process_alloc_gpuvm - Allocate GPU VM for the KFD process
@@ -119,16 +182,16 @@ static int kfd_process_alloc_gpuvm(struct kfd_process_device *pdd,
 	int handle;
 	int err;
 
-	err = kdev->kfd2kgd->alloc_memory_of_gpu(kdev->kgd, gpu_va, size,
+	err = amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu(kdev->kgd, gpu_va, size,
 						 pdd->vm, &mem, NULL, flags);
 	if (err)
 		goto err_alloc_mem;
 
-	err = kdev->kfd2kgd->map_memory_to_gpu(kdev->kgd, mem, pdd->vm);
+	err = amdgpu_amdkfd_gpuvm_map_memory_to_gpu(kdev->kgd, mem, pdd->vm);
 	if (err)
 		goto err_map_mem;
 
-	err = kdev->kfd2kgd->sync_memory(kdev->kgd, mem, true);
+	err = amdgpu_amdkfd_gpuvm_sync_memory(kdev->kgd, mem, true);
 	if (err) {
 		pr_debug("Sync memory failed, wait interrupted by user signal\n");
 		goto sync_memory_failed;
@@ -147,7 +210,7 @@ static int kfd_process_alloc_gpuvm(struct kfd_process_device *pdd,
 	}
 
 	if (kptr) {
-		err = kdev->kfd2kgd->map_gtt_bo_to_kernel(kdev->kgd,
+		err = amdgpu_amdkfd_gpuvm_map_gtt_bo_to_kernel(kdev->kgd,
 				(struct kgd_mem *)mem, kptr, NULL);
 		if (err) {
 			pr_debug("Map GTT BO to kernel failed\n");
@@ -165,7 +228,7 @@ sync_memory_failed:
 	return err;
 
 err_map_mem:
-	kdev->kfd2kgd->free_memory_of_gpu(kdev->kgd, mem);
+	amdgpu_amdkfd_gpuvm_free_memory_of_gpu(kdev->kgd, mem);
 err_alloc_mem:
 	*kptr = NULL;
 	return err;
@@ -205,6 +268,7 @@ struct kfd_process *kfd_create_process(struct file *filep)
 {
 	struct kfd_process *process;
 	struct task_struct *thread = current;
+	int ret;
 
 	if (!thread->mm)
 		return ERR_PTR(-EINVAL);
@@ -222,11 +286,36 @@ struct kfd_process *kfd_create_process(struct file *filep)
 
 	/* A prior open of /dev/kfd could have already created the process. */
 	process = find_process(thread);
-	if (process)
+	if (process) {
 		pr_debug("Process already found\n");
-	else
+	} else {
 		process = create_process(thread, filep);
 
+		if (!procfs.kobj)
+			goto out;
+
+		process->kobj = kfd_alloc_struct(process->kobj);
+		if (!process->kobj) {
+			pr_warn("Creating procfs kobject failed");
+			goto out;
+		}
+		ret = kobject_init_and_add(process->kobj, &procfs_type,
+					   procfs.kobj, "%d",
+					   (int)process->lead_thread->pid);
+		if (ret) {
+			pr_warn("Creating procfs pid directory failed");
+			goto out;
+		}
+
+		process->attr_pasid.name = "pasid";
+		process->attr_pasid.mode = KFD_SYSFS_FILE_MODE;
+		sysfs_attr_init(&process->attr_pasid);
+		ret = sysfs_create_file(process->kobj, &process->attr_pasid);
+		if (ret)
+			pr_warn("Creating pasid for pid %d failed",
+					(int)process->lead_thread->pid);
+	}
+out:
 	mutex_unlock(&kfd_processes_mutex);
 
 	return process;
@@ -296,11 +385,11 @@ static void kfd_process_device_free_bos(struct kfd_process_device *pdd)
 				    per_device_list) {
 			if (!peer_pdd->vm)
 				continue;
-			peer_pdd->dev->kfd2kgd->unmap_memory_to_gpu(
+			amdgpu_amdkfd_gpuvm_unmap_memory_from_gpu(
 				peer_pdd->dev->kgd, mem, peer_pdd->vm);
 		}
 
-		pdd->dev->kfd2kgd->free_memory_of_gpu(pdd->dev->kgd, mem);
+		amdgpu_amdkfd_gpuvm_free_memory_of_gpu(pdd->dev->kgd, mem);
 		kfd_process_device_remove_obj_handle(pdd, id);
 	}
 }
@@ -322,10 +411,13 @@ static void kfd_process_destroy_pdds(struct kfd_process *p)
 		pr_debug("Releasing pdd (topology id %d) for process (pasid %d)\n",
 				pdd->dev->id, p->pasid);
 
-		if (pdd->drm_file)
+		if (pdd->drm_file) {
+			amdgpu_amdkfd_gpuvm_release_process_vm(
+					pdd->dev->kgd, pdd->vm);
 			fput(pdd->drm_file);
+		}
 		else if (pdd->vm)
-			pdd->dev->kfd2kgd->destroy_process_vm(
+			amdgpu_amdkfd_gpuvm_destroy_process_vm(
 				pdd->dev->kgd, pdd->vm);
 
 		list_del(&pdd->per_device_list);
@@ -350,6 +442,14 @@ static void kfd_process_wq_release(struct work_struct *work)
 {
 	struct kfd_process *p = container_of(work, struct kfd_process,
 					     release_work);
+
+	/* Remove the procfs files */
+	if (p->kobj) {
+		sysfs_remove_file(p->kobj, &p->attr_pasid);
+		kobject_del(p->kobj);
+		kobject_put(p->kobj);
+		p->kobj = NULL;
+	}
 
 	kfd_iommu_unbind_process(p);
 
@@ -603,13 +703,17 @@ static int init_doorbell_bitmap(struct qcm_process_device *qpd,
 	if (!qpd->doorbell_bitmap)
 		return -ENOMEM;
 
-	/* Mask out any reserved doorbells */
-	for (i = 0; i < KFD_MAX_NUM_OF_QUEUES_PER_PROCESS; i++)
-		if ((dev->shared_resources.reserved_doorbell_mask & i) ==
-		    dev->shared_resources.reserved_doorbell_val) {
+	/* Mask out doorbells reserved for SDMA, IH, and VCN on SOC15. */
+	for (i = 0; i < KFD_MAX_NUM_OF_QUEUES_PER_PROCESS / 2; i++) {
+		if (i >= dev->shared_resources.non_cp_doorbells_start
+			&& i <= dev->shared_resources.non_cp_doorbells_end) {
 			set_bit(i, qpd->doorbell_bitmap);
-			pr_debug("reserved doorbell 0x%03x\n", i);
+			set_bit(i + KFD_QUEUE_DOORBELL_MIRROR_OFFSET,
+				qpd->doorbell_bitmap);
+			pr_debug("reserved doorbell 0x%03x and 0x%03x\n", i,
+				i + KFD_QUEUE_DOORBELL_MIRROR_OFFSET);
 		}
+	}
 
 	return 0;
 }
@@ -686,12 +790,12 @@ int kfd_process_device_init_vm(struct kfd_process_device *pdd,
 	dev = pdd->dev;
 
 	if (drm_file)
-		ret = dev->kfd2kgd->acquire_process_vm(
-			dev->kgd, drm_file,
+		ret = amdgpu_amdkfd_gpuvm_acquire_process_vm(
+			dev->kgd, drm_file, p->pasid,
 			&pdd->vm, &p->kgd_process_info, &p->ef);
 	else
-		ret = dev->kfd2kgd->create_process_vm(
-			dev->kgd, &pdd->vm, &p->kgd_process_info, &p->ef);
+		ret = amdgpu_amdkfd_gpuvm_create_process_vm(dev->kgd, p->pasid,
+			&pdd->vm, &p->kgd_process_info, &p->ef);
 	if (ret) {
 		pr_err("Failed to create process VM object\n");
 		return ret;
@@ -712,7 +816,7 @@ err_init_cwsr:
 err_reserve_ib_mem:
 	kfd_process_device_free_bos(pdd);
 	if (!drm_file)
-		dev->kfd2kgd->destroy_process_vm(dev->kgd, pdd->vm);
+		amdgpu_amdkfd_gpuvm_destroy_process_vm(dev->kgd, pdd->vm);
 	pdd->vm = NULL;
 
 	return ret;
@@ -970,7 +1074,7 @@ static void restore_process_worker(struct work_struct *work)
 	 */
 
 	p->last_restore_timestamp = get_jiffies_64();
-	ret = pdd->dev->kfd2kgd->restore_process_bos(p->kgd_process_info,
+	ret = amdgpu_amdkfd_gpuvm_restore_process_bos(p->kgd_process_info,
 						     &p->ef);
 	if (ret) {
 		pr_debug("Failed to restore BOs of pasid %d, retry after %d ms\n",
@@ -1099,3 +1203,4 @@ int kfd_debugfs_mqds_by_process(struct seq_file *m, void *data)
 }
 
 #endif
+

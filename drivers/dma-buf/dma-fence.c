@@ -30,13 +30,77 @@
 EXPORT_TRACEPOINT_SYMBOL(dma_fence_emit);
 EXPORT_TRACEPOINT_SYMBOL(dma_fence_enable_signal);
 
+static DEFINE_SPINLOCK(dma_fence_stub_lock);
+static struct dma_fence dma_fence_stub;
+
 /*
  * fence context counter: each execution context should have its own
  * fence context, this allows checking if fences belong to the same
  * context or not. One device can have multiple separate contexts,
  * and they're used if some engine can run independently of another.
  */
-static atomic64_t dma_fence_context_counter = ATOMIC64_INIT(0);
+static atomic64_t dma_fence_context_counter = ATOMIC64_INIT(1);
+
+/**
+ * DOC: DMA fences overview
+ *
+ * DMA fences, represented by &struct dma_fence, are the kernel internal
+ * synchronization primitive for DMA operations like GPU rendering, video
+ * encoding/decoding, or displaying buffers on a screen.
+ *
+ * A fence is initialized using dma_fence_init() and completed using
+ * dma_fence_signal(). Fences are associated with a context, allocated through
+ * dma_fence_context_alloc(), and all fences on the same context are
+ * fully ordered.
+ *
+ * Since the purposes of fences is to facilitate cross-device and
+ * cross-application synchronization, there's multiple ways to use one:
+ *
+ * - Individual fences can be exposed as a &sync_file, accessed as a file
+ *   descriptor from userspace, created by calling sync_file_create(). This is
+ *   called explicit fencing, since userspace passes around explicit
+ *   synchronization points.
+ *
+ * - Some subsystems also have their own explicit fencing primitives, like
+ *   &drm_syncobj. Compared to &sync_file, a &drm_syncobj allows the underlying
+ *   fence to be updated.
+ *
+ * - Then there's also implicit fencing, where the synchronization points are
+ *   implicitly passed around as part of shared &dma_buf instances. Such
+ *   implicit fences are stored in &struct reservation_object through the
+ *   &dma_buf.resv pointer.
+ */
+
+static const char *dma_fence_stub_get_name(struct dma_fence *fence)
+{
+        return "stub";
+}
+
+static const struct dma_fence_ops dma_fence_stub_ops = {
+	.get_driver_name = dma_fence_stub_get_name,
+	.get_timeline_name = dma_fence_stub_get_name,
+};
+
+/**
+ * dma_fence_get_stub - return a signaled fence
+ *
+ * Return a stub fence which is already signaled.
+ */
+struct dma_fence *dma_fence_get_stub(void)
+{
+	spin_lock(&dma_fence_stub_lock);
+	if (!dma_fence_stub.ops) {
+		dma_fence_init(&dma_fence_stub,
+			       &dma_fence_stub_ops,
+			       &dma_fence_stub_lock,
+			       0, 0);
+		dma_fence_signal_locked(&dma_fence_stub);
+	}
+	spin_unlock(&dma_fence_stub_lock);
+
+	return dma_fence_get(&dma_fence_stub);
+}
+EXPORT_SYMBOL(dma_fence_get_stub);
 
 /**
  * DOC: DMA fences overview

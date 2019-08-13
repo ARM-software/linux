@@ -47,10 +47,6 @@ struct etnaviv_gem_object {
 	struct sg_table *sgt;
 	void *vaddr;
 
-	/* normally (resv == &_resv) except for imported bo's */
-	struct reservation_object *resv;
-	struct reservation_object _resv;
-
 	struct list_head vram_list;
 
 	/* cache maintenance */
@@ -95,6 +91,7 @@ struct etnaviv_gem_submit_bo {
 struct etnaviv_gem_submit {
 	struct drm_sched_job sched_job;
 	struct kref refcount;
+	struct etnaviv_file_private *ctx;
 	struct etnaviv_gpu *gpu;
 	struct dma_fence *out_fence, *in_fence;
 	int out_fence_id;
@@ -115,8 +112,7 @@ void etnaviv_submit_put(struct etnaviv_gem_submit * submit);
 int etnaviv_gem_wait_bo(struct etnaviv_gpu *gpu, struct drm_gem_object *obj,
 	struct timespec *timeout);
 int etnaviv_gem_new_private(struct drm_device *dev, size_t size, u32 flags,
-	struct reservation_object *robj, const struct etnaviv_gem_ops *ops,
-	struct etnaviv_gem_object **res);
+	const struct etnaviv_gem_ops *ops, struct etnaviv_gem_object **res);
 void etnaviv_gem_obj_add(struct drm_device *dev, struct drm_gem_object *obj);
 struct page **etnaviv_gem_get_pages(struct etnaviv_gem_object *obj);
 void etnaviv_gem_put_pages(struct etnaviv_gem_object *obj);

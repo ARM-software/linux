@@ -23,6 +23,9 @@
  *
  */
 
+#include <linux/delay.h>
+#include <linux/slab.h>
+
 #include "reg_helper.h"
 
 #include "core_types.h"
@@ -85,6 +88,7 @@ static const struct link_encoder_funcs dcn10_lnk_enc_funcs = {
 	.enable_hpd = dcn10_link_encoder_enable_hpd,
 	.disable_hpd = dcn10_link_encoder_disable_hpd,
 	.is_dig_enabled = dcn10_is_dig_enabled,
+	.get_dig_frontend = dcn10_get_dig_frontend,
 	.destroy = dcn10_link_encoder_destroy
 };
 
@@ -228,7 +232,9 @@ static void setup_panel_mode(
 {
 	uint32_t value;
 
-	ASSERT(REG(DP_DPHY_INTERNAL_CTRL));
+	if (!REG(DP_DPHY_INTERNAL_CTRL))
+		return;
+
 	value = REG_READ(DP_DPHY_INTERNAL_CTRL);
 
 	switch (panel_mode) {
@@ -440,7 +446,7 @@ static uint8_t get_frontend_source(
 	}
 }
 
-void configure_encoder(
+void enc1_configure_encoder(
 	struct dcn10_link_encoder *enc10,
 	const struct dc_link_settings *link_settings)
 {
@@ -495,6 +501,15 @@ bool dcn10_is_dig_enabled(struct link_encoder *enc)
 	return value;
 }
 
+unsigned int dcn10_get_dig_frontend(struct link_encoder *enc)
+{
+	struct dcn10_link_encoder *enc10 = TO_DCN10_LINK_ENC(enc);
+	uint32_t value;
+
+	REG_GET(DIG_BE_CNTL, DIG_FE_SOURCE_SELECT, &value);
+	return value;
+}
+
 static void link_encoder_disable(struct dcn10_link_encoder *enc10)
 {
 	/* reset training pattern */
@@ -543,12 +558,12 @@ bool dcn10_link_encoder_validate_dvi_output(
 	if ((connector_signal == SIGNAL_TYPE_DVI_SINGLE_LINK ||
 		connector_signal == SIGNAL_TYPE_HDMI_TYPE_A) &&
 		signal != SIGNAL_TYPE_HDMI_TYPE_A &&
-		crtc_timing->pix_clk_khz > TMDS_MAX_PIXEL_CLOCK)
+		crtc_timing->pix_clk_100hz > (TMDS_MAX_PIXEL_CLOCK * 10))
 		return false;
-	if (crtc_timing->pix_clk_khz < TMDS_MIN_PIXEL_CLOCK)
+	if (crtc_timing->pix_clk_100hz < (TMDS_MIN_PIXEL_CLOCK * 10))
 		return false;
 
-	if (crtc_timing->pix_clk_khz > max_pixel_clock)
+	if (crtc_timing->pix_clk_100hz > (max_pixel_clock * 10))
 		return false;
 
 	/* DVI supports 6/8bpp single-link and 10/16bpp dual-link */
@@ -571,7 +586,7 @@ bool dcn10_link_encoder_validate_dvi_output(
 static bool dcn10_link_encoder_validate_hdmi_output(
 	const struct dcn10_link_encoder *enc10,
 	const struct dc_crtc_timing *crtc_timing,
-	int adjusted_pix_clk_khz)
+	int adjusted_pix_clk_100hz)
 {
 	enum dc_color_depth max_deep_color =
 			enc10->base.features.max_hdmi_deep_color;
@@ -581,20 +596,20 @@ static bool dcn10_link_encoder_validate_hdmi_output(
 
 	if (crtc_timing->display_color_depth < COLOR_DEPTH_888)
 		return false;
-	if (adjusted_pix_clk_khz < TMDS_MIN_PIXEL_CLOCK)
+	if (adjusted_pix_clk_100hz < (TMDS_MIN_PIXEL_CLOCK * 10))
 		return false;
 
-	if ((adjusted_pix_clk_khz == 0) ||
-		(adjusted_pix_clk_khz > enc10->base.features.max_hdmi_pixel_clock))
+	if ((adjusted_pix_clk_100hz == 0) ||
+		(adjusted_pix_clk_100hz > (enc10->base.features.max_hdmi_pixel_clock * 10)))
 		return false;
 
 	/* DCE11 HW does not support 420 */
-	if (!enc10->base.features.ycbcr420_supported &&
+	if (!enc10->base.features.hdmi_ycbcr420_supported &&
 			crtc_timing->pixel_encoding == PIXEL_ENCODING_YCBCR420)
 		return false;
 
 	if (!enc10->base.features.flags.bits.HDMI_6GB_EN &&
-		adjusted_pix_clk_khz >= 300000)
+		adjusted_pix_clk_100hz >= 3000000)
 		return false;
 	if (enc10->base.ctx->dc->debug.hdmi20_disable &&
 		crtc_timing->pixel_encoding == PIXEL_ENCODING_YCBCR420)
@@ -606,22 +621,12 @@ bool dcn10_link_encoder_validate_dp_output(
 	const struct dcn10_link_encoder *enc10,
 	const struct dc_crtc_timing *crtc_timing)
 {
-	/* default RGB only */
-	if (crtc_timing->pixel_encoding == PIXEL_ENCODING_RGB)
-		return true;
+	if (crtc_timing->pixel_encoding == PIXEL_ENCODING_YCBCR420) {
+		if (!enc10->base.features.dp_ycbcr420_supported)
+			return false;
+	}
 
-	if (enc10->base.features.flags.bits.IS_YCBCR_CAPABLE)
-		return true;
-
-	/* for DCE 8.x or later DP Y-only feature,
-	 * we need ASIC cap + FeatureSupportDPYonly, not support 666
-	 */
-	if (crtc_timing->flags.Y_ONLY &&
-		enc10->base.features.flags.bits.IS_YCBCR_CAPABLE &&
-		crtc_timing->display_color_depth != COLOR_DEPTH_666)
-		return true;
-
-	return false;
+	return true;
 }
 
 void dcn10_link_encoder_construct(
@@ -726,6 +731,8 @@ void dcn10_link_encoder_construct(
 		enc10->base.features.flags.bits.IS_HBR3_CAPABLE =
 				bp_cap_info.DP_HBR3_EN;
 		enc10->base.features.flags.bits.HDMI_6GB_EN = bp_cap_info.HDMI_6GB_EN;
+		enc10->base.features.flags.bits.DP_IS_USB_C =
+				bp_cap_info.DP_IS_USB_C;
 	} else {
 		DC_LOG_WARNING("%s: Failed to get encoder_cap_info from VBIOS with error code %d!\n",
 				__func__,
@@ -748,7 +755,7 @@ bool dcn10_link_encoder_validate_output_with_stream(
 	case SIGNAL_TYPE_DVI_DUAL_LINK:
 		is_valid = dcn10_link_encoder_validate_dvi_output(
 			enc10,
-			stream->sink->link->connector_signal,
+			stream->link->connector_signal,
 			stream->signal,
 			&stream->timing);
 	break;
@@ -756,7 +763,7 @@ bool dcn10_link_encoder_validate_output_with_stream(
 		is_valid = dcn10_link_encoder_validate_hdmi_output(
 				enc10,
 				&stream->timing,
-				stream->phy_pix_clk);
+				stream->phy_pix_clk * 10);
 	break;
 	case SIGNAL_TYPE_DISPLAY_PORT:
 	case SIGNAL_TYPE_DISPLAY_PORT_MST:
@@ -920,7 +927,7 @@ void dcn10_link_encoder_enable_dp_output(
 	 * but it's not passed to asic_control.
 	 * We need to set number of lanes manually.
 	 */
-	configure_encoder(enc10, link_settings);
+	enc1_configure_encoder(enc10, link_settings);
 
 	cntl.action = TRANSMITTER_CONTROL_ENABLE;
 	cntl.engine_id = enc->preferred_engine;
@@ -959,7 +966,7 @@ void dcn10_link_encoder_enable_dp_mst_output(
 	 * but it's not passed to asic_control.
 	 * We need to set number of lanes manually.
 	 */
-	configure_encoder(enc10, link_settings);
+	enc1_configure_encoder(enc10, link_settings);
 
 	cntl.action = TRANSMITTER_CONTROL_ENABLE;
 	cntl.engine_id = ENGINE_ID_UNKNOWN;
@@ -1304,7 +1311,6 @@ void dcn10_link_encoder_connect_dig_be_to_fe(
 #define HPD_REG_UPDATE_N(reg_name, n, ...)	\
 		generic_reg_update_ex(CTX, \
 				HPD_REG(reg_name), \
-				HPD_REG_READ(reg_name), \
 				n, __VA_ARGS__)
 
 #define HPD_REG_UPDATE(reg_name, field, val)	\
@@ -1337,7 +1343,6 @@ void dcn10_link_encoder_disable_hpd(struct link_encoder *enc)
 #define AUX_REG_UPDATE_N(reg_name, n, ...)	\
 		generic_reg_update_ex(CTX, \
 				AUX_REG(reg_name), \
-				AUX_REG_READ(reg_name), \
 				n, __VA_ARGS__)
 
 #define AUX_REG_UPDATE(reg_name, field, val)	\
@@ -1359,5 +1364,5 @@ void dcn10_aux_initialize(struct dcn10_link_encoder *enc10)
 
 	/* 1/4 window (the maximum allowed) */
 	AUX_REG_UPDATE(AUX_DPHY_RX_CONTROL0,
-			AUX_RX_RECEIVE_WINDOW, 1);
+			AUX_RX_RECEIVE_WINDOW, 0);
 }

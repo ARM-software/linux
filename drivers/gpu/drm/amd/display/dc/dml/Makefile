@@ -32,20 +32,26 @@ endif
 
 dml_ccflags := -mhard-float -msse $(cc_stack_align)
 
-# Use -msse2 only with clang:
-#   https://bugs.freedesktop.org/show_bug.cgi?id=109487
-ifdef CONFIG_CC_IS_CLANG
-dml_ccflags += -msse2
-endif
-
 CFLAGS_display_mode_lib.o := $(dml_ccflags)
-CFLAGS_display_pipe_clocks.o := $(dml_ccflags)
+
+ifdef CONFIG_DRM_AMD_DC_DCN2_0
+CFLAGS_display_mode_vba.o := $(dml_ccflags)
+CFLAGS_display_mode_vba_20.o := $(dml_ccflags)
+CFLAGS_display_rq_dlg_calc_20.o := $(dml_ccflags)
+endif
+ifdef CONFIG_DRM_AMD_DCN3AG
+CFLAGS_display_mode_vba_3ag.o := $(dml_ccflags)
+endif
 CFLAGS_dml1_display_rq_dlg_calc.o := $(dml_ccflags)
 CFLAGS_display_rq_dlg_helpers.o := $(dml_ccflags)
 CFLAGS_dml_common_defs.o := $(dml_ccflags)
 
 DML = display_mode_lib.o display_rq_dlg_helpers.o dml1_display_rq_dlg_calc.o \
 	dml_common_defs.o
+
+ifdef CONFIG_DRM_AMD_DC_DCN2_0
+DML += display_mode_vba.o dcn20/display_rq_dlg_calc_20.o dcn20/display_mode_vba_20.o
+endif
 
 AMD_DAL_DML = $(addprefix $(AMDDALPATH)/dc/dml/,$(DML))
 

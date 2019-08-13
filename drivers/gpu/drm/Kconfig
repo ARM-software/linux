@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Drm device configuration
 #
@@ -22,6 +23,10 @@ menuconfig DRM
 	  DMA transfers. Please see <http://dri.sourceforge.net/> for more
 	  details.  You should also select and configure AGP
 	  (/dev/agpgart) support if it is available for your platform.
+
+config DRM_MIPI_DBI
+	tristate
+	depends on DRM
 
 config DRM_MIPI_DSI
 	bool
@@ -130,10 +135,6 @@ config DRM_FBDEV_LEAK_PHYS_SMEM
 	  If in doubt, say "N" or spread the word to your closed source
 	  library vendor.
 
-config DRM_EDID_RETRY
-	int "Maximum number of EDID query retries"
-	default 5
-
 config DRM_LOAD_EDID_FIRMWARE
 	bool "Allow to specify an EDID data set instead of probing for it"
 	depends on DRM
@@ -144,7 +145,7 @@ config DRM_LOAD_EDID_FIRMWARE
 	  monitor are unable to provide appropriate EDID data. Since this
 	  feature is provided as a workaround for broken hardware, the
 	  default case is N. Details and instructions how to build your own
-	  EDID data are given in Documentation/EDID/HOWTO.txt.
+	  EDID data are given in Documentation/driver-api/edid.rst.
 
 config DRM_DP_CEC
 	bool "Enable DisplayPort CEC-Tunneling-over-AUX HDMI support"
@@ -164,6 +165,13 @@ config DRM_TTM
 	  GPU memory types. Will be enabled automatically if a device driver
 	  uses it.
 
+config DRM_VRAM_HELPER
+	tristate
+	depends on DRM
+	select DRM_TTM
+	help
+	  Helpers for VRAM memory management
+
 config DRM_GEM_CMA_HELPER
 	bool
 	depends on DRM
@@ -174,12 +182,14 @@ config DRM_KMS_CMA_HELPER
 	bool
 	depends on DRM
 	select DRM_GEM_CMA_HELPER
-	select DRM_KMS_FB_HELPER
-	select FB_SYS_FILLRECT
-	select FB_SYS_COPYAREA
-	select FB_SYS_IMAGEBLIT
 	help
 	  Choose this if you need the KMS CMA helper functions
+
+config DRM_GEM_SHMEM_HELPER
+	bool
+	depends on DRM
+	help
+	  Choose this if you need the GEM shmem helper functions
 
 config DRM_VM
 	bool
@@ -202,7 +212,6 @@ config DRM_RADEON
 	select POWER_SUPPLY
 	select HWMON
 	select BACKLIGHT_CLASS_DEVICE
-	select BACKLIGHT_LCD_SUPPORT
 	select INTERVAL_TREE
 	help
 	  Choose this option if you have an ATI Radeon graphics card.  There
@@ -223,7 +232,6 @@ config DRM_AMDGPU
 	select POWER_SUPPLY
 	select HWMON
 	select BACKLIGHT_CLASS_DEVICE
-	select BACKLIGHT_LCD_SUPPORT
 	select INTERVAL_TREE
 	select CHASH
 	help
@@ -232,8 +240,6 @@ config DRM_AMDGPU
 	  If M is selected, the module will be called amdgpu.
 
 source "drivers/gpu/drm/amd/amdgpu/Kconfig"
-
-source "drivers/gpu/drm/amd/lib/Kconfig"
 
 source "drivers/gpu/drm/nouveau/Kconfig"
 
@@ -258,6 +264,9 @@ config DRM_VKMS
 	  a VKMS.
 
 	  If M is selected the module will be called vkms.
+
+config DRM_ATI_PCIGART
+        bool
 
 source "drivers/gpu/drm/exynos/Kconfig"
 
@@ -309,9 +318,9 @@ source "drivers/gpu/drm/bridge/Kconfig"
 
 source "drivers/gpu/drm/sti/Kconfig"
 
-source "drivers/gpu/drm/amd/amdkfd/Kconfig"
-
 source "drivers/gpu/drm/imx/Kconfig"
+
+source "drivers/gpu/drm/ingenic/Kconfig"
 
 source "drivers/gpu/drm/v3d/Kconfig"
 
@@ -331,7 +340,7 @@ source "drivers/gpu/drm/mxsfb/Kconfig"
 
 source "drivers/gpu/drm/meson/Kconfig"
 
-source "drivers/gpu/drm/tinydrm/Kconfig"
+source "drivers/gpu/drm/tiny/Kconfig"
 
 source "drivers/gpu/drm/pl111/Kconfig"
 
@@ -339,12 +348,23 @@ source "drivers/gpu/drm/tve200/Kconfig"
 
 source "drivers/gpu/drm/xen/Kconfig"
 
+source "drivers/gpu/drm/vboxvideo/Kconfig"
+
+source "drivers/gpu/drm/lima/Kconfig"
+
+source "drivers/gpu/drm/panfrost/Kconfig"
+
+source "drivers/gpu/drm/aspeed/Kconfig"
+
+source "drivers/gpu/drm/mcde/Kconfig"
+
 # Keep legacy drivers last
 
 menuconfig DRM_LEGACY
 	bool "Enable legacy drivers (DANGEROUS)"
 	depends on DRM && MMU
 	select DRM_VM
+	select DRM_ATI_PCIGART if PCI
 	help
 	  Enable legacy DRI1 drivers. Those drivers expose unsafe and dangerous
 	  APIs to user-space, which can be used to circumvent access

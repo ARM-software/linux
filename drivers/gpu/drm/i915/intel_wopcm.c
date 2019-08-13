@@ -41,26 +41,27 @@
  * context).
  */
 
-/* Default WOPCM size 1MB. */
-#define GEN9_WOPCM_SIZE			(1024 * 1024)
+/* Default WOPCM size is 2MB from Gen11, 1MB on previous platforms */
+#define GEN11_WOPCM_SIZE		SZ_2M
+#define GEN9_WOPCM_SIZE			SZ_1M
 /* 16KB WOPCM (RSVD WOPCM) is reserved from HuC firmware top. */
-#define WOPCM_RESERVED_SIZE		(16 * 1024)
+#define WOPCM_RESERVED_SIZE		SZ_16K
 
 /* 16KB reserved at the beginning of GuC WOPCM. */
-#define GUC_WOPCM_RESERVED		(16 * 1024)
+#define GUC_WOPCM_RESERVED		SZ_16K
 /* 8KB from GUC_WOPCM_RESERVED is reserved for GuC stack. */
-#define GUC_WOPCM_STACK_RESERVED	(8 * 1024)
+#define GUC_WOPCM_STACK_RESERVED	SZ_8K
 
 /* GuC WOPCM Offset value needs to be aligned to 16KB. */
 #define GUC_WOPCM_OFFSET_ALIGNMENT	(1UL << GUC_WOPCM_OFFSET_SHIFT)
 
 /* 24KB at the end of WOPCM is reserved for RC6 CTX on BXT. */
-#define BXT_WOPCM_RC6_CTX_RESERVED	(24 * 1024)
+#define BXT_WOPCM_RC6_CTX_RESERVED	(SZ_16K + SZ_8K)
 /* 36KB WOPCM reserved at the end of WOPCM on CNL. */
-#define CNL_WOPCM_HW_CTX_RESERVED	(36 * 1024)
+#define CNL_WOPCM_HW_CTX_RESERVED	(SZ_32K + SZ_4K)
 
 /* 128KB from GUC_WOPCM_RESERVED is reserved for FW on Gen9. */
-#define GEN9_GUC_FW_RESERVED	(128 * 1024)
+#define GEN9_GUC_FW_RESERVED	SZ_128K
 #define GEN9_GUC_WOPCM_OFFSET	(GUC_WOPCM_RESERVED + GEN9_GUC_FW_RESERVED)
 
 /**
@@ -71,7 +72,15 @@
  */
 void intel_wopcm_init_early(struct intel_wopcm *wopcm)
 {
-	wopcm->size = GEN9_WOPCM_SIZE;
+	struct drm_i915_private *i915 = wopcm_to_i915(wopcm);
+
+	if (!HAS_GUC(i915))
+		return;
+
+	if (INTEL_GEN(i915) >= 11)
+		wopcm->size = GEN11_WOPCM_SIZE;
+	else
+		wopcm->size = GEN9_WOPCM_SIZE;
 
 	DRM_DEBUG_DRIVER("WOPCM size: %uKiB\n", wopcm->size / 1024);
 }
@@ -130,11 +139,11 @@ static inline int check_hw_restriction(struct drm_i915_private *i915,
 {
 	int err = 0;
 
-	if (IS_GEN9(i915))
+	if (IS_GEN(i915, 9))
 		err = gen9_check_dword_gap(guc_wopcm_base, guc_wopcm_size);
 
 	if (!err &&
-	    (IS_GEN9(i915) || IS_CNL_REVID(i915, CNL_REVID_A0, CNL_REVID_A0)))
+	    (IS_GEN(i915, 9) || IS_CNL_REVID(i915, CNL_REVID_A0, CNL_REVID_A0)))
 		err = gen9_check_huc_fw_fits(guc_wopcm_size, huc_fw_size);
 
 	return err;
@@ -163,7 +172,13 @@ int intel_wopcm_init(struct intel_wopcm *wopcm)
 	u32 guc_wopcm_rsvd;
 	int err;
 
+	if (!USES_GUC(i915))
+		return 0;
+
 	GEM_BUG_ON(!wopcm->size);
+
+	if (i915_inject_load_failure())
+		return -E2BIG;
 
 	if (guc_fw_size >= wopcm->size) {
 		DRM_ERROR("GuC FW (%uKiB) is too big to fit in WOPCM.",

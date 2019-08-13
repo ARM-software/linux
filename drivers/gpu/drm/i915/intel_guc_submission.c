@@ -23,10 +23,13 @@
  */
 
 #include <linux/circ_buf.h>
-#include <trace/events/dma_fence.h>
+
+#include "gt/intel_engine_pm.h"
+#include "gt/intel_lrc_reg.h"
+#include "gt/intel_context.h"
+#include "gem/i915_gem_context.h"
 
 #include "intel_guc_submission.h"
-#include "intel_lrc_reg.h"
 #include "i915_drv.h"
 
 #define GUC_PREEMPT_FINISHED		0x1
@@ -80,6 +83,12 @@
  * See guc_add_request()
  *
  */
+
+static inline u32 intel_hws_preempt_done_address(struct intel_engine_cs *engine)
+{
+	return (i915_ggtt_offset(engine->status_page.vma) +
+		I915_GEM_HWS_PREEMPT_ADDR);
+}
 
 static inline struct i915_priolist *to_priolist(struct rb_node *rb)
 {
@@ -192,7 +201,15 @@ static struct guc_doorbell_info *__get_doorbell(struct intel_guc_client *client)
 	return client->vaddr + client->doorbell_offset;
 }
 
-static void __create_doorbell(struct intel_guc_client *client)
+static bool __doorbell_valid(struct intel_guc *guc, u16 db_id)
+{
+	struct drm_i915_private *dev_priv = guc_to_i915(guc);
+
+	GEM_BUG_ON(db_id >= GUC_NUM_DOORBELLS);
+	return I915_READ(GEN8_DRBREGL(db_id)) & GEN8_DRB_VALID;
+}
+
+static void __init_doorbell(struct intel_guc_client *client)
 {
 	struct guc_doorbell_info *doorbell;
 
@@ -201,21 +218,19 @@ static void __create_doorbell(struct intel_guc_client *client)
 	doorbell->cookie = 0;
 }
 
-static void __destroy_doorbell(struct intel_guc_client *client)
+static void __fini_doorbell(struct intel_guc_client *client)
 {
-	struct drm_i915_private *dev_priv = guc_to_i915(client->guc);
 	struct guc_doorbell_info *doorbell;
 	u16 db_id = client->doorbell_id;
 
 	doorbell = __get_doorbell(client);
 	doorbell->db_status = GUC_DOORBELL_DISABLED;
-	doorbell->cookie = 0;
 
 	/* Doorbell release flow requires that we wait for GEN8_DRB_VALID bit
 	 * to go to zero after updating db_status before we call the GuC to
 	 * release the doorbell
 	 */
-	if (wait_for_us(!(I915_READ(GEN8_DRBREGL(db_id)) & GEN8_DRB_VALID), 10))
+	if (wait_for_us(!__doorbell_valid(client->guc, db_id), 10))
 		WARN_ONCE(true, "Doorbell never became invalid after disable\n");
 }
 
@@ -227,11 +242,11 @@ static int create_doorbell(struct intel_guc_client *client)
 		return -ENODEV; /* internal setup error, should never happen */
 
 	__update_doorbell_desc(client, client->doorbell_id);
-	__create_doorbell(client);
+	__init_doorbell(client);
 
 	ret = __guc_allocate_doorbell(client->guc, client->stage_id);
 	if (ret) {
-		__destroy_doorbell(client);
+		__fini_doorbell(client);
 		__update_doorbell_desc(client, GUC_DOORBELL_INVALID);
 		DRM_DEBUG_DRIVER("Couldn't create client %u doorbell: %d\n",
 				 client->stage_id, ret);
@@ -247,7 +262,7 @@ static int destroy_doorbell(struct intel_guc_client *client)
 
 	GEM_BUG_ON(!has_doorbell(client));
 
-	__destroy_doorbell(client);
+	__fini_doorbell(client);
 	ret = __guc_deallocate_doorbell(client->guc, client->stage_id);
 	if (ret)
 		DRM_ERROR("Couldn't destroy client %u doorbell: %d\n",
@@ -282,8 +297,7 @@ __get_process_desc(struct intel_guc_client *client)
 /*
  * Initialise the process descriptor shared with the GuC firmware.
  */
-static void guc_proc_desc_init(struct intel_guc *guc,
-			       struct intel_guc_client *client)
+static void guc_proc_desc_init(struct intel_guc_client *client)
 {
 	struct guc_process_desc *desc;
 
@@ -304,6 +318,14 @@ static void guc_proc_desc_init(struct intel_guc *guc,
 	desc->priority = client->priority;
 }
 
+static void guc_proc_desc_fini(struct intel_guc_client *client)
+{
+	struct guc_process_desc *desc;
+
+	desc = __get_process_desc(client);
+	memset(desc, 0, sizeof(*desc));
+}
+
 static int guc_stage_desc_pool_create(struct intel_guc *guc)
 {
 	struct i915_vma *vma;
@@ -317,7 +339,7 @@ static int guc_stage_desc_pool_create(struct intel_guc *guc)
 
 	vaddr = i915_gem_object_pin_map(vma->obj, I915_MAP_WB);
 	if (IS_ERR(vaddr)) {
-		i915_vma_unpin_and_release(&vma);
+		i915_vma_unpin_and_release(&vma, 0);
 		return PTR_ERR(vaddr);
 	}
 
@@ -331,8 +353,7 @@ static int guc_stage_desc_pool_create(struct intel_guc *guc)
 static void guc_stage_desc_pool_destroy(struct intel_guc *guc)
 {
 	ida_destroy(&guc->stage_ids);
-	i915_gem_object_unpin_map(guc->stage_desc_pool->obj);
-	i915_vma_unpin_and_release(&guc->stage_desc_pool);
+	i915_vma_unpin_and_release(&guc->stage_desc_pool, I915_VMA_RELEASE_MAP);
 }
 
 /*
@@ -342,14 +363,13 @@ static void guc_stage_desc_pool_destroy(struct intel_guc *guc)
  * data structures relating to this client (doorbell, process descriptor,
  * write queue, etc).
  */
-static void guc_stage_desc_init(struct intel_guc *guc,
-				struct intel_guc_client *client)
+static void guc_stage_desc_init(struct intel_guc_client *client)
 {
-	struct drm_i915_private *dev_priv = guc_to_i915(guc);
-	struct intel_engine_cs *engine;
+	struct intel_guc *guc = client->guc;
 	struct i915_gem_context *ctx = client->owner;
+	struct i915_gem_engines_iter it;
 	struct guc_stage_desc *desc;
-	unsigned int tmp;
+	struct intel_context *ce;
 	u32 gfx_addr;
 
 	desc = __get_stage_desc(client);
@@ -363,10 +383,11 @@ static void guc_stage_desc_init(struct intel_guc *guc,
 	desc->priority = client->priority;
 	desc->db_id = client->doorbell_id;
 
-	for_each_engine_masked(engine, dev_priv, client->engines, tmp) {
-		struct intel_context *ce = to_intel_context(ctx, engine);
-		u32 guc_engine_id = engine->guc_id;
-		struct guc_execlist_context *lrc = &desc->lrc[guc_engine_id];
+	for_each_gem_engine(ce, i915_gem_context_lock_engines(ctx), it) {
+		struct guc_execlist_context *lrc;
+
+		if (!(ce->engine->mask & client->engines))
+			continue;
 
 		/* TODO: We have a design issue to be solved here. Only when we
 		 * receive the first batch, we know which engine is used by the
@@ -385,6 +406,7 @@ static void guc_stage_desc_init(struct intel_guc *guc,
 		 * Instead, the GuC uses the LRCA of the user mode context (see
 		 * guc_add_request below).
 		 */
+		lrc = &desc->lrc[ce->engine->guc_id];
 		lrc->context_desc = lower_32_bits(ce->lrc_desc);
 
 		/* The state page is after PPHWSP */
@@ -395,15 +417,16 @@ static void guc_stage_desc_init(struct intel_guc *guc,
 		 * here. In proxy submission, it wants the stage id
 		 */
 		lrc->context_id = (client->stage_id << GUC_ELC_CTXID_OFFSET) |
-				(guc_engine_id << GUC_ELC_ENGINE_OFFSET);
+				(ce->engine->guc_id << GUC_ELC_ENGINE_OFFSET);
 
 		lrc->ring_begin = intel_guc_ggtt_offset(guc, ce->ring->vma);
 		lrc->ring_end = lrc->ring_begin + ce->ring->size - 1;
 		lrc->ring_next_free_location = lrc->ring_begin;
 		lrc->ring_current_tail_pointer_value = 0;
 
-		desc->engines_used |= (1 << guc_engine_id);
+		desc->engines_used |= BIT(ce->engine->guc_id);
 	}
+	i915_gem_context_unlock_engines(ctx);
 
 	DRM_DEBUG_DRIVER("Host engines 0x%x => GuC engines used 0x%x\n",
 			 client->engines, desc->engines_used);
@@ -425,8 +448,7 @@ static void guc_stage_desc_init(struct intel_guc *guc,
 	desc->desc_private = ptr_to_u64(client);
 }
 
-static void guc_stage_desc_fini(struct intel_guc *guc,
-				struct intel_guc_client *client)
+static void guc_stage_desc_fini(struct intel_guc_client *client)
 {
 	struct guc_stage_desc *desc;
 
@@ -457,6 +479,9 @@ static void guc_wq_item_append(struct intel_guc_client *client,
 	 */
 	BUILD_BUG_ON(wqi_size != 16);
 
+	/* We expect the WQ to be active if we're appending items to it */
+	GEM_BUG_ON(desc->wq_status != WQ_STATUS_ACTIVE);
+
 	/* Free space is guaranteed. */
 	wq_off = READ_ONCE(desc->tail);
 	GEM_BUG_ON(CIRC_SPACE(wq_off, READ_ONCE(desc->head),
@@ -466,26 +491,22 @@ static void guc_wq_item_append(struct intel_guc_client *client,
 	/* WQ starts from the page after doorbell / process_desc */
 	wqi = client->vaddr + wq_off + GUC_DB_SIZE;
 
-	/* Now fill in the 4-word work queue item */
-	wqi->header = WQ_TYPE_INORDER |
-		      (wqi_len << WQ_LEN_SHIFT) |
-		      (target_engine << WQ_TARGET_SHIFT) |
-		      WQ_NO_WCFLUSH_WAIT;
-	wqi->context_desc = context_desc;
-	wqi->submit_element_info = ring_tail << WQ_RING_TAIL_SHIFT;
-	GEM_BUG_ON(ring_tail > WQ_RING_TAIL_MAX);
-	wqi->fence_id = fence_id;
+	if (I915_SELFTEST_ONLY(client->use_nop_wqi)) {
+		wqi->header = WQ_TYPE_NOOP | (wqi_len << WQ_LEN_SHIFT);
+	} else {
+		/* Now fill in the 4-word work queue item */
+		wqi->header = WQ_TYPE_INORDER |
+			      (wqi_len << WQ_LEN_SHIFT) |
+			      (target_engine << WQ_TARGET_SHIFT) |
+			      WQ_NO_WCFLUSH_WAIT;
+		wqi->context_desc = context_desc;
+		wqi->submit_element_info = ring_tail << WQ_RING_TAIL_SHIFT;
+		GEM_BUG_ON(ring_tail > WQ_RING_TAIL_MAX);
+		wqi->fence_id = fence_id;
+	}
 
 	/* Make the update visible to GuC */
 	WRITE_ONCE(desc->tail, (wq_off + wqi_size) & (GUC_WQ_SIZE - 1));
-}
-
-static void guc_reset_wq(struct intel_guc_client *client)
-{
-	struct guc_process_desc *desc = __get_process_desc(client);
-
-	desc->head = 0;
-	desc->tail = 0;
 }
 
 static void guc_ring_doorbell(struct intel_guc_client *client)
@@ -519,7 +540,7 @@ static void guc_add_request(struct intel_guc *guc, struct i915_request *rq)
 	spin_lock(&client->wq_lock);
 
 	guc_wq_item_append(client, engine->guc_id, ctx_desc,
-			   ring_tail, rq->global_seqno);
+			   ring_tail, rq->fence.seqno);
 	guc_ring_doorbell(client);
 
 	client->submissions[engine->id] += 1;
@@ -536,10 +557,10 @@ static void guc_add_request(struct intel_guc *guc, struct i915_request *rq)
  */
 static void flush_ggtt_writes(struct i915_vma *vma)
 {
-	struct drm_i915_private *dev_priv = vma->vm->i915;
+	struct drm_i915_private *i915 = vma->vm->i915;
 
 	if (i915_vma_is_map_and_fenceable(vma))
-		POSTING_READ_FW(GUC_STATUS);
+		intel_uncore_posting_read_fw(&i915->uncore, GUC_STATUS);
 }
 
 static void inject_preempt_context(struct work_struct *work)
@@ -551,16 +572,38 @@ static void inject_preempt_context(struct work_struct *work)
 					     preempt_work[engine->id]);
 	struct intel_guc_client *client = guc->preempt_client;
 	struct guc_stage_desc *stage_desc = __get_stage_desc(client);
-	u32 ctx_desc = lower_32_bits(to_intel_context(client->owner,
-						      engine)->lrc_desc);
+	struct intel_context *ce = engine->preempt_context;
 	u32 data[7];
 
-	/*
-	 * The ring contains commands to write GUC_PREEMPT_FINISHED into HWSP.
-	 * See guc_fill_preempt_context().
-	 */
+	if (!ce->ring->emit) { /* recreate upon load/resume */
+		u32 addr = intel_hws_preempt_done_address(engine);
+		u32 *cs;
+
+		cs = ce->ring->vaddr;
+		if (engine->class == RENDER_CLASS) {
+			cs = gen8_emit_ggtt_write_rcs(cs,
+						      GUC_PREEMPT_FINISHED,
+						      addr,
+						      PIPE_CONTROL_CS_STALL);
+		} else {
+			cs = gen8_emit_ggtt_write(cs,
+						  GUC_PREEMPT_FINISHED,
+						  addr,
+						  0);
+			*cs++ = MI_NOOP;
+			*cs++ = MI_NOOP;
+		}
+		*cs++ = MI_USER_INTERRUPT;
+		*cs++ = MI_NOOP;
+
+		ce->ring->emit = GUC_PREEMPT_BREADCRUMB_BYTES;
+		GEM_BUG_ON((void *)cs - ce->ring->vaddr != ce->ring->emit);
+
+		flush_ggtt_writes(ce->ring->vma);
+	}
+
 	spin_lock_irq(&client->wq_lock);
-	guc_wq_item_append(client, engine->guc_id, ctx_desc,
+	guc_wq_item_append(client, engine->guc_id, lower_32_bits(ce->lrc_desc),
 			   GUC_PREEMPT_BREADCRUMB_BYTES / sizeof(u64), 0);
 	spin_unlock_irq(&client->wq_lock);
 
@@ -592,6 +635,8 @@ static void inject_preempt_context(struct work_struct *work)
 				       EXECLISTS_ACTIVE_PREEMPT);
 		tasklet_schedule(&engine->execlists.tasklet);
 	}
+
+	(void)I915_SELFTEST_ONLY(engine->execlists.preempt_hang.count++);
 }
 
 /*
@@ -610,9 +655,10 @@ static void wait_for_guc_preempt_report(struct intel_engine_cs *engine)
 	struct guc_ctx_report *report =
 		&data->preempt_ctx_report[engine->guc_id];
 
-	WARN_ON(wait_for_atomic(report->report_return_status ==
-				INTEL_GUC_REPORT_STATUS_COMPLETE,
-				GUC_PREEMPT_POSTPROCESS_DELAY_MS));
+	if (wait_for_atomic(report->report_return_status ==
+			    INTEL_GUC_REPORT_STATUS_COMPLETE,
+			    GUC_PREEMPT_POSTPROCESS_DELAY_MS))
+		DRM_ERROR("Timed out waiting for GuC preemption report\n");
 	/*
 	 * GuC is expecting that we're also going to clear the affected context
 	 * counter, let's also reset the return status to not depend on GuC
@@ -635,7 +681,7 @@ static void complete_preempt_context(struct intel_engine_cs *engine)
 	execlists_unwind_incomplete_requests(execlists);
 
 	wait_for_guc_preempt_report(engine);
-	intel_write_status_page(engine, I915_GEM_HWS_PREEMPT_INDEX, 0);
+	intel_write_status_page(engine, I915_GEM_HWS_PREEMPT, 0);
 }
 
 /**
@@ -681,7 +727,7 @@ static inline int rq_prio(const struct i915_request *rq)
 
 static inline int port_prio(const struct execlist_port *port)
 {
-	return rq_prio(port_request(port));
+	return rq_prio(port_request(port)) | __NO_PREEMPTION;
 }
 
 static bool __guc_dequeue(struct intel_engine_cs *engine)
@@ -694,15 +740,16 @@ static bool __guc_dequeue(struct intel_engine_cs *engine)
 	bool submit = false;
 	struct rb_node *rb;
 
-	lockdep_assert_held(&engine->timeline.lock);
+	lockdep_assert_held(&engine->active.lock);
 
 	if (port_isset(port)) {
 		if (intel_engine_has_preemption(engine)) {
 			struct guc_preempt_work *preempt_work =
 				&engine->i915->guc.preempt_work[engine->id];
-			int prio = execlists->queue_priority;
+			int prio = execlists->queue_priority_hint;
 
-			if (__execlists_need_preempt(prio, port_prio(port))) {
+			if (i915_scheduler_need_preempt(prio,
+							port_prio(port))) {
 				execlists_set_active(execlists,
 						     EXECLISTS_ACTIVE_PREEMPT);
 				queue_work(engine->i915->guc.preempt_wq,
@@ -720,35 +767,33 @@ static bool __guc_dequeue(struct intel_engine_cs *engine)
 	while ((rb = rb_first_cached(&execlists->queue))) {
 		struct i915_priolist *p = to_priolist(rb);
 		struct i915_request *rq, *rn;
+		int i;
 
-		list_for_each_entry_safe(rq, rn, &p->requests, sched.link) {
+		priolist_for_each_request_consume(rq, rn, p, i) {
 			if (last && rq->hw_context != last->hw_context) {
-				if (port == last_port) {
-					__list_del_many(&p->requests,
-							&rq->sched.link);
+				if (port == last_port)
 					goto done;
-				}
 
 				if (submit)
 					port_assign(port, last);
 				port++;
 			}
 
-			INIT_LIST_HEAD(&rq->sched.link);
+			list_del_init(&rq->sched.link);
 
 			__i915_request_submit(rq);
 			trace_i915_request_in(rq, port_index(port, execlists));
+
 			last = rq;
 			submit = true;
 		}
 
 		rb_erase_cached(&p->node, &execlists->queue);
-		INIT_LIST_HEAD(&p->requests);
-		if (p->priority != I915_PRIORITY_NORMAL)
-			kmem_cache_free(engine->i915->priorities, p);
+		i915_priolist_free(p);
 	}
 done:
-	execlists->queue_priority = rb ? to_priolist(rb)->priority : INT_MIN;
+	execlists->queue_priority_hint =
+		rb ? to_priolist(rb)->priority : INT_MIN;
 	if (submit)
 		port_assign(port, last);
 	if (last)
@@ -765,19 +810,8 @@ done:
 
 static void guc_dequeue(struct intel_engine_cs *engine)
 {
-	unsigned long flags;
-	bool submit;
-
-	local_irq_save(flags);
-
-	spin_lock(&engine->timeline.lock);
-	submit = __guc_dequeue(engine);
-	spin_unlock(&engine->timeline.lock);
-
-	if (submit)
+	if (__guc_dequeue(engine))
 		guc_submit(engine);
-
-	local_irq_restore(flags);
 }
 
 static void guc_submission_tasklet(unsigned long data)
@@ -786,6 +820,9 @@ static void guc_submission_tasklet(unsigned long data)
 	struct intel_engine_execlists * const execlists = &engine->execlists;
 	struct execlist_port *port = execlists->port;
 	struct i915_request *rq;
+	unsigned long flags;
+
+	spin_lock_irqsave(&engine->active.lock, flags);
 
 	rq = port_request(port);
 	while (rq && i915_request_completed(rq)) {
@@ -803,16 +840,17 @@ static void guc_submission_tasklet(unsigned long data)
 	}
 
 	if (execlists_is_active(execlists, EXECLISTS_ACTIVE_PREEMPT) &&
-	    intel_read_status_page(engine, I915_GEM_HWS_PREEMPT_INDEX) ==
+	    intel_read_status_page(engine, I915_GEM_HWS_PREEMPT) ==
 	    GUC_PREEMPT_FINISHED)
 		complete_preempt_context(engine);
 
 	if (!execlists_is_active(execlists, EXECLISTS_ACTIVE_PREEMPT))
 		guc_dequeue(engine);
+
+	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
 
-static struct i915_request *
-guc_reset_prepare(struct intel_engine_cs *engine)
+static void guc_reset_prepare(struct intel_engine_cs *engine)
 {
 	struct intel_engine_execlists * const execlists = &engine->execlists;
 
@@ -838,8 +876,104 @@ guc_reset_prepare(struct intel_engine_cs *engine)
 	 */
 	if (engine->i915->guc.preempt_wq)
 		flush_workqueue(engine->i915->guc.preempt_wq);
+}
 
-	return i915_gem_find_active_request(engine);
+static void guc_reset(struct intel_engine_cs *engine, bool stalled)
+{
+	struct intel_engine_execlists * const execlists = &engine->execlists;
+	struct i915_request *rq;
+	unsigned long flags;
+
+	spin_lock_irqsave(&engine->active.lock, flags);
+
+	execlists_cancel_port_requests(execlists);
+
+	/* Push back any incomplete requests for replay after the reset. */
+	rq = execlists_unwind_incomplete_requests(execlists);
+	if (!rq)
+		goto out_unlock;
+
+	if (!i915_request_started(rq))
+		stalled = false;
+
+	i915_reset_request(rq, stalled);
+	intel_lr_context_reset(engine, rq->hw_context, rq->head, stalled);
+
+out_unlock:
+	spin_unlock_irqrestore(&engine->active.lock, flags);
+}
+
+static void guc_cancel_requests(struct intel_engine_cs *engine)
+{
+	struct intel_engine_execlists * const execlists = &engine->execlists;
+	struct i915_request *rq, *rn;
+	struct rb_node *rb;
+	unsigned long flags;
+
+	GEM_TRACE("%s\n", engine->name);
+
+	/*
+	 * Before we call engine->cancel_requests(), we should have exclusive
+	 * access to the submission state. This is arranged for us by the
+	 * caller disabling the interrupt generation, the tasklet and other
+	 * threads that may then access the same state, giving us a free hand
+	 * to reset state. However, we still need to let lockdep be aware that
+	 * we know this state may be accessed in hardirq context, so we
+	 * disable the irq around this manipulation and we want to keep
+	 * the spinlock focused on its duties and not accidentally conflate
+	 * coverage to the submission's irq state. (Similarly, although we
+	 * shouldn't need to disable irq around the manipulation of the
+	 * submission's irq state, we also wish to remind ourselves that
+	 * it is irq state.)
+	 */
+	spin_lock_irqsave(&engine->active.lock, flags);
+
+	/* Cancel the requests on the HW and clear the ELSP tracker. */
+	execlists_cancel_port_requests(execlists);
+
+	/* Mark all executing requests as skipped. */
+	list_for_each_entry(rq, &engine->active.requests, sched.link) {
+		if (!i915_request_signaled(rq))
+			dma_fence_set_error(&rq->fence, -EIO);
+
+		i915_request_mark_complete(rq);
+	}
+
+	/* Flush the queued requests to the timeline list (for retiring). */
+	while ((rb = rb_first_cached(&execlists->queue))) {
+		struct i915_priolist *p = to_priolist(rb);
+		int i;
+
+		priolist_for_each_request_consume(rq, rn, p, i) {
+			list_del_init(&rq->sched.link);
+			__i915_request_submit(rq);
+			dma_fence_set_error(&rq->fence, -EIO);
+			i915_request_mark_complete(rq);
+		}
+
+		rb_erase_cached(&p->node, &execlists->queue);
+		i915_priolist_free(p);
+	}
+
+	/* Remaining _unready_ requests will be nop'ed when submitted */
+
+	execlists->queue_priority_hint = INT_MIN;
+	execlists->queue = RB_ROOT_CACHED;
+	GEM_BUG_ON(port_isset(execlists->port));
+
+	spin_unlock_irqrestore(&engine->active.lock, flags);
+}
+
+static void guc_reset_finish(struct intel_engine_cs *engine)
+{
+	struct intel_engine_execlists * const execlists = &engine->execlists;
+
+	if (__tasklet_enable(&execlists->tasklet))
+		/* And kick in case we missed a new request submission. */
+		tasklet_hi_schedule(&execlists->tasklet);
+
+	GEM_TRACE("%s: depth->%d\n", engine->name,
+		  atomic_read(&execlists->tasklet.count));
 }
 
 /*
@@ -851,72 +985,31 @@ guc_reset_prepare(struct intel_engine_cs *engine)
 /* Check that a doorbell register is in the expected state */
 static bool doorbell_ok(struct intel_guc *guc, u16 db_id)
 {
-	struct drm_i915_private *dev_priv = guc_to_i915(guc);
-	u32 drbregl;
 	bool valid;
 
-	GEM_BUG_ON(db_id >= GUC_DOORBELL_INVALID);
+	GEM_BUG_ON(db_id >= GUC_NUM_DOORBELLS);
 
-	drbregl = I915_READ(GEN8_DRBREGL(db_id));
-	valid = drbregl & GEN8_DRB_VALID;
+	valid = __doorbell_valid(guc, db_id);
 
 	if (test_bit(db_id, guc->doorbell_bitmap) == valid)
 		return true;
 
-	DRM_DEBUG_DRIVER("Doorbell %d has unexpected state (0x%x): valid=%s\n",
-			 db_id, drbregl, yesno(valid));
+	DRM_DEBUG_DRIVER("Doorbell %u has unexpected state: valid=%s\n",
+			 db_id, yesno(valid));
 
 	return false;
 }
 
 static bool guc_verify_doorbells(struct intel_guc *guc)
 {
+	bool doorbells_ok = true;
 	u16 db_id;
 
 	for (db_id = 0; db_id < GUC_NUM_DOORBELLS; ++db_id)
 		if (!doorbell_ok(guc, db_id))
-			return false;
+			doorbells_ok = false;
 
-	return true;
-}
-
-static int guc_clients_doorbell_init(struct intel_guc *guc)
-{
-	int ret;
-
-	ret = create_doorbell(guc->execbuf_client);
-	if (ret)
-		return ret;
-
-	if (guc->preempt_client) {
-		ret = create_doorbell(guc->preempt_client);
-		if (ret) {
-			destroy_doorbell(guc->execbuf_client);
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
-static void guc_clients_doorbell_fini(struct intel_guc *guc)
-{
-	/*
-	 * By the time we're here, GuC has already been reset.
-	 * Instead of trying (in vain) to communicate with it, let's just
-	 * cleanup the doorbell HW and our internal state.
-	 */
-	if (guc->preempt_client) {
-		__destroy_doorbell(guc->preempt_client);
-		__update_doorbell_desc(guc->preempt_client,
-				       GUC_DOORBELL_INVALID);
-	}
-
-	if (guc->execbuf_client) {
-		__destroy_doorbell(guc->execbuf_client);
-		__update_doorbell_desc(guc->execbuf_client,
-				       GUC_DOORBELL_INVALID);
-	}
+	return doorbells_ok;
 }
 
 /**
@@ -979,6 +1072,10 @@ guc_client_alloc(struct drm_i915_private *dev_priv,
 	}
 	client->vaddr = vaddr;
 
+	ret = reserve_doorbell(client);
+	if (ret)
+		goto err_vaddr;
+
 	client->doorbell_offset = __select_cacheline(guc);
 
 	/*
@@ -991,13 +1088,6 @@ guc_client_alloc(struct drm_i915_private *dev_priv,
 	else
 		client->proc_desc_offset = (GUC_DB_SIZE / 2);
 
-	guc_proc_desc_init(guc, client);
-	guc_stage_desc_init(guc, client);
-
-	ret = reserve_doorbell(client);
-	if (ret)
-		goto err_vaddr;
-
 	DRM_DEBUG_DRIVER("new priority %u client %p for engine(s) 0x%x: stage_id %u\n",
 			 priority, client, client->engines, client->stage_id);
 	DRM_DEBUG_DRIVER("doorbell id %u, cacheline offset 0x%lx\n",
@@ -1008,7 +1098,7 @@ guc_client_alloc(struct drm_i915_private *dev_priv,
 err_vaddr:
 	i915_gem_object_unpin_map(client->vma->obj);
 err_vma:
-	i915_vma_unpin_and_release(&client->vma);
+	i915_vma_unpin_and_release(&client->vma, 0);
 err_id:
 	ida_simple_remove(&guc->stage_ids, client->stage_id);
 err_client:
@@ -1019,9 +1109,7 @@ err_client:
 static void guc_client_free(struct intel_guc_client *client)
 {
 	unreserve_doorbell(client);
-	guc_stage_desc_fini(client->guc, client);
-	i915_gem_object_unpin_map(client->vma->obj);
-	i915_vma_unpin_and_release(&client->vma);
+	i915_vma_unpin_and_release(&client->vma, I915_VMA_RELEASE_MAP);
 	ida_simple_remove(&client->guc->stage_ids, client->stage_id);
 	kfree(client);
 }
@@ -1039,50 +1127,6 @@ static inline bool ctx_save_restore_disabled(struct intel_context *ce)
 #undef SR_DISABLED
 }
 
-static void guc_fill_preempt_context(struct intel_guc *guc)
-{
-	struct drm_i915_private *dev_priv = guc_to_i915(guc);
-	struct intel_guc_client *client = guc->preempt_client;
-	struct intel_engine_cs *engine;
-	enum intel_engine_id id;
-
-	for_each_engine(engine, dev_priv, id) {
-		struct intel_context *ce =
-			to_intel_context(client->owner, engine);
-		u32 addr = intel_hws_preempt_done_address(engine);
-		u32 *cs;
-
-		GEM_BUG_ON(!ce->pin_count);
-
-		/*
-		 * We rely on this context image *not* being saved after
-		 * preemption. This ensures that the RING_HEAD / RING_TAIL
-		 * remain pointing at initial values forever.
-		 */
-		GEM_BUG_ON(!ctx_save_restore_disabled(ce));
-
-		cs = ce->ring->vaddr;
-		if (id == RCS) {
-			cs = gen8_emit_ggtt_write_rcs(cs,
-						      GUC_PREEMPT_FINISHED,
-						      addr);
-		} else {
-			cs = gen8_emit_ggtt_write(cs,
-						  GUC_PREEMPT_FINISHED,
-						  addr);
-			*cs++ = MI_NOOP;
-			*cs++ = MI_NOOP;
-		}
-		*cs++ = MI_USER_INTERRUPT;
-		*cs++ = MI_NOOP;
-
-		GEM_BUG_ON((void *)cs - ce->ring->vaddr !=
-			   GUC_PREEMPT_BREADCRUMB_BYTES);
-
-		flush_ggtt_writes(ce->ring->vma);
-	}
-}
-
 static int guc_clients_create(struct intel_guc *guc)
 {
 	struct drm_i915_private *dev_priv = guc_to_i915(guc);
@@ -1092,7 +1136,7 @@ static int guc_clients_create(struct intel_guc *guc)
 	GEM_BUG_ON(guc->preempt_client);
 
 	client = guc_client_alloc(dev_priv,
-				  INTEL_INFO(dev_priv)->ring_mask,
+				  INTEL_INFO(dev_priv)->engine_mask,
 				  GUC_CLIENT_PRIORITY_KMD_NORMAL,
 				  dev_priv->kernel_context);
 	if (IS_ERR(client)) {
@@ -1103,7 +1147,7 @@ static int guc_clients_create(struct intel_guc *guc)
 
 	if (dev_priv->preempt_context) {
 		client = guc_client_alloc(dev_priv,
-					  INTEL_INFO(dev_priv)->ring_mask,
+					  INTEL_INFO(dev_priv)->engine_mask,
 					  GUC_CLIENT_PRIORITY_KMD_HIGH,
 					  dev_priv->preempt_context);
 		if (IS_ERR(client)) {
@@ -1113,8 +1157,6 @@ static int guc_clients_create(struct intel_guc *guc)
 			return PTR_ERR(client);
 		}
 		guc->preempt_client = client;
-
-		guc_fill_preempt_context(guc);
 	}
 
 	return 0;
@@ -1131,6 +1173,69 @@ static void guc_clients_destroy(struct intel_guc *guc)
 	client = fetch_and_zero(&guc->execbuf_client);
 	if (client)
 		guc_client_free(client);
+}
+
+static int __guc_client_enable(struct intel_guc_client *client)
+{
+	int ret;
+
+	guc_proc_desc_init(client);
+	guc_stage_desc_init(client);
+
+	ret = create_doorbell(client);
+	if (ret)
+		goto fail;
+
+	return 0;
+
+fail:
+	guc_stage_desc_fini(client);
+	guc_proc_desc_fini(client);
+	return ret;
+}
+
+static void __guc_client_disable(struct intel_guc_client *client)
+{
+	/*
+	 * By the time we're here, GuC may have already been reset. if that is
+	 * the case, instead of trying (in vain) to communicate with it, let's
+	 * just cleanup the doorbell HW and our internal state.
+	 */
+	if (intel_guc_is_loaded(client->guc))
+		destroy_doorbell(client);
+	else
+		__fini_doorbell(client);
+
+	guc_stage_desc_fini(client);
+	guc_proc_desc_fini(client);
+}
+
+static int guc_clients_enable(struct intel_guc *guc)
+{
+	int ret;
+
+	ret = __guc_client_enable(guc->execbuf_client);
+	if (ret)
+		return ret;
+
+	if (guc->preempt_client) {
+		ret = __guc_client_enable(guc->preempt_client);
+		if (ret) {
+			__guc_client_disable(guc->execbuf_client);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static void guc_clients_disable(struct intel_guc *guc)
+{
+	if (guc->preempt_client)
+		__guc_client_disable(guc->preempt_client);
+
+	if (guc->execbuf_client)
+		__guc_client_disable(guc->execbuf_client);
 }
 
 /*
@@ -1201,7 +1306,7 @@ static void guc_interrupts_capture(struct drm_i915_private *dev_priv)
 	 */
 	irqs = _MASKED_BIT_ENABLE(GFX_INTERRUPT_STEERING);
 	for_each_engine(engine, dev_priv, id)
-		I915_WRITE(RING_MODE_GEN7(engine), irqs);
+		ENGINE_WRITE(engine, RING_MODE_GEN7, irqs);
 
 	/* route USER_INTERRUPT to Host, all others are sent to GuC. */
 	irqs = GT_RENDER_USER_INTERRUPT << GEN8_RCS_IRQ_SHIFT |
@@ -1248,7 +1353,7 @@ static void guc_interrupts_release(struct drm_i915_private *dev_priv)
 	irqs = _MASKED_FIELD(GFX_FORWARD_VBLANK_MASK, GFX_FORWARD_VBLANK_NEVER);
 	irqs |= _MASKED_BIT_DISABLE(GFX_INTERRUPT_STEERING);
 	for_each_engine(engine, dev_priv, id)
-		I915_WRITE(RING_MODE_GEN7(engine), irqs);
+		ENGINE_WRITE(engine, RING_MODE_GEN7, irqs);
 
 	/* route all GT interrupts to the host */
 	I915_WRITE(GUC_BCS_RCS_IER, 0);
@@ -1261,11 +1366,14 @@ static void guc_interrupts_release(struct drm_i915_private *dev_priv)
 
 static void guc_submission_park(struct intel_engine_cs *engine)
 {
+	intel_engine_park(engine);
 	intel_engine_unpin_breadcrumbs_irq(engine);
+	engine->flags &= ~I915_ENGINE_NEEDS_BREADCRUMB_TASKLET;
 }
 
 static void guc_submission_unpark(struct intel_engine_cs *engine)
 {
+	engine->flags |= I915_ENGINE_NEEDS_BREADCRUMB_TASKLET;
 	intel_engine_pin_breadcrumbs_irq(engine);
 }
 
@@ -1290,6 +1398,10 @@ static void guc_set_default_submission(struct intel_engine_cs *engine)
 	engine->unpark = guc_submission_unpark;
 
 	engine->reset.prepare = guc_reset_prepare;
+	engine->reset.reset = guc_reset;
+	engine->reset.finish = guc_reset_finish;
+
+	engine->cancel_requests = guc_cancel_requests;
 
 	engine->flags &= ~I915_ENGINE_SUPPORTS_STATS;
 }
@@ -1316,15 +1428,7 @@ int intel_guc_submission_enable(struct intel_guc *guc)
 
 	GEM_BUG_ON(!guc->execbuf_client);
 
-	guc_reset_wq(guc->execbuf_client);
-	if (guc->preempt_client)
-		guc_reset_wq(guc->preempt_client);
-
-	err = intel_guc_sample_forcewake(guc);
-	if (err)
-		return err;
-
-	err = guc_clients_doorbell_init(guc);
+	err = guc_clients_enable(guc);
 	if (err)
 		return err;
 
@@ -1346,7 +1450,7 @@ void intel_guc_submission_disable(struct intel_guc *guc)
 	GEM_BUG_ON(dev_priv->gt.awake); /* GT should be parked first */
 
 	guc_interrupts_release(dev_priv);
-	guc_clients_doorbell_fini(guc);
+	guc_clients_disable(guc);
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

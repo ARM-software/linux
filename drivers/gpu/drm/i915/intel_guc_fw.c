@@ -30,56 +30,82 @@
 #include "intel_guc_fw.h"
 #include "i915_drv.h"
 
-#define SKL_FW_MAJOR 9
-#define SKL_FW_MINOR 33
+#define __MAKE_GUC_FW_PATH(KEY) \
+	"i915/" \
+	__stringify(KEY##_GUC_FW_PREFIX) "_guc_" \
+	__stringify(KEY##_GUC_FW_MAJOR) "." \
+	__stringify(KEY##_GUC_FW_MINOR) "." \
+	__stringify(KEY##_GUC_FW_PATCH) ".bin"
 
-#define BXT_FW_MAJOR 9
-#define BXT_FW_MINOR 29
+#define SKL_GUC_FW_PREFIX skl
+#define SKL_GUC_FW_MAJOR 32
+#define SKL_GUC_FW_MINOR 0
+#define SKL_GUC_FW_PATCH 3
+#define SKL_GUC_FIRMWARE_PATH __MAKE_GUC_FW_PATH(SKL)
+MODULE_FIRMWARE(SKL_GUC_FIRMWARE_PATH);
 
-#define KBL_FW_MAJOR 9
-#define KBL_FW_MINOR 39
+#define BXT_GUC_FW_PREFIX bxt
+#define BXT_GUC_FW_MAJOR 32
+#define BXT_GUC_FW_MINOR 0
+#define BXT_GUC_FW_PATCH 3
+#define BXT_GUC_FIRMWARE_PATH __MAKE_GUC_FW_PATH(BXT)
+MODULE_FIRMWARE(BXT_GUC_FIRMWARE_PATH);
 
-#define GUC_FW_PATH(platform, major, minor) \
-       "i915/" __stringify(platform) "_guc_ver" __stringify(major) "_" __stringify(minor) ".bin"
+#define KBL_GUC_FW_PREFIX kbl
+#define KBL_GUC_FW_MAJOR 32
+#define KBL_GUC_FW_MINOR 0
+#define KBL_GUC_FW_PATCH 3
+#define KBL_GUC_FIRMWARE_PATH __MAKE_GUC_FW_PATH(KBL)
+MODULE_FIRMWARE(KBL_GUC_FIRMWARE_PATH);
 
-#define I915_SKL_GUC_UCODE GUC_FW_PATH(skl, SKL_FW_MAJOR, SKL_FW_MINOR)
-MODULE_FIRMWARE(I915_SKL_GUC_UCODE);
+#define GLK_GUC_FW_PREFIX glk
+#define GLK_GUC_FW_MAJOR 32
+#define GLK_GUC_FW_MINOR 0
+#define GLK_GUC_FW_PATCH 3
+#define GLK_GUC_FIRMWARE_PATH __MAKE_GUC_FW_PATH(GLK)
+MODULE_FIRMWARE(GLK_GUC_FIRMWARE_PATH);
 
-#define I915_BXT_GUC_UCODE GUC_FW_PATH(bxt, BXT_FW_MAJOR, BXT_FW_MINOR)
-MODULE_FIRMWARE(I915_BXT_GUC_UCODE);
-
-#define I915_KBL_GUC_UCODE GUC_FW_PATH(kbl, KBL_FW_MAJOR, KBL_FW_MINOR)
-MODULE_FIRMWARE(I915_KBL_GUC_UCODE);
+#define ICL_GUC_FW_PREFIX icl
+#define ICL_GUC_FW_MAJOR 32
+#define ICL_GUC_FW_MINOR 0
+#define ICL_GUC_FW_PATCH 3
+#define ICL_GUC_FIRMWARE_PATH __MAKE_GUC_FW_PATH(ICL)
+MODULE_FIRMWARE(ICL_GUC_FIRMWARE_PATH);
 
 static void guc_fw_select(struct intel_uc_fw *guc_fw)
 {
 	struct intel_guc *guc = container_of(guc_fw, struct intel_guc, fw);
-	struct drm_i915_private *dev_priv = guc_to_i915(guc);
+	struct drm_i915_private *i915 = guc_to_i915(guc);
 
 	GEM_BUG_ON(guc_fw->type != INTEL_UC_FW_TYPE_GUC);
 
-	if (!HAS_GUC(dev_priv))
+	if (!HAS_GUC(i915))
 		return;
 
 	if (i915_modparams.guc_firmware_path) {
 		guc_fw->path = i915_modparams.guc_firmware_path;
 		guc_fw->major_ver_wanted = 0;
 		guc_fw->minor_ver_wanted = 0;
-	} else if (IS_SKYLAKE(dev_priv)) {
-		guc_fw->path = I915_SKL_GUC_UCODE;
-		guc_fw->major_ver_wanted = SKL_FW_MAJOR;
-		guc_fw->minor_ver_wanted = SKL_FW_MINOR;
-	} else if (IS_BROXTON(dev_priv)) {
-		guc_fw->path = I915_BXT_GUC_UCODE;
-		guc_fw->major_ver_wanted = BXT_FW_MAJOR;
-		guc_fw->minor_ver_wanted = BXT_FW_MINOR;
-	} else if (IS_KABYLAKE(dev_priv) || IS_COFFEELAKE(dev_priv)) {
-		guc_fw->path = I915_KBL_GUC_UCODE;
-		guc_fw->major_ver_wanted = KBL_FW_MAJOR;
-		guc_fw->minor_ver_wanted = KBL_FW_MINOR;
-	} else {
-		DRM_WARN("%s: No firmware known for this platform!\n",
-			 intel_uc_fw_type_repr(guc_fw->type));
+	} else if (IS_ICELAKE(i915)) {
+		guc_fw->path = ICL_GUC_FIRMWARE_PATH;
+		guc_fw->major_ver_wanted = ICL_GUC_FW_MAJOR;
+		guc_fw->minor_ver_wanted = ICL_GUC_FW_MINOR;
+	} else if (IS_GEMINILAKE(i915)) {
+		guc_fw->path = GLK_GUC_FIRMWARE_PATH;
+		guc_fw->major_ver_wanted = GLK_GUC_FW_MAJOR;
+		guc_fw->minor_ver_wanted = GLK_GUC_FW_MINOR;
+	} else if (IS_KABYLAKE(i915) || IS_COFFEELAKE(i915)) {
+		guc_fw->path = KBL_GUC_FIRMWARE_PATH;
+		guc_fw->major_ver_wanted = KBL_GUC_FW_MAJOR;
+		guc_fw->minor_ver_wanted = KBL_GUC_FW_MINOR;
+	} else if (IS_BROXTON(i915)) {
+		guc_fw->path = BXT_GUC_FIRMWARE_PATH;
+		guc_fw->major_ver_wanted = BXT_GUC_FW_MAJOR;
+		guc_fw->minor_ver_wanted = BXT_GUC_FW_MINOR;
+	} else if (IS_SKYLAKE(i915)) {
+		guc_fw->path = SKL_GUC_FIRMWARE_PATH;
+		guc_fw->major_ver_wanted = SKL_GUC_FW_MAJOR;
+		guc_fw->minor_ver_wanted = SKL_GUC_FW_MINOR;
 	}
 }
 
@@ -93,7 +119,7 @@ void intel_guc_fw_init_early(struct intel_guc *guc)
 {
 	struct intel_uc_fw *guc_fw = &guc->fw;
 
-	intel_uc_fw_init(guc_fw, INTEL_UC_FW_TYPE_GUC);
+	intel_uc_fw_init_early(guc_fw, INTEL_UC_FW_TYPE_GUC);
 	guc_fw_select(guc_fw);
 }
 
@@ -114,7 +140,7 @@ static void guc_prepare_xfer(struct intel_guc *guc)
 	else
 		I915_WRITE(GEN9_GT_PM_CONFIG, GT_DOORBELL_ENABLE);
 
-	if (IS_GEN9(dev_priv)) {
+	if (IS_GEN(dev_priv, 9)) {
 		/* DOP Clock Gating Enable for GuC clocks */
 		I915_WRITE(GEN7_MISCCPCTL, (GEN8_DOP_CLOCK_GATE_GUC_ENABLE |
 					    I915_READ(GEN7_MISCCPCTL)));
@@ -125,66 +151,28 @@ static void guc_prepare_xfer(struct intel_guc *guc)
 }
 
 /* Copy RSA signature from the fw image to HW for verification */
-static int guc_xfer_rsa(struct intel_guc *guc, struct i915_vma *vma)
+static void guc_xfer_rsa(struct intel_guc *guc)
 {
 	struct drm_i915_private *dev_priv = guc_to_i915(guc);
-	struct intel_uc_fw *guc_fw = &guc->fw;
-	struct sg_table *sg = vma->pages;
+	struct intel_uc_fw *fw = &guc->fw;
+	struct sg_table *pages = fw->obj->mm.pages;
 	u32 rsa[UOS_RSA_SCRATCH_COUNT];
 	int i;
 
-	if (sg_pcopy_to_buffer(sg->sgl, sg->nents, rsa, sizeof(rsa),
-			       guc_fw->rsa_offset) != sizeof(rsa))
-		return -EINVAL;
+	sg_pcopy_to_buffer(pages->sgl, pages->nents,
+			   rsa, sizeof(rsa), fw->rsa_offset);
 
 	for (i = 0; i < UOS_RSA_SCRATCH_COUNT; i++)
 		I915_WRITE(UOS_RSA_SCRATCH(i), rsa[i]);
-
-	return 0;
 }
 
-/*
- * Transfer the firmware image to RAM for execution by the microcontroller.
- *
- * Architecturally, the DMA engine is bidirectional, and can potentially even
- * transfer between GTT locations. This functionality is left out of the API
- * for now as there is no need for it.
- */
-static int guc_xfer_ucode(struct intel_guc *guc, struct i915_vma *vma)
+static bool guc_xfer_completed(struct intel_guc *guc, u32 *status)
 {
 	struct drm_i915_private *dev_priv = guc_to_i915(guc);
-	struct intel_uc_fw *guc_fw = &guc->fw;
-	unsigned long offset;
-	u32 status;
-	int ret;
 
-	/*
-	 * The header plus uCode will be copied to WOPCM via DMA, excluding any
-	 * other components
-	 */
-	I915_WRITE(DMA_COPY_SIZE, guc_fw->header_size + guc_fw->ucode_size);
-
-	/* Set the source address for the new blob */
-	offset = intel_guc_ggtt_offset(guc, vma) + guc_fw->header_offset;
-	I915_WRITE(DMA_ADDR_0_LOW, lower_32_bits(offset));
-	I915_WRITE(DMA_ADDR_0_HIGH, upper_32_bits(offset) & 0xFFFF);
-
-	/*
-	 * Set the DMA destination. Current uCode expects the code to be
-	 * loaded at 8k; locations below this are used for the stack.
-	 */
-	I915_WRITE(DMA_ADDR_1_LOW, 0x2000);
-	I915_WRITE(DMA_ADDR_1_HIGH, DMA_ADDRESS_SPACE_WOPCM);
-
-	/* Finally start the DMA */
-	I915_WRITE(DMA_CTRL, _MASKED_BIT_ENABLE(UOS_MOVE | START_DMA));
-
-	/* Wait for DMA to finish */
-	ret = __intel_wait_for_register_fw(dev_priv, DMA_CTRL, START_DMA, 0,
-					   2, 100, &status);
-	DRM_DEBUG_DRIVER("GuC DMA status %#x\n", status);
-
-	return ret;
+	/* Did we complete the xfer? */
+	*status = I915_READ(DMA_CTRL);
+	return !(*status & START_DMA);
 }
 
 /*
@@ -217,8 +205,8 @@ static int guc_wait_ucode(struct intel_guc *guc)
 	 * NB: Docs recommend not using the interrupt for completion.
 	 * Measurements indicate this should take no more than 20ms, so a
 	 * timeout here indicates that the GuC has failed and is unusable.
-	 * (Higher levels of the driver will attempt to fall back to
-	 * execlist mode if this happens.)
+	 * (Higher levels of the driver may decide to reset the GuC and
+	 * attempt the ucode load again if this happens.)
 	 */
 	ret = wait_for(guc_ready(guc, &status), 100);
 	DRM_DEBUG_DRIVER("GuC status %#x\n", status);
@@ -228,13 +216,55 @@ static int guc_wait_ucode(struct intel_guc *guc)
 		ret = -ENOEXEC;
 	}
 
+	if (ret == 0 && !guc_xfer_completed(guc, &status)) {
+		DRM_ERROR("GuC is ready, but the xfer %08x is incomplete\n",
+			  status);
+		ret = -ENXIO;
+	}
+
 	return ret;
 }
 
 /*
+ * Transfer the firmware image to RAM for execution by the microcontroller.
+ *
+ * Architecturally, the DMA engine is bidirectional, and can potentially even
+ * transfer between GTT locations. This functionality is left out of the API
+ * for now as there is no need for it.
+ */
+static int guc_xfer_ucode(struct intel_guc *guc)
+{
+	struct drm_i915_private *dev_priv = guc_to_i915(guc);
+	struct intel_uc_fw *guc_fw = &guc->fw;
+	unsigned long offset;
+
+	/*
+	 * The header plus uCode will be copied to WOPCM via DMA, excluding any
+	 * other components
+	 */
+	I915_WRITE(DMA_COPY_SIZE, guc_fw->header_size + guc_fw->ucode_size);
+
+	/* Set the source address for the new blob */
+	offset = intel_uc_fw_ggtt_offset(guc_fw) + guc_fw->header_offset;
+	I915_WRITE(DMA_ADDR_0_LOW, lower_32_bits(offset));
+	I915_WRITE(DMA_ADDR_0_HIGH, upper_32_bits(offset) & 0xFFFF);
+
+	/*
+	 * Set the DMA destination. Current uCode expects the code to be
+	 * loaded at 8k; locations below this are used for the stack.
+	 */
+	I915_WRITE(DMA_ADDR_1_LOW, 0x2000);
+	I915_WRITE(DMA_ADDR_1_HIGH, DMA_ADDRESS_SPACE_WOPCM);
+
+	/* Finally start the DMA */
+	I915_WRITE(DMA_CTRL, _MASKED_BIT_ENABLE(UOS_MOVE | START_DMA));
+
+	return guc_wait_ucode(guc);
+}
+/*
  * Load the GuC firmware blob into the MinuteIA.
  */
-static int guc_fw_xfer(struct intel_uc_fw *guc_fw, struct i915_vma *vma)
+static int guc_fw_xfer(struct intel_uc_fw *guc_fw)
 {
 	struct intel_guc *guc = container_of(guc_fw, struct intel_guc, fw);
 	struct drm_i915_private *dev_priv = guc_to_i915(guc);
@@ -242,7 +272,7 @@ static int guc_fw_xfer(struct intel_uc_fw *guc_fw, struct i915_vma *vma)
 
 	GEM_BUG_ON(guc_fw->type != INTEL_UC_FW_TYPE_GUC);
 
-	intel_uncore_forcewake_get(dev_priv, FORCEWAKE_ALL);
+	intel_uncore_forcewake_get(&dev_priv->uncore, FORCEWAKE_ALL);
 
 	guc_prepare_xfer(guc);
 
@@ -251,19 +281,11 @@ static int guc_fw_xfer(struct intel_uc_fw *guc_fw, struct i915_vma *vma)
 	 * by the DMA engine in one operation, whereas the RSA signature is
 	 * loaded via MMIO.
 	 */
-	ret = guc_xfer_rsa(guc, vma);
-	if (ret)
-		DRM_WARN("GuC firmware signature xfer error %d\n", ret);
+	guc_xfer_rsa(guc);
 
-	ret = guc_xfer_ucode(guc, vma);
-	if (ret)
-		DRM_WARN("GuC firmware code xfer error %d\n", ret);
+	ret = guc_xfer_ucode(guc);
 
-	ret = guc_wait_ucode(guc);
-	if (ret)
-		DRM_ERROR("GuC firmware xfer error %d\n", ret);
-
-	intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
+	intel_uncore_forcewake_put(&dev_priv->uncore, FORCEWAKE_ALL);
 
 	return ret;
 }

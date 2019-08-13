@@ -72,14 +72,8 @@ static void etnaviv_postclose(struct drm_device *dev, struct drm_file *file)
 	for (i = 0; i < ETNA_MAX_PIPES; i++) {
 		struct etnaviv_gpu *gpu = priv->gpu[i];
 
-		if (gpu) {
-			mutex_lock(&gpu->lock);
-			if (gpu->lastctx == ctx)
-				gpu->lastctx = NULL;
-			mutex_unlock(&gpu->lock);
-
+		if (gpu)
 			drm_sched_entity_destroy(&ctx->sched_entity[i]);
-		}
 	}
 
 	kfree(ctx);
@@ -345,7 +339,6 @@ static int etnaviv_ioctl_gem_userptr(struct drm_device *dev, void *data,
 	struct drm_file *file)
 {
 	struct drm_etnaviv_gem_userptr *args = data;
-	int access;
 
 	if (args->flags & ~(ETNA_USERPTR_READ|ETNA_USERPTR_WRITE) ||
 	    args->flags == 0)
@@ -357,12 +350,7 @@ static int etnaviv_ioctl_gem_userptr(struct drm_device *dev, void *data,
 	    args->user_ptr & ~PAGE_MASK)
 		return -EINVAL;
 
-	if (args->flags & ETNA_USERPTR_WRITE)
-		access = VERIFY_WRITE;
-	else
-		access = VERIFY_READ;
-
-	if (!access_ok(access, (void __user *)(unsigned long)args->user_ptr,
+	if (!access_ok((void __user *)(unsigned long)args->user_ptr,
 		       args->user_size))
 		return -EFAULT;
 
@@ -442,17 +430,17 @@ static int etnaviv_ioctl_pm_query_sig(struct drm_device *dev, void *data,
 static const struct drm_ioctl_desc etnaviv_ioctls[] = {
 #define ETNA_IOCTL(n, func, flags) \
 	DRM_IOCTL_DEF_DRV(ETNAVIV_##n, etnaviv_ioctl_##func, flags)
-	ETNA_IOCTL(GET_PARAM,    get_param,    DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_NEW,      gem_new,      DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_INFO,     gem_info,     DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_CPU_PREP, gem_cpu_prep, DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_CPU_FINI, gem_cpu_fini, DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_SUBMIT,   gem_submit,   DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(WAIT_FENCE,   wait_fence,   DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_USERPTR,  gem_userptr,  DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(GEM_WAIT,     gem_wait,     DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(PM_QUERY_DOM, pm_query_dom, DRM_AUTH|DRM_RENDER_ALLOW),
-	ETNA_IOCTL(PM_QUERY_SIG, pm_query_sig, DRM_AUTH|DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GET_PARAM,    get_param,    DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_NEW,      gem_new,      DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_INFO,     gem_info,     DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_CPU_PREP, gem_cpu_prep, DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_CPU_FINI, gem_cpu_fini, DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_SUBMIT,   gem_submit,   DRM_RENDER_ALLOW),
+	ETNA_IOCTL(WAIT_FENCE,   wait_fence,   DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_USERPTR,  gem_userptr,  DRM_RENDER_ALLOW),
+	ETNA_IOCTL(GEM_WAIT,     gem_wait,     DRM_RENDER_ALLOW),
+	ETNA_IOCTL(PM_QUERY_DOM, pm_query_dom, DRM_RENDER_ALLOW),
+	ETNA_IOCTL(PM_QUERY_SIG, pm_query_sig, DRM_RENDER_ALLOW),
 };
 
 static const struct vm_operations_struct vm_ops = {
@@ -474,18 +462,13 @@ static const struct file_operations fops = {
 };
 
 static struct drm_driver etnaviv_drm_driver = {
-	.driver_features    = DRIVER_GEM |
-				DRIVER_PRIME |
-				DRIVER_RENDER,
+	.driver_features    = DRIVER_GEM | DRIVER_RENDER,
 	.open               = etnaviv_open,
 	.postclose           = etnaviv_postclose,
 	.gem_free_object_unlocked = etnaviv_gem_free_object,
 	.gem_vm_ops         = &vm_ops,
 	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
-	.gem_prime_export   = drm_gem_prime_export,
-	.gem_prime_import   = drm_gem_prime_import,
-	.gem_prime_res_obj  = etnaviv_gem_prime_res_obj,
 	.gem_prime_pin      = etnaviv_gem_prime_pin,
 	.gem_prime_unpin    = etnaviv_gem_prime_unpin,
 	.gem_prime_get_sg_table = etnaviv_gem_prime_get_sg_table,
@@ -523,7 +506,7 @@ static int etnaviv_bind(struct device *dev)
 	if (!priv) {
 		dev_err(dev, "failed to allocate private data\n");
 		ret = -ENOMEM;
-		goto out_unref;
+		goto out_put;
 	}
 	drm->dev_private = priv;
 
@@ -552,8 +535,8 @@ out_register:
 	component_unbind_all(dev, drm);
 out_bind:
 	kfree(priv);
-out_unref:
-	drm_dev_unref(drm);
+out_put:
+	drm_dev_put(drm);
 
 	return ret;
 }
@@ -572,7 +555,7 @@ static void etnaviv_unbind(struct device *dev)
 	drm->dev_private = NULL;
 	kfree(priv);
 
-	drm_dev_unref(drm);
+	drm_dev_put(drm);
 }
 
 static const struct component_master_ops etnaviv_master_ops = {

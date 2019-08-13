@@ -18,19 +18,6 @@ static inline struct page *ion_page_pool_alloc_pages(struct ion_page_pool *pool,
 	if (!page)
 		return NULL;
 
-#ifdef CONFIG_ARM64
-	/*
-	 * The memory allocated here is likely to be in the CPU cache.
-	 * It might have been used previously and because of the
-	 * GFP_ZERO flag, alloc_pages() will write it. In order to map
-	 * this memory as non cached, we need to flush the CPU cache
-	 * first.
-	 */
-	if (!cached)
-		__dma_flush_area(page_address(page),
-			         PAGE_SIZE << pool->order);
-#endif
-
 	return page;
 }
 

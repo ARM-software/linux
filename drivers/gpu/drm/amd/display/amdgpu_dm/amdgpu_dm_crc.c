@@ -24,6 +24,7 @@
  */
 
 #include <drm/drm_crtc.h>
+#include <drm/drm_vblank.h>
 
 #include "amdgpu.h"
 #include "amdgpu_dm.h"
@@ -46,9 +47,25 @@ static enum amdgpu_dm_pipe_crc_source dm_parse_crc_source(const char *source)
 	return AMDGPU_DM_PIPE_CRC_SOURCE_INVALID;
 }
 
-int amdgpu_dm_crtc_set_crc_source(struct drm_crtc *crtc, const char *src_name,
-			   size_t *values_cnt)
+int
+amdgpu_dm_crtc_verify_crc_source(struct drm_crtc *crtc, const char *src_name,
+				 size_t *values_cnt)
 {
+	enum amdgpu_dm_pipe_crc_source source = dm_parse_crc_source(src_name);
+
+	if (source < 0) {
+		DRM_DEBUG_DRIVER("Unknown CRC source %s for CRTC%d\n",
+				 src_name, crtc->index);
+		return -EINVAL;
+	}
+
+	*values_cnt = 3;
+	return 0;
+}
+
+int amdgpu_dm_crtc_set_crc_source(struct drm_crtc *crtc, const char *src_name)
+{
+	struct amdgpu_device *adev = crtc->dev->dev_private;
 	struct dm_crtc_state *crtc_state = to_dm_crtc_state(crtc->state);
 	struct dc_stream_state *stream_state = crtc_state->stream;
 	bool enable;
@@ -68,14 +85,19 @@ int amdgpu_dm_crtc_set_crc_source(struct drm_crtc *crtc, const char *src_name,
 
 	enable = (source == AMDGPU_DM_PIPE_CRC_SOURCE_AUTO);
 
+	mutex_lock(&adev->dm.dc_lock);
 	if (!dc_stream_configure_crc(stream_state->ctx->dc, stream_state,
-				     enable, enable))
+				     enable, enable)) {
+		mutex_unlock(&adev->dm.dc_lock);
 		return -EINVAL;
+	}
 
 	/* When enabling CRC, we should also disable dithering. */
 	dc_stream_set_dither_option(stream_state,
 				    enable ? DITHER_OPTION_TRUN8
 					   : DITHER_OPTION_DEFAULT);
+
+	mutex_unlock(&adev->dm.dc_lock);
 
 	/*
 	 * Reading the CRC requires the vblank interrupt handler to be
@@ -88,7 +110,6 @@ int amdgpu_dm_crtc_set_crc_source(struct drm_crtc *crtc, const char *src_name,
 
 	crtc_state->crc_enabled = enable;
 
-	*values_cnt = 3;
 	/* Reset crc_skipped on dm state */
 	crtc_state->crc_skip_count = 0;
 	return 0;

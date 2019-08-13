@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
  *
@@ -6,24 +7,20 @@
  * Copyright (c) 2006-2008 Intel Corporation
  * Copyright (c) 2007 Dave Airlie <airlied@linux.ie>
  * Copyright (C) 2011 Texas Instruments
- *
- * This program is free software and is provided to you under the terms of the
- * GNU General Public License version 2 as published by the Free Software
- * Foundation, and any use by you of this program is subject to the terms of
- * such GNU licence.
- *
  */
 
 #include <linux/amba/clcd-regs.h>
 #include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/version.h>
 #include <linux/dma-buf.h>
 #include <linux/of_graph.h>
 
-#include <drm/drmP.h>
+#include <drm/drm_fb_cma_helper.h>
+#include <drm/drm_fourcc.h>
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
-#include <drm/drm_fb_cma_helper.h>
+#include <drm/drm_vblank.h>
 
 #include "pl111_drm.h"
 
@@ -188,7 +185,7 @@ static void pl111_display_enable(struct drm_simple_display_pipe *pipe,
 			tim2 |= TIM2_IOE;
 
 		if (connector->display_info.bus_flags &
-		    DRM_BUS_FLAG_PIXDATA_NEGEDGE)
+		    DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE)
 			tim2 |= TIM2_IPC;
 	}
 
@@ -551,24 +548,7 @@ pl111_init_clock_divider(struct drm_device *drm)
 int pl111_display_init(struct drm_device *drm)
 {
 	struct pl111_drm_dev_private *priv = drm->dev_private;
-	struct device *dev = drm->dev;
-	struct device_node *endpoint;
-	u32 tft_r0b0g0[3];
 	int ret;
-
-	endpoint = of_graph_get_next_endpoint(dev->of_node, NULL);
-	if (!endpoint)
-		return -ENODEV;
-
-	if (of_property_read_u32_array(endpoint,
-				       "arm,pl11x,tft-r0g0b0-pads",
-				       tft_r0b0g0,
-				       ARRAY_SIZE(tft_r0b0g0)) != 0) {
-		dev_err(dev, "arm,pl11x,tft-r0g0b0-pads should be 3 ints\n");
-		of_node_put(endpoint);
-		return -ENOENT;
-	}
-	of_node_put(endpoint);
 
 	ret = pl111_init_clock_divider(drm);
 	if (ret)

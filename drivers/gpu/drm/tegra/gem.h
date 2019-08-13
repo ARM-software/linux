@@ -1,11 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Tegra host1x GEM implementation
  *
  * Copyright (c) 2012-2013, NVIDIA Corporation.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #ifndef __HOST1X_GEM_H
@@ -73,8 +70,7 @@ extern const struct vm_operations_struct tegra_bo_vm_ops;
 int __tegra_gem_mmap(struct drm_gem_object *gem, struct vm_area_struct *vma);
 int tegra_drm_mmap(struct file *file, struct vm_area_struct *vma);
 
-struct dma_buf *tegra_gem_prime_export(struct drm_device *drm,
-				       struct drm_gem_object *gem,
+struct dma_buf *tegra_gem_prime_export(struct drm_gem_object *gem,
 				       int flags);
 struct drm_gem_object *tegra_gem_prime_import(struct drm_device *drm,
 					      struct dma_buf *buf);

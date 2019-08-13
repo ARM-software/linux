@@ -335,13 +335,13 @@ nouveau_fence_sync(struct nouveau_bo *nvbo, struct nouveau_channel *chan, bool e
 {
 	struct nouveau_fence_chan *fctx = chan->fence;
 	struct dma_fence *fence;
-	struct reservation_object *resv = nvbo->bo.resv;
+	struct reservation_object *resv = nvbo->bo.base.resv;
 	struct reservation_object_list *fobj;
 	struct nouveau_fence *f;
 	int ret = 0, i;
 
 	if (!exclusive) {
-		ret = reservation_object_reserve_shared(resv);
+		ret = reservation_object_reserve_shared(resv, 1);
 
 		if (ret)
 			return ret;
@@ -526,6 +526,5 @@ static const struct dma_fence_ops nouveau_fence_ops_uevent = {
 	.get_timeline_name = nouveau_fence_get_timeline_name,
 	.enable_signaling = nouveau_fence_enable_signaling,
 	.signaled = nouveau_fence_is_signaled,
-	.wait = dma_fence_default_wait,
 	.release = nouveau_fence_release
 };

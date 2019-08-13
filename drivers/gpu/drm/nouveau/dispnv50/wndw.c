@@ -127,7 +127,7 @@ void
 nv50_wndw_flush_set(struct nv50_wndw *wndw, u32 *interlock,
 		    struct nv50_wndw_atom *asyw)
 {
-	if (interlock) {
+	if (interlock[NV50_DISP_INTERLOCK_CORE]) {
 		asyw->image.mode = 0;
 		asyw->image.interval = 1;
 	}
@@ -139,10 +139,8 @@ nv50_wndw_flush_set(struct nv50_wndw *wndw, u32 *interlock,
 	if (asyw->set.xlut ) {
 		if (asyw->ilut) {
 			asyw->xlut.i.offset =
-				nv50_lut_load(&wndw->ilut,
-					      asyw->xlut.i.mode <= 1,
-					      asyw->xlut.i.buffer,
-					      asyw->ilut);
+				nv50_lut_load(&wndw->ilut, asyw->xlut.i.buffer,
+					      asyw->ilut, asyw->xlut.i.load);
 		}
 		wndw->func->xlut_set(wndw, asyw);
 	}
@@ -322,6 +320,11 @@ nv50_wndw_atomic_check_lut(struct nv50_wndw *wndw,
 		asyh->wndw.olut &= ~BIT(wndw->id);
 	}
 
+	if (!ilut && wndw->func->ilut_identity) {
+		static struct drm_property_blob dummy = {};
+		ilut = &dummy;
+	}
+
 	/* Recalculate LUT state. */
 	memset(&asyw->xlut, 0x00, sizeof(asyw->xlut));
 	if ((asyw->ilut = wndw->func->ilut ? ilut : NULL)) {
@@ -454,7 +457,7 @@ nv50_wndw_prepare_fb(struct drm_plane *plane, struct drm_plane_state *state)
 		asyw->image.handle[0] = ctxdma->object.handle;
 	}
 
-	asyw->state.fence = reservation_object_get_excl_rcu(fb->nvbo->bo.resv);
+	asyw->state.fence = reservation_object_get_excl_rcu(fb->nvbo->bo.base.resv);
 	asyw->image.offset[0] = fb->nvbo->bo.offset;
 
 	if (wndw->func->prepare) {
@@ -623,6 +626,7 @@ nv50_wndw_new(struct nouveau_drm *drm, enum drm_plane_type type, int index,
 		int (*new)(struct nouveau_drm *, enum drm_plane_type,
 			   int, s32, struct nv50_wndw **);
 	} wndws[] = {
+		{ TU102_DISP_WINDOW_CHANNEL_DMA, 0, wndwc57e_new },
 		{ GV100_DISP_WINDOW_CHANNEL_DMA, 0, wndwc37e_new },
 		{}
 	};

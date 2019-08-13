@@ -40,8 +40,8 @@ enum source_format_class {
 	dm_422_8 = 5,
 	dm_422_10 = 6,
 	dm_444_8 = 7,
-	dm_mono_8,
-	dm_mono_16
+	dm_mono_8 = dm_444_8,
+	dm_mono_16 = dm_444_16
 };
 enum output_bpc_class {
 	dm_out_6 = 0, dm_out_8 = 1, dm_out_10 = 2, dm_out_12 = 3, dm_out_16 = 4
@@ -86,7 +86,8 @@ enum dm_swizzle_mode {
 	dm_sw_gfx7_2d_thin_gl
 };
 enum lb_depth {
-	dm_lb_10 = 0, dm_lb_8 = 1, dm_lb_6 = 2, dm_lb_12 = 3, dm_lb_16
+	dm_lb_10 = 0, dm_lb_8 = 1, dm_lb_6 = 2, dm_lb_12 = 3, dm_lb_16 = 4,
+	dm_lb_19 = 5
 };
 enum voltage_state {
 	dm_vmin = 0, dm_vmid = 1, dm_vnom = 2, dm_vmax = 3
@@ -119,6 +120,41 @@ enum self_refresh_affinity {
 	dm_allow_self_refresh_and_mclk_switch,
 	dm_allow_self_refresh,
 	dm_neither_self_refresh_nor_mclk_switch
+};
+
+enum dm_validation_status {
+	DML_VALIDATION_OK,
+	DML_FAIL_SCALE_RATIO_TAP,
+	DML_FAIL_SOURCE_PIXEL_FORMAT,
+	DML_FAIL_VIEWPORT_SIZE,
+	DML_FAIL_TOTAL_V_ACTIVE_BW,
+	DML_FAIL_DIO_SUPPORT,
+	DML_FAIL_NOT_ENOUGH_DSC,
+	DML_FAIL_DSC_CLK_REQUIRED,
+#ifdef CONFIG_DRM_AMD_DC_DSC_SUPPORT
+	DML_FAIL_DSC_VALIDATION_FAILURE,
+#endif
+	DML_FAIL_URGENT_LATENCY,
+	DML_FAIL_REORDERING_BUFFER,
+	DML_FAIL_DISPCLK_DPPCLK,
+	DML_FAIL_TOTAL_AVAILABLE_PIPES,
+	DML_FAIL_NUM_OTG,
+	DML_FAIL_WRITEBACK_MODE,
+	DML_FAIL_WRITEBACK_LATENCY,
+	DML_FAIL_WRITEBACK_SCALE_RATIO_TAP,
+	DML_FAIL_CURSOR_SUPPORT,
+	DML_FAIL_PITCH_SUPPORT,
+	DML_FAIL_PTE_BUFFER_SIZE,
+	DML_FAIL_HOST_VM_IMMEDIATE_FLIP,
+	DML_FAIL_DSC_INPUT_BPC,
+	DML_FAIL_PREFETCH_SUPPORT,
+	DML_FAIL_V_RATIO_PREFETCH,
+};
+
+enum writeback_config {
+	dm_normal,
+	dm_whole_buffer_for_single_stream_no_interleave,
+	dm_whole_buffer_for_single_stream_interleave,
 };
 
 #endif

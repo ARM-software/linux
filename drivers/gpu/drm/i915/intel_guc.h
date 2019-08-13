@@ -32,6 +32,7 @@
 #include "intel_guc_log.h"
 #include "intel_guc_reg.h"
 #include "intel_uc_fw.h"
+#include "i915_utils.h"
 #include "i915_vma.h"
 
 struct guc_preempt_work {
@@ -49,16 +50,19 @@ struct intel_guc {
 	struct intel_guc_log log;
 	struct intel_guc_ct ct;
 
-	/* Offset where Non-WOPCM memory starts. */
-	u32 ggtt_pin_bias;
-
 	/* Log snapshot if GuC errors during load */
 	struct drm_i915_gem_object *load_err_log;
 
 	/* intel_guc_recv interrupt related state */
 	spinlock_t irq_lock;
-	bool interrupts_enabled;
 	unsigned int msg_enabled_mask;
+
+	struct {
+		bool enabled;
+		void (*reset)(struct drm_i915_private *i915);
+		void (*enable)(struct drm_i915_private *i915);
+		void (*disable)(struct drm_i915_private *i915);
+	} interrupts;
 
 	struct i915_vma *ads_vma;
 	struct i915_vma *stage_desc_pool;
@@ -130,10 +134,10 @@ static inline void intel_guc_to_host_event_handler(struct intel_guc *guc)
  * @vma: i915 graphics virtual memory area.
  *
  * GuC does not allow any gfx GGTT address that falls into range
- * [0, GuC ggtt_pin_bias), which is reserved for Boot ROM, SRAM and WOPCM.
- * Currently, in order to exclude [0, GuC ggtt_pin_bias) address space from
+ * [0, ggtt.pin_bias), which is reserved for Boot ROM, SRAM and WOPCM.
+ * Currently, in order to exclude [0, ggtt.pin_bias) address space from
  * GGTT, all gfx objects used by GuC are allocated with intel_guc_allocate_vma()
- * and pinned with PIN_OFFSET_BIAS along with the value of GuC ggtt_pin_bias.
+ * and pinned with PIN_OFFSET_BIAS along with the value of ggtt.pin_bias.
  *
  * Return: GGTT offset of the @vma.
  */
@@ -142,7 +146,7 @@ static inline u32 intel_guc_ggtt_offset(struct intel_guc *guc,
 {
 	u32 offset = i915_ggtt_offset(vma);
 
-	GEM_BUG_ON(offset < guc->ggtt_pin_bias);
+	GEM_BUG_ON(offset < i915_ggtt_pin_bias(vma));
 	GEM_BUG_ON(range_overflows_t(u64, offset, vma->size, GUC_GGTT_TOP));
 
 	return offset;
@@ -161,13 +165,18 @@ int intel_guc_send_mmio(struct intel_guc *guc, const u32 *action, u32 len,
 			u32 *response_buf, u32 response_buf_size);
 void intel_guc_to_host_event_handler(struct intel_guc *guc);
 void intel_guc_to_host_event_handler_nop(struct intel_guc *guc);
-void intel_guc_to_host_event_handler_mmio(struct intel_guc *guc);
-void intel_guc_to_host_process_recv_msg(struct intel_guc *guc, u32 msg);
+int intel_guc_to_host_process_recv_msg(struct intel_guc *guc,
+				       const u32 *payload, u32 len);
 int intel_guc_sample_forcewake(struct intel_guc *guc);
 int intel_guc_auth_huc(struct intel_guc *guc, u32 rsa_offset);
 int intel_guc_suspend(struct intel_guc *guc);
 int intel_guc_resume(struct intel_guc *guc);
 struct i915_vma *intel_guc_allocate_vma(struct intel_guc *guc, u32 size);
+
+static inline bool intel_guc_is_loaded(struct intel_guc *guc)
+{
+	return intel_uc_fw_is_loaded(&guc->fw);
+}
 
 static inline int intel_guc_sanitize(struct intel_guc *guc)
 {
@@ -188,5 +197,8 @@ static inline void intel_guc_disable_msg(struct intel_guc *guc, u32 mask)
 	guc->msg_enabled_mask &= ~mask;
 	spin_unlock_irq(&guc->irq_lock);
 }
+
+int intel_guc_reset_engine(struct intel_guc *guc,
+			   struct intel_engine_cs *engine);
 
 #endif

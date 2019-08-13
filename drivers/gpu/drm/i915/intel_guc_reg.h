@@ -51,6 +51,9 @@
 #define SOFT_SCRATCH(n)			_MMIO(0xc180 + (n) * 4)
 #define SOFT_SCRATCH_COUNT		16
 
+#define GEN11_SOFT_SCRATCH(n)		_MMIO(0x190240 + (n) * 4)
+#define GEN11_SOFT_SCRATCH_COUNT	4
+
 #define UOS_RSA_SCRATCH(i)		_MMIO(0xc200 + (i) * 4)
 #define UOS_RSA_SCRATCH_COUNT		64
 
@@ -75,6 +78,9 @@
 
 #define HUC_STATUS2             _MMIO(0xD3B0)
 #define   HUC_FW_VERIFIED       (1<<7)
+
+#define GEN11_HUC_KERNEL_LOAD_INFO	_MMIO(0xC1DC)
+#define   HUC_LOAD_SUCCESSFUL		  (1 << 0)
 
 #define GUC_WOPCM_SIZE			_MMIO(0xc050)
 #define   GUC_WOPCM_SIZE_LOCKED		  (1<<0)
@@ -103,6 +109,19 @@
 
 #define GUC_SEND_INTERRUPT		_MMIO(0xc4c8)
 #define   GUC_SEND_TRIGGER		  (1<<0)
+#define GEN11_GUC_HOST_INTERRUPT	_MMIO(0x1901f0)
+
+#define GUC_NUM_DOORBELLS		256
+
+/* format of the HW-monitored doorbell cacheline */
+struct guc_doorbell_info {
+	u32 db_status;
+#define GUC_DOORBELL_DISABLED		0
+#define GUC_DOORBELL_ENABLED		1
+
+	u32 cookie;
+	u32 reserved[14];
+} __packed;
 
 #define GEN8_DRBREGL(x)			_MMIO(0x1000 + (x) * 8)
 #define   GEN8_DRB_VALID		  (1<<0)
@@ -114,5 +133,23 @@
 #define GUC_VCS2_VCS1_IER		_MMIO(0xC554)
 #define GUC_WD_VECS_IER			_MMIO(0xC558)
 #define GUC_PM_P24C_IER			_MMIO(0xC55C)
+
+/* GuC Interrupt Vector */
+#define GEN11_GUC_INTR_GUC2HOST		(1 << 15)
+#define GEN11_GUC_INTR_EXEC_ERROR	(1 << 14)
+#define GEN11_GUC_INTR_DISPLAY_EVENT	(1 << 13)
+#define GEN11_GUC_INTR_SEM_SIG		(1 << 12)
+#define GEN11_GUC_INTR_IOMMU2GUC	(1 << 11)
+#define GEN11_GUC_INTR_DOORBELL_RANG	(1 << 10)
+#define GEN11_GUC_INTR_DMA_DONE		(1 <<  9)
+#define GEN11_GUC_INTR_FATAL_ERROR	(1 <<  8)
+#define GEN11_GUC_INTR_NOTIF_ERROR	(1 <<  7)
+#define GEN11_GUC_INTR_SW_INT_6		(1 <<  6)
+#define GEN11_GUC_INTR_SW_INT_5		(1 <<  5)
+#define GEN11_GUC_INTR_SW_INT_4		(1 <<  4)
+#define GEN11_GUC_INTR_SW_INT_3		(1 <<  3)
+#define GEN11_GUC_INTR_SW_INT_2		(1 <<  2)
+#define GEN11_GUC_INTR_SW_INT_1		(1 <<  1)
+#define GEN11_GUC_INTR_SW_INT_0		(1 <<  0)
 
 #endif

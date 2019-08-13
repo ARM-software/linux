@@ -34,6 +34,7 @@
 #define HUBP_REG_LIST_DCN(id)\
 	SRI(DCHUBP_CNTL, HUBP, id),\
 	SRI(HUBPREQ_DEBUG_DB, HUBP, id),\
+	SRI(HUBPREQ_DEBUG, HUBP, id),\
 	SRI(DCSURF_ADDR_CONFIG, HUBP, id),\
 	SRI(DCSURF_TILING_CONFIG, HUBP, id),\
 	SRI(DCSURF_SURFACE_PITCH, HUBPREQ, id),\
@@ -138,6 +139,7 @@
 #define HUBP_COMMON_REG_VARIABLE_LIST \
 	uint32_t DCHUBP_CNTL; \
 	uint32_t HUBPREQ_DEBUG_DB; \
+	uint32_t HUBPREQ_DEBUG; \
 	uint32_t DCSURF_ADDR_CONFIG; \
 	uint32_t DCSURF_TILING_CONFIG; \
 	uint32_t DCSURF_SURFACE_PITCH; \
@@ -247,10 +249,11 @@
 	.field_name = reg_name ## __ ## field_name ## post_fix
 
 /* Mask/shift struct generation macro for all ASICs (including those with reduced functionality) */
-#define HUBP_MASK_SH_LIST_DCN(mask_sh)\
+#define HUBP_MASK_SH_LIST_DCN_COMMON(mask_sh)\
 	HUBP_SF(HUBP0_DCHUBP_CNTL, HUBP_BLANK_EN, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_CNTL, HUBP_TTU_DISABLE, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_CNTL, HUBP_UNDERFLOW_STATUS, mask_sh),\
+	HUBP_SF(HUBP0_DCHUBP_CNTL, HUBP_UNDERFLOW_CLEAR, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_CNTL, HUBP_NO_OUTSTANDING_REQ, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_CNTL, HUBP_VTG_SEL, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_CNTL, HUBP_DISABLE, mask_sh),\
@@ -270,6 +273,8 @@
 	HUBP_SF(HUBPREQ0_DCSURF_SURFACE_PITCH_C, META_PITCH_C, mask_sh),\
 	HUBP_SF(HUBP0_DCSURF_SURFACE_CONFIG, SURFACE_PIXEL_FORMAT, mask_sh),\
 	HUBP_SF(HUBPREQ0_DCSURF_FLIP_CONTROL, SURFACE_FLIP_TYPE, mask_sh),\
+	HUBP_SF(HUBPREQ0_DCSURF_FLIP_CONTROL, SURFACE_FLIP_MODE_FOR_STEREOSYNC, mask_sh),\
+	HUBP_SF(HUBPREQ0_DCSURF_FLIP_CONTROL, SURFACE_FLIP_IN_STEREOSYNC, mask_sh),\
 	HUBP_SF(HUBPREQ0_DCSURF_FLIP_CONTROL, SURFACE_FLIP_PENDING, mask_sh),\
 	HUBP_SF(HUBPREQ0_DCSURF_FLIP_CONTROL, SURFACE_UPDATE_LOCK, mask_sh),\
 	HUBP_SF(HUBP0_DCSURF_PRI_VIEWPORT_DIMENSION, PRI_VIEWPORT_WIDTH, mask_sh),\
@@ -328,7 +333,6 @@
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG, META_CHUNK_SIZE, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG, MIN_META_CHUNK_SIZE, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG, DPTE_GROUP_SIZE, mask_sh),\
-	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG, MPTE_GROUP_SIZE, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG, SWATH_HEIGHT, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG, PTE_ROW_HEIGHT_LINEAR, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG_C, CHUNK_SIZE_C, mask_sh),\
@@ -336,7 +340,6 @@
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG_C, META_CHUNK_SIZE_C, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG_C, MIN_META_CHUNK_SIZE_C, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG_C, DPTE_GROUP_SIZE_C, mask_sh),\
-	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG_C, MPTE_GROUP_SIZE_C, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG_C, SWATH_HEIGHT_C, mask_sh),\
 	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG_C, PTE_ROW_HEIGHT_LINEAR_C, mask_sh),\
 	HUBP_SF(HUBPREQ0_BLANK_OFFSET_0, REFCYC_H_BLANK_END, mask_sh),\
@@ -369,6 +372,11 @@
 	HUBP_SF(HUBPREQ0_DCN_SURF0_TTU_CNTL0, QoS_RAMP_DISABLE, mask_sh),\
 	HUBP_SF(HUBPREQ0_DCN_SURF0_TTU_CNTL1, REFCYC_PER_REQ_DELIVERY_PRE, mask_sh),\
 	HUBP_SF(HUBP0_HUBP_CLK_CNTL, HUBP_CLOCK_ENABLE, mask_sh)
+
+#define HUBP_MASK_SH_LIST_DCN(mask_sh)\
+	HUBP_MASK_SH_LIST_DCN_COMMON(mask_sh),\
+	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG, MPTE_GROUP_SIZE, mask_sh),\
+	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG_C, MPTE_GROUP_SIZE_C, mask_sh)
 
 /* Mask/shift struct generation macro for ASICs with VM */
 #define HUBP_MASK_SH_LIST_DCN_VM(mask_sh)\
@@ -433,6 +441,7 @@
 	type HUBP_NO_OUTSTANDING_REQ;\
 	type HUBP_VTG_SEL;\
 	type HUBP_UNDERFLOW_STATUS;\
+	type HUBP_UNDERFLOW_CLEAR;\
 	type NUM_PIPES;\
 	type NUM_BANKS;\
 	type PIPE_INTERLEAVE;\
@@ -450,7 +459,10 @@
 	type ROTATION_ANGLE;\
 	type H_MIRROR_EN;\
 	type SURFACE_PIXEL_FORMAT;\
+	type ALPHA_PLANE_EN;\
 	type SURFACE_FLIP_TYPE;\
+	type SURFACE_FLIP_MODE_FOR_STEREOSYNC;\
+	type SURFACE_FLIP_IN_STEREOSYNC;\
 	type SURFACE_UPDATE_LOCK;\
 	type SURFACE_FLIP_PENDING;\
 	type PRI_VIEWPORT_WIDTH; \
@@ -589,6 +601,9 @@
 	type AGP_BASE;\
 	type AGP_BOT;\
 	type AGP_TOP;\
+	type DCN_VM_SYSTEM_APERTURE_DEFAULT_SYSTEM;\
+	type DCN_VM_SYSTEM_APERTURE_DEFAULT_ADDR_MSB;\
+	type DCN_VM_SYSTEM_APERTURE_DEFAULT_ADDR_LSB;\
 	/* todo:  get these from GVM instead of reading registers ourselves */\
 	type PAGE_DIRECTORY_ENTRY_HI32;\
 	type PAGE_DIRECTORY_ENTRY_LO32;\
@@ -635,6 +650,7 @@ struct dcn_hubp_state {
 	struct _vcs_dpi_display_rq_regs_st rq_regs;
 	uint32_t pixel_format;
 	uint32_t inuse_addr_hi;
+	uint32_t inuse_addr_lo;
 	uint32_t viewport_width;
 	uint32_t viewport_height;
 	uint32_t rotation_angle;
@@ -664,7 +680,8 @@ void hubp1_program_surface_config(
 	union plane_size *plane_size,
 	enum dc_rotation_angle rotation,
 	struct dc_plane_dcc_param *dcc,
-	bool horizontal_mirror);
+	bool horizontal_mirror,
+	unsigned int compat_level);
 
 void hubp1_program_deadline(
 		struct hubp *hubp,
@@ -699,11 +716,13 @@ void hubp1_dcc_control(struct hubp *hubp,
 		bool enable,
 		bool independent_64b_blks);
 
+#ifdef CONFIG_DRM_AMD_DC_DCN2_0
 bool hubp1_program_surface_flip_and_addr(
 	struct hubp *hubp,
 	const struct dc_plane_address *address,
 	bool flip_immediate);
 
+#endif
 bool hubp1_is_flip_pending(struct hubp *hubp);
 
 void hubp1_cursor_set_attributes(
@@ -733,8 +752,13 @@ void dcn10_hubp_construct(
 	const struct dcn_mi_mask *hubp_mask);
 
 void hubp1_read_state(struct hubp *hubp);
+void hubp1_clear_underflow(struct hubp *hubp);
 
 enum cursor_pitch hubp1_get_cursor_pitch(unsigned int pitch);
 
+void hubp1_vready_workaround(struct hubp *hubp,
+		struct _vcs_dpi_display_pipe_dest_params_st *pipe_dest);
+
+void hubp1_init(struct hubp *hubp);
 
 #endif

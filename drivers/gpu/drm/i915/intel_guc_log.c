@@ -140,6 +140,9 @@ static struct dentry *create_buf_file_callback(const char *filename,
 
 	buf_file = debugfs_create_file(filename, mode,
 				       parent, buf, &relay_file_operations);
+	if (IS_ERR(buf_file))
+		return NULL;
+
 	return buf_file;
 }
 
@@ -205,7 +208,9 @@ static bool guc_check_log_buf_overflow(struct intel_guc_log *log,
 			/* buffer_full_cnt is a 4 bit counter */
 			log->stats[type].sampled_overflow += 16;
 		}
-		DRM_ERROR_RATELIMITED("GuC log buffer overflow\n");
+
+		dev_notice_ratelimited(guc_to_i915(log_to_guc(log))->drm.dev,
+				       "GuC log buffer overflow\n");
 	}
 
 	return overflow;
@@ -340,21 +345,12 @@ static void capture_logs_work(struct work_struct *work)
 
 static int guc_log_map(struct intel_guc_log *log)
 {
-	struct intel_guc *guc = log_to_guc(log);
-	struct drm_i915_private *dev_priv = guc_to_i915(guc);
 	void *vaddr;
-	int ret;
 
 	lockdep_assert_held(&log->relay.lock);
 
 	if (!log->vma)
 		return -ENODEV;
-
-	mutex_lock(&dev_priv->drm.struct_mutex);
-	ret = i915_gem_object_set_to_wc_domain(log->vma->obj, true);
-	mutex_unlock(&dev_priv->drm.struct_mutex);
-	if (ret)
-		return ret;
 
 	/*
 	 * Create a WC (Uncached for read) vmalloc mapping of log
@@ -362,10 +358,8 @@ static int guc_log_map(struct intel_guc_log *log)
 	 * (up-to-date) from memory.
 	 */
 	vaddr = i915_gem_object_pin_map(log->vma->obj, I915_MAP_WC);
-	if (IS_ERR(vaddr)) {
-		DRM_ERROR("Couldn't map log buffer pages %d\n", ret);
+	if (IS_ERR(vaddr))
 		return PTR_ERR(vaddr);
-	}
 
 	log->relay.buf_addr = vaddr;
 
@@ -436,6 +430,7 @@ static void guc_log_capture_logs(struct intel_guc_log *log)
 {
 	struct intel_guc *guc = log_to_guc(log);
 	struct drm_i915_private *dev_priv = guc_to_i915(guc);
+	intel_wakeref_t wakeref;
 
 	guc_read_update_log_buffer(log);
 
@@ -443,9 +438,8 @@ static void guc_log_capture_logs(struct intel_guc_log *log)
 	 * Generally device is expected to be active only at this
 	 * time, so get/put should be really quick.
 	 */
-	intel_runtime_pm_get(dev_priv);
-	guc_action_flush_log_complete(guc);
-	intel_runtime_pm_put(dev_priv);
+	with_intel_runtime_pm(&dev_priv->runtime_pm, wakeref)
+		guc_action_flush_log_complete(guc);
 }
 
 int intel_guc_log_create(struct intel_guc_log *log)
@@ -498,14 +492,15 @@ err:
 
 void intel_guc_log_destroy(struct intel_guc_log *log)
 {
-	i915_vma_unpin_and_release(&log->vma);
+	i915_vma_unpin_and_release(&log->vma, 0);
 }
 
 int intel_guc_log_set_level(struct intel_guc_log *log, u32 level)
 {
 	struct intel_guc *guc = log_to_guc(log);
 	struct drm_i915_private *dev_priv = guc_to_i915(guc);
-	int ret;
+	intel_wakeref_t wakeref;
+	int ret = 0;
 
 	BUILD_BUG_ON(GUC_LOG_VERBOSITY_MIN != 0);
 	GEM_BUG_ON(!log->vma);
@@ -519,16 +514,14 @@ int intel_guc_log_set_level(struct intel_guc_log *log, u32 level)
 
 	mutex_lock(&dev_priv->drm.struct_mutex);
 
-	if (log->level == level) {
-		ret = 0;
+	if (log->level == level)
 		goto out_unlock;
-	}
 
-	intel_runtime_pm_get(dev_priv);
-	ret = guc_action_control_log(guc, GUC_LOG_LEVEL_IS_VERBOSE(level),
-				     GUC_LOG_LEVEL_IS_ENABLED(level),
-				     GUC_LOG_LEVEL_TO_VERBOSITY(level));
-	intel_runtime_pm_put(dev_priv);
+	with_intel_runtime_pm(&dev_priv->runtime_pm, wakeref)
+		ret = guc_action_control_log(guc,
+					     GUC_LOG_LEVEL_IS_VERBOSE(level),
+					     GUC_LOG_LEVEL_IS_ENABLED(level),
+					     GUC_LOG_LEVEL_TO_VERBOSITY(level));
 	if (ret) {
 		DRM_DEBUG_DRIVER("guc_log_control action failed %d\n", ret);
 		goto out_unlock;
@@ -601,6 +594,7 @@ void intel_guc_log_relay_flush(struct intel_guc_log *log)
 {
 	struct intel_guc *guc = log_to_guc(log);
 	struct drm_i915_private *i915 = guc_to_i915(guc);
+	intel_wakeref_t wakeref;
 
 	/*
 	 * Before initiating the forceful flush, wait for any pending/ongoing
@@ -608,9 +602,8 @@ void intel_guc_log_relay_flush(struct intel_guc_log *log)
 	 */
 	flush_work(&log->relay.flush_work);
 
-	intel_runtime_pm_get(i915);
-	guc_action_flush_log(guc);
-	intel_runtime_pm_put(i915);
+	with_intel_runtime_pm(&i915->runtime_pm, wakeref)
+		guc_action_flush_log(guc);
 
 	/* GuC would have updated log buffer by now, so capture it */
 	guc_log_capture_logs(log);
@@ -618,7 +611,12 @@ void intel_guc_log_relay_flush(struct intel_guc_log *log)
 
 void intel_guc_log_relay_close(struct intel_guc_log *log)
 {
+	struct intel_guc *guc = log_to_guc(log);
+	struct drm_i915_private *i915 = guc_to_i915(guc);
+
 	guc_log_disable_flush_events(log);
+	synchronize_irq(i915->drm.irq);
+
 	flush_work(&log->relay.flush_work);
 
 	mutex_lock(&log->relay.lock);

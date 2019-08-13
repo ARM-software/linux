@@ -188,6 +188,38 @@ reservation_object_lock_interruptible(struct reservation_object *obj,
 	return ww_mutex_lock_interruptible(&obj->lock, ctx);
 }
 
+/**
+ * reservation_object_lock_slow - slowpath lock the reservation object
+ * @obj: the reservation object
+ * @ctx: the locking context
+ *
+ * Acquires the reservation object after a die case. This function
+ * will sleep until the lock becomes available. See reservation_object_lock() as
+ * well.
+ */
+static inline void
+reservation_object_lock_slow(struct reservation_object *obj,
+                             struct ww_acquire_ctx *ctx)
+{
+        ww_mutex_lock_slow(&obj->lock, ctx);
+}
+
+/**
+ * reservation_object_lock_slow_interruptible - slowpath lock the reservation
+ * object, interruptible
+ * @obj: the reservation object
+ * @ctx: the locking context
+ *
+ * Acquires the reservation object interruptible after a die case. This function
+ * will sleep until the lock becomes available. See
+ * reservation_object_lock_interruptible() as well.
+ */
+static inline int
+reservation_object_lock_slow_interruptible(struct reservation_object *obj,
+                                           struct ww_acquire_ctx *ctx)
+{
+        return ww_mutex_lock_slow_interruptible(&obj->lock, ctx);
+}
 
 /**
  * reservation_object_trylock - trylock the reservation object
