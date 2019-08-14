@@ -1,0 +1,28 @@
+/*
+ * ARM Ltd. HDMI Daughterboard
+ *
+ * HBI-0284A Tile - Daughterboard with 2 TDA998x HDMI Phys and HDMI sockets
+ * This should be included as a child of the i2c bus
+ */
+
+	db_dvi0: dvi-transmitter@70 {
+		compatible = "nxp,tda998x";
+		reg = <0x70>;
+		video-ports = <0x234501>;
+		port {
+			db_dvi0_in: endpoint {
+
+			};
+		};
+	};
+
+	db_dvi1: dvi-transmitter@71 {
+		compatible = "nxp,tda998x";
+		reg = <0x71>;
+		video-ports = <0x234501>;
+		port {
+			db_dvi1_in: endpoint {
+
+			};
+		};
+	};

@@ -59,28 +59,15 @@
 		};
 	};
 
-	gpu: gpu@2d000000 {
-		compatible = "arm,mali-midgard";
-		#cooling-cells = <2>; /* min followed by max */
-		reg = <0x0 0x2d000000 0x0 0x4000>;
-		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
-		interrupt-names = "JOB", "MMU", "GPU";
-		clocks = <&scpi_dvfs 2>;
-		clock-names = "clk_mali";
-		secure-mode-switcher = <&gpu_secure_switch>;
-		operating-points-v2 = <&gpu_opp_table>;
-		power_model {
-			compatible = "arm,mali-simple-power-model";
-			ts = <20000 2000 (-20) 2>;
-			thermal-zone = "soc";
-			/* Old Power Model */
-			voltage = <800>;
-			frequency = <500>;
-			static-power = <500>;
-			dynamic-power = <1500>;
-			/* New Power Model */
-			static-coefficient = <2427750>;
-			dynamic-coefficient = <4687>;
-		};
-	};
+        gpu: gpu@2d000000 {
+                compatible = "arm,mali-midgard";
+                #cooling-cells = <2>; /* min followed by max */
+                reg = <0x0 0x2d000000 0x0 0x4000>;
+                interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
+                interrupt-names = "JOB", "MMU", "GPU";
+                clocks = <&scpi_dvfs 2>;
+                clock-names = "clk_mali";
+                status = "okay";
+        };
+
 };
