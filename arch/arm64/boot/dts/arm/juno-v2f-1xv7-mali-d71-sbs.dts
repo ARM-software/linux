@@ -29,6 +29,7 @@
 
 		/include/ "v2f-1xv7-malidp-framework.dtsi"
 		/include/ "v2f-1xv7-malidp-d71.dtsi"
+		/include/ "split-connector.dtsi"
 	};
 };
 
@@ -74,6 +75,14 @@
 
 &dp0_pl0_link1 {
 	remote-endpoint = <&split_connector_in1>;
+};
+
+&split_connector_in0 {
+	remote-endpoint = <&dp0_pl0_link0>;
+};
+
+&split_connector_in1 {
+	remote-endpoint = <&dp0_pl0_link1>;
 };
 
 &split_connector_out0 {
