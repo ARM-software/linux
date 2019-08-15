@@ -18,3 +18,12 @@ config DRM_KOMEDA_ERROR_PRINT
 	depends on DRM_KOMEDA
 	help
 	  Choose this option to enable error printing.
+
+config ASSERTIVE_DISPLAY
+	tristate "ARM Assertive display driver"
+	depends on DRM_KOMEDA
+	help
+          Choose this option if you want to compile the ARM Assertive display
+          Processor driver. It supports the AD3 variants of the hardware.
+
+          If compiled as a module it will be called ad_drv.

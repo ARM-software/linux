@@ -1,3 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
 
 obj-$(CONFIG_DRM_KOMEDA) += komeda/
+
+obj-$(CONFIG_ASSERTIVE_DISPLAY) += ad/
