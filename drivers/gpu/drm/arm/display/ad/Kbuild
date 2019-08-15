@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0
+ad_drv-y += ad_driver.o ad_device.o ad3/ad3_device.o
+
+obj-$(CONFIG_ASSERTIVE_DISPLAY) += ad_drv.o
