@@ -9,4 +9,7 @@
 
 struct ad_dev;
 
+void ad3_save_hw_stat(struct ad_dev *ad_dev);
+void ad3_reload_hw_stat(struct ad_dev *ad_dev);
+
 #endif
