@@ -16,6 +16,7 @@
 #include <linux/component.h>
 #include <linux/firmware.h>
 #include "ad_device.h"
+#include "ad_debugfs.h"
 
 #define AD_NAME "assertive_display"
 
@@ -186,6 +187,8 @@ static int ad_probe(struct platform_device *pdev)
 		goto reg_misc_failed;
 	}
 
+	ad_debugfs_register(ad_dev);
+
 	pm_runtime_enable(dev);
 	if (!pm_runtime_enabled(dev)) {
 		dev_info(dev, "Continuing without Runtime PM support\n");
@@ -203,6 +206,7 @@ static int ad_probe(struct platform_device *pdev)
 
 add_component_failed:
 	pm_runtime_disable(dev);
+	ad_debugfs_unregister(ad_dev);
 	misc_deregister(&ad_dev->miscdev);
 reg_misc_failed:
 get_res_failed:
@@ -223,6 +227,7 @@ static int ad_remove(struct platform_device *pdev)
 		pm_runtime_set_suspended(&pdev->dev);
 	}
 
+	ad_debugfs_unregister(ad_dev);
 	misc_deregister(&ad_dev->miscdev);
 
 	if (ad_dev->ad_dev_funcs && ad_dev->ad_dev_funcs->ad_destroy)

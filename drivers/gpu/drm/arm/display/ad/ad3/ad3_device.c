@@ -117,6 +117,199 @@ static void ad3_load_firmware(struct device *dev, const u8 *data, size_t size)
 	ad3_save_hw_stat(ad_dev);
 }
 
+static void ad3_save_hw_status(struct device *dev,
+			       unsigned int offset,
+			       unsigned int value)
+{
+	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+	struct ad3_data *ad_data = ad_dev->private_data;
+	struct ad3_firmware_data *fw_data = &ad_data->fw_data;
+
+	ad3_firmware_save_change(dev,fw_data, offset, value);
+	ad3_save_hw_stat(ad_dev);
+}
+
+static ssize_t ad3_debugfs_sw_lut_read(struct file *file,
+				       char __user *buff,
+				       size_t count,
+				       loff_t *ppos)
+{
+	u32 r, i, len = 0;
+	char buffer[512];
+	u16 *value = (u16 *)file->private_data;
+
+	for (i = 0; i < AD3_LUT_SIZE; i++) {
+		r = snprintf(&buffer[len], 64, "0x%x \n", value[i]);
+		len += r;
+	}
+
+	return simple_read_from_buffer(buff, count, ppos, buffer, len);
+}
+
+static ssize_t ad3_debugfs_sw_lut_write(struct file *file,
+				        const char __user *user_buf,
+				        size_t count,
+				        loff_t *ppos)
+{
+	char *token;
+	u32 val, r;
+	char buffer[512];
+	int written_num = 0;
+	char delim[] = " ,;";
+	char *s;
+	u16 *value = (u16 *)file->private_data;
+
+	if (count > sizeof(buffer))
+		return -ENOMEM;
+
+	if (copy_from_user(&buffer[0], user_buf, count))
+		return -EFAULT;
+
+	buffer[count] = '\0';
+	s = buffer;
+	for (token = strsep(&s, delim); token != NULL;
+		 token = strsep(&s, delim)) {
+		if (!*token)
+			continue;
+
+		r = kstrtou32(token, 10, &val);
+		if (0 != r)
+			r = kstrtou32(token, 16, &val);
+
+		if ( 0 != r || written_num >= AD3_LUT_SIZE)
+			return -EINVAL;
+
+		value[written_num] = (u16)val;
+		written_num += 1;
+	}
+
+	*ppos += count;
+	return count;
+}
+
+static const struct file_operations ad3_sw_lut_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = ad3_debugfs_sw_lut_read,
+	.write = ad3_debugfs_sw_lut_write,
+};
+
+static ssize_t ad3_debugfs_read_u32(struct file *file,
+				    char __user *buff,
+				    size_t count,
+				    loff_t *ppos)
+{
+	int r;
+	char buffer[512];
+	u32 *value = file->private_data;
+
+	r = snprintf(buffer, 64, "%d \n", *value);
+
+	return simple_read_from_buffer(buff, count, ppos, buffer, r);
+}
+
+static ssize_t ad3_debugfs_write_u32(struct file *file,
+				     const char __user *buff,
+				     size_t count,
+				     loff_t *ppos)
+{
+	int ret;
+	char buffer[32];
+	u32 *value = file->private_data;
+
+	count = min(count, sizeof(buffer) - 1);
+	if (copy_from_user(buffer, buff, count))
+		return -EFAULT;
+
+	buffer[count] = '\0';
+
+	ret = kstrtou32(buffer, 10, value);
+	if (ret) {
+		ret = kstrtou32(buffer, 16, value);
+		if (ret)
+			return ret;
+	}
+
+	return count;
+}
+
+static const struct file_operations ad3_assertiveness_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = ad3_debugfs_read_u32,
+};
+
+static const struct file_operations ad3_alpha_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = ad3_debugfs_read_u32,
+	.write = ad3_debugfs_write_u32,
+};
+
+static ssize_t ad3_debugfs_firmware_read(struct file *file,
+					 char __user *buff,
+					 size_t count,
+					 loff_t *ppos)
+{
+	struct ad3_firmware_data *fw_data = file->private_data;
+
+	return simple_read_from_buffer(buff, count, ppos, fw_data,
+				       sizeof(struct ad3_firmware_data));
+}
+
+static const struct file_operations ad3_firmware_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = ad3_debugfs_firmware_read,
+};
+
+static void ad3_create_debugfs_sw(struct device *dev)
+{
+	struct dentry *fw_dir;
+	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+	struct ad3_data *ad_data = ad_dev->private_data;
+	struct ad3_firmware_data *fw_data = &ad_data->fw_data;
+	struct dentry *sw_dir = debugfs_create_dir("sw_parameters",
+					ad_dev->ad_debugfs_dir);
+
+	if (sw_dir) {
+		/* The debugfs node for backlight linearization LUT*/
+		debugfs_create_file("bl_linearity_lut", S_IRUGO | S_IWUSR,
+				    sw_dir, &fw_data->bl_linearity_lut,
+				    &ad3_sw_lut_fops);
+
+		/* The debugfs node for backlight attenuation LUT*/
+		debugfs_create_file("bl_att_lut", S_IRUGO | S_IWUSR,
+				    sw_dir, &fw_data->bl_att_lut,
+				    &ad3_sw_lut_fops);
+
+		/* The debugfs node for backlight linearization inverse LUT*/
+		debugfs_create_file("bl_linearity_inverse_lut",
+				    S_IRUGO | S_IWUSR,
+				    sw_dir, &fw_data->bl_linearity_inverse_lut,
+				    &ad3_sw_lut_fops);
+
+		/* The debugfs node for assertiveness*/
+		debugfs_create_file("assertiveness", S_IRUGO,
+				    sw_dir, &ad_data->assertive,
+				    &ad3_assertiveness_fops);
+
+		/* The debugfs node for alpha*/
+		debugfs_create_file("alpha", S_IRUGO | S_IWUSR,
+				    sw_dir, &fw_data->alpha,
+				    &ad3_alpha_fops);
+	}
+
+	fw_dir = debugfs_create_dir("firmware", ad_dev->ad_debugfs_dir);
+	if (fw_dir) {
+		/* The debugfs node for firmware downloading*/
+		debugfs_create_file("firmware_data", S_IRUGO,
+				    fw_dir, &ad_data->fw_data,
+				    &ad3_firmware_fops);
+	}
+
+}
+
 static int ad3_init(struct device *dev)
 {
 	struct ad_dev *ad_dev = dev_get_drvdata(dev);
@@ -140,6 +333,9 @@ static struct ad_dev_funcs ad3_dev_func = {
 	.ad_runtime_suspend = ad3_runtime_suspend,
 	.ad_runtime_resume= ad3_runtime_resume,
 	.ad_load_firmware = ad3_load_firmware,
+	.ad_reg_get_all = ad3_register_get_all,
+	.ad_save_hw_status = ad3_save_hw_status,
+	.ad_create_debugfs_sw = ad3_create_debugfs_sw,
 };
 
 struct ad_dev_funcs *ad3_identify(struct device *dev,
