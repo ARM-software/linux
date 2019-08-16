@@ -476,6 +476,7 @@ static void komeda_crtc_reset(struct drm_crtc *crtc)
 	if (state) {
 		crtc->state = &state->base;
 		crtc->state->crtc = crtc;
+		state->en_protected_mode = false;
 	}
 }
 
@@ -494,6 +495,7 @@ komeda_crtc_atomic_duplicate_state(struct drm_crtc *crtc)
 	new->affected_pipes = old->active_pipes;
 	new->clock_ratio = old->clock_ratio;
 	new->max_slave_zorder = old->max_slave_zorder;
+	new->en_protected_mode = old->en_protected_mode;
 
 	return &new->base;
 }
@@ -522,6 +524,57 @@ static void komeda_crtc_vblank_disable(struct drm_crtc *crtc)
 	mdev->funcs->on_off_vblank(mdev, kcrtc->master->id, false);
 }
 
+static int komeda_crtc_atomic_get_property(struct drm_crtc *crtc,
+		const struct drm_crtc_state *state,
+		struct drm_property *property, uint64_t *val)
+{
+	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
+	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(state);
+
+	if (property == kcrtc->protected_mode_property)
+		*val = kcrtc_st->en_protected_mode;
+	else {
+		DRM_DEBUG_DRIVER("Unknown property %s\n", property->name);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int komeda_crtc_atomic_set_property(struct drm_crtc *crtc,
+		struct drm_crtc_state *state,
+		struct drm_property *property, uint64_t val)
+{
+	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
+	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(state);
+	int ret = 0;
+
+	if (property == kcrtc->protected_mode_property)
+		kcrtc_st->en_protected_mode = !!val;
+	else {
+		DRM_DEBUG_DRIVER("Unknown property %s\n", property->name);
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+static int komeda_crtc_create_protected_mode_property(struct komeda_crtc *kcrtc)
+{
+	struct drm_crtc *crtc = &kcrtc->base;
+	struct drm_property *prop;
+
+	prop = drm_property_create_bool(crtc->dev, DRM_MODE_PROP_ATOMIC,
+					"PROTECTED_MODE");
+	if (!prop)
+		return -ENOMEM;
+
+	drm_object_attach_property(&crtc->base, prop, 0);
+	kcrtc->protected_mode_property = prop;
+
+	return 0;
+}
+
 static const struct drm_crtc_funcs komeda_crtc_funcs = {
 	.gamma_set		= drm_atomic_helper_legacy_gamma_set,
 	.destroy		= drm_crtc_cleanup,
@@ -532,6 +585,8 @@ static const struct drm_crtc_funcs komeda_crtc_funcs = {
 	.atomic_destroy_state	= komeda_crtc_atomic_destroy_state,
 	.enable_vblank		= komeda_crtc_vblank_enable,
 	.disable_vblank		= komeda_crtc_vblank_disable,
+	.atomic_get_property	= komeda_crtc_atomic_get_property,
+	.atomic_set_property	= komeda_crtc_atomic_set_property,
 };
 
 int komeda_kms_setup_crtcs(struct komeda_kms_dev *kms,
@@ -607,6 +662,10 @@ static int komeda_crtc_add(struct komeda_kms_dev *kms,
 	crtc->port = kcrtc->master->of_output_port;
 
 	drm_crtc_enable_color_mgmt(crtc, 0, true, KOMEDA_COLOR_LUT_SIZE);
+
+	err = komeda_crtc_create_protected_mode_property(kcrtc);
+	if (err)
+		return err;
 
 	return 0;
 }

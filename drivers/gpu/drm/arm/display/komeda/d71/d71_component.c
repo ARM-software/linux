@@ -1176,6 +1176,7 @@ static void d71_timing_ctrlr_update(struct komeda_component *c,
 				    struct komeda_component_state *state)
 {
 	struct drm_crtc_state *crtc_st = state->crtc->state;
+	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(crtc_st);
 	struct drm_display_mode *mode = &crtc_st->adjusted_mode;
 	struct komeda_timing_ctrlr_state *st = to_ctrlr_st(state);
 	u32 __iomem *reg = c->reg;
@@ -1221,6 +1222,8 @@ static void d71_timing_ctrlr_update(struct komeda_component *c,
 		malidp_write32(reg, BS_DRIFT_TO, hfront_porch + 16);
 		value |= BS_CTRL_DL;
 	}
+
+	value |= kcrtc_st->en_protected_mode ? BS_CTRL_PM : 0;
 
 	malidp_write32(reg, BLK_CONTROL, value);
 }

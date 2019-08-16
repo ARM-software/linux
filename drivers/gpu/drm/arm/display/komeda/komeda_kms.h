@@ -92,6 +92,9 @@ struct komeda_crtc {
 
 	/** @disable_done: this flip_done is for tracing the disable */
 	struct completion *disable_done;
+
+	/* protected mode property */
+	struct drm_property *protected_mode_property;
 };
 
 /**
@@ -120,6 +123,8 @@ struct komeda_crtc_state {
 
 	/** @max_slave_zorder: the maximum of slave zorder */
 	u32 max_slave_zorder;
+
+	bool en_protected_mode;
 };
 
 /** struct komeda_kms_dev - for gather KMS related things */
