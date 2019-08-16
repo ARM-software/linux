@@ -50,7 +50,6 @@ static void aeu_buf_queue(struct vb2_buffer *buf)
 	aeu_ctx_t *ctx = vb2_get_drv_priv(buf->vb2_queue);
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(buf);
 	v4l2_m2m_buf_queue(ctx->fh.m2m_ctx, vbuf);
-	pr_info("%s: in the queue\n", __func__);
 }
 
 static int aeu_start_streaming(struct vb2_queue *q, unsigned int count)
@@ -375,7 +374,6 @@ static const struct v4l2_m2m_ops mali_aeu_m2m_ops = {
 	.job_abort	= aeu_m2m_job_abort,
 };
 
-/* TODO: Implement irq thread function */
 irqreturn_t mali_aeu_irq_thread_handler(int irq, void *data)
 {
 	return IRQ_HANDLED;

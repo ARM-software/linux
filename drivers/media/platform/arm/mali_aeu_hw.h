@@ -7,6 +7,9 @@
 #ifndef _MALI_AEU_HW_H_
 #define _MALI_AEU_HW_H_
 
+#include <media/v4l2-device.h>
+#include <media/v4l2-mem2mem.h>
+
 #define AEU_OFFSET	0x08000
 #define AEU_DS_OFFSET	0x08200
 #define AEU_AES_OFFSET	0x08400
@@ -25,7 +28,7 @@
 #define AEU_BLOCK_INFO		_BLK_INFO(AEU_OFFSET)
 #define AEU_PIPELINE_INFO	_PPL_INFO(AEU_OFFSET)
 #define AEU_IRQ_STATUS		_IRQ_STATUS(AEU_OFFSET)
-#define AEU_STATUS		_STAUS(AEU_OFFSET)
+#define AEU_STATUS		_STATUS(AEU_OFFSET)
 #define AEU_CONTROL		_CONTROL(AEU_OFFSET)
 
 #define AEU_IRQ_DS		(1 << 0)
@@ -33,6 +36,14 @@
 
 #define AEU_CTRL_SRST		(1 << 16)
 #define AEU_CTRL_PM		(1 << 20)
+
+#define AES_IRQ_EOW		(1 << 0)
+#define AES_IRQ_CFGS		(1 << 1)
+#define AES_IRQ_ERR		(1 << 2)
+#define AES_IRQ_TERR		(1 << 3)
+
+#define AES_CTRL_EN		(1 << 0)
+#define AES_CMD_DS		(1 << 0)
 
 #define AEU_AES_BLOCK_INFO	_BLK_INFO(AEU_AES_OFFSET)
 #define AEU_AES_PIPELINE_INFO	_PPL_INFO(AEU_AES_OFFSET)
@@ -54,11 +65,13 @@
 #define AEU_DS_PIPELINE_INFO	_PPL_INFO(AEU_DS_OFFSET)
 #define AEU_DS_IRQ_RAW_STATUS	_DS_REG(0x0A0)
 #define AEU_DS_IRQ_CLEAR	_DS_REG(0x0A4)
-#define AEU_DS_IRQ_MARK		_DS_REG(0x0A8)
+#define AEU_DS_IRQ_MASK		_DS_REG(0x0A8)
 #define AEU_DS_IRQ_STATUS	_DS_REG(0x0AC)
 #define AEU_DS_CONTROL		_DS_REG(0x0D0)
+#define ADU_DS_CONFIG_VALID	_DS_REG(0x0D4)
+#define ADU_DS_PROG_LINE	_DS_REG(0x0D8)
 
-#define DS_IRQ_STATUS		(1 << 2)
+#define DS_IRQ_ERR		(1 << 2)
 #define DS_IRQ_CVAL		(1 << 8)
 #define DS_IRQ_PL		(1 << 9)
 
@@ -127,4 +140,10 @@ irqreturn_t mali_aeu_hw_irq_handler(int irq, void *data);
 mali_aeu_hw_ctx_t *
 mali_aeu_hw_init_ctx(struct mali_aeu_hw_device *hw_dev);
 void mali_aeu_hw_free_ctx(mali_aeu_hw_ctx_t *hw_ctx);
+
+void mali_aeu_hw_connect_m2m_device(struct mali_aeu_hw_device *hw_dev,
+		struct v4l2_m2m_dev *m2mdev,
+		mali_aeu_hw_ctx_t* (*cb)(struct v4l2_m2m_dev *));
+struct v4l2_m2m_dev *
+mali_aeu_hw_get_m2m_device(struct mali_aeu_hw_device *hw_dev);
 #endif
