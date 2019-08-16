@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config MALI_AEU
+	tristate "arm MALI AFBC Encoder Unit"
+	depends on OF && (ARM || ARM64)
+	depends on VIDEO_DEV && VIDEO_V4L2
+	select V4L2_MEM2MEM_DEV
+	select VIDEOBUF2_DMA_CONTIG
+	help
+	  Support AEU device which could transfer the uncompressed buffer
+	  to compressed buffer in AFBC format.
