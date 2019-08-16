@@ -10,7 +10,10 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 #include <linux/clk.h>
+#include <linux/completion.h>
+
 #include "ad_regs.h"
+#include "../include/ad_coprocessor_defs.h"
 
 #define AD3_VERSION 0x3
 
@@ -42,6 +45,7 @@ struct ad_dev_data {
 	u32 ad_version;
 	struct ad_dev_funcs *(*identify)(struct device *dev,
 				         void __iomem *reg);
+	struct ad_coprocessor_funcs *interface_funcs;
 };
 
 struct ad_chip_info {
@@ -63,6 +67,7 @@ struct ad_dev {
 	u32 regs_size;
 	const struct ad_dev_data *dev_data;
 	struct ad_dev_funcs *ad_dev_funcs;
+	u32 is_enabled : 1;
 	void *private_data;
 };
 

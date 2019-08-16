@@ -14,6 +14,7 @@
 #include <linux/platform_device.h>
 #include <linux/of_device.h>
 #include <linux/component.h>
+#include <drm/drm_device.h>
 #include <linux/firmware.h>
 #include "ad_device.h"
 #include "ad_debugfs.h"
@@ -81,12 +82,37 @@ static const struct file_operations ad_fops = {
 
 static int ad_driver_bind(struct device *dev, struct device *master, void *data)
 {
+	struct drm_device *drm = data;
+	struct ad_list *ad_head = drm->dev_private;
+	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+	struct ad_coprocessor *ad;
+
+	ad = devm_kzalloc(dev, sizeof(*ad), GFP_KERNEL);
+	if (!ad) {
+		dev_err(dev, "Fail to create ad coprocessor!\n");
+		return -ENOMEM;
+	}
+
+	ad->dev = dev;
+	ad->funcs = ad_dev->dev_data->interface_funcs;
+	list_add_tail(&ad->ad_node, &ad_head->head);
+
 	return 0;
 }
 
 static void ad_driver_unbind(struct device *dev, struct device *master,
 			     void *data)
 {
+	struct drm_device *drm = data;
+	struct ad_list *ad_head = drm->dev_private;
+	struct ad_coprocessor *ad;
+
+	list_for_each_entry(ad, &ad_head->head, ad_node)
+		if (ad->dev == dev) {
+			list_del(&ad->ad_node);
+			devm_kfree(dev, ad);
+			break;
+		}
 	return;
 }
 
@@ -167,6 +193,7 @@ static int ad_probe(struct platform_device *pdev)
 	}
 
 	dev_set_drvdata(dev, ad_dev);
+	ad_dev->is_enabled = false;
 
 	ret = ad_device_get_resources(ad_dev);
 	if (ret) {
@@ -220,6 +247,8 @@ match_dev_failed:
 static int ad_remove(struct platform_device *pdev)
 {
 	struct ad_dev *ad_dev = platform_get_drvdata(pdev);
+
+	component_del(ad_dev->dev, &ad_component_ops);
 
 	if (pm_runtime_enabled(&pdev->dev))
 		pm_runtime_put_sync(&pdev->dev);
