@@ -14,6 +14,7 @@
 #include <linux/platform_device.h>
 #include <linux/of_device.h>
 #include <linux/component.h>
+#include <linux/firmware.h>
 #include "ad_device.h"
 
 #define AD_NAME "assertive_display"
@@ -93,6 +94,47 @@ static const struct component_ops ad_component_ops = {
 	.unbind = ad_driver_unbind,
 };
 
+static void ad_request_firmware(struct ad_dev *ad_dev)
+{
+	int ret;
+	const char *fw_name;
+	const struct firmware *fw;
+
+	ret = of_property_read_string_index(ad_dev->dev->of_node,
+				            "firmware_name",
+				            0,
+				            &fw_name);
+
+	if(ret) {
+		dev_info(ad_dev->dev,
+			 "No firmware found, continue with default!\n");
+		return;
+	}
+
+	ret = request_firmware(&fw, fw_name, ad_dev->dev);
+
+	if (ret) {
+		dev_err(ad_dev->dev,
+			"Failed to get firmware, continue with default!\n");
+		return;
+	}
+
+	if (!fw || !fw->data) {
+		dev_err(ad_dev->dev,
+			"The firmware is invalid, continue with default!\n");
+		return;
+	}
+
+	clk_prepare_enable(ad_dev->aclk);
+
+	ad_dev->ad_dev_funcs->ad_load_firmware(ad_dev->dev,
+					       fw->data,
+					       fw->size);
+
+	clk_disable_unprepare(ad_dev->aclk);
+	release_firmware(fw);
+}
+
 static int ad_probe(struct platform_device *pdev)
 {
 	int ret, id;
@@ -130,6 +172,8 @@ static int ad_probe(struct platform_device *pdev)
 		dev_err(dev, "Failed to get resources: 0x%x!\n", ret);
 		goto get_res_failed;
 	}
+
+	ad_request_firmware(ad_dev);
 
 	ad_dev->miscdev.minor	= MISC_DYNAMIC_MINOR;
 	ad_dev->miscdev.name	= ad_dev->name;

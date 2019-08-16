@@ -26,6 +26,12 @@ struct ad_dev_funcs {
 	void (*ad_runtime_suspend)(struct device *dev);
 	/* Runtime resume the ad device, then store HW status. */
 	void (*ad_runtime_resume)(struct device *dev);
+	/* Load the ad firmware data. */
+	void (*ad_load_firmware)(struct device *dev, const u8 *data,
+				 size_t size);
+	/* Save hw change. */
+	void (*ad_save_hw_status)(struct device *dev, unsigned int offset,
+				  unsigned int value);
 };
 
 struct ad_dev_data {
@@ -52,6 +58,7 @@ struct ad_dev {
 	u32 regs_size;
 	const struct ad_dev_data *dev_data;
 	struct ad_dev_funcs *ad_dev_funcs;
+	void *private_data;
 };
 
 extern const struct ad_dev_data ad_products[];
