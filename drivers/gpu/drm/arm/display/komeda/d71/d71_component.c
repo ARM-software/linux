@@ -1117,6 +1117,7 @@ static void d71_timing_ctrlr_update(struct komeda_component *c,
 {
 	struct drm_crtc_state *crtc_st = state->crtc->state;
 	struct drm_display_mode *mode = &crtc_st->adjusted_mode;
+	struct komeda_timing_ctrlr_state *st = to_ctrlr_st(state);
 	u32 __iomem *reg = c->reg;
 	u32 hactive, hfront_porch, hback_porch, hsync_len;
 	u32 vactive, vfront_porch, vback_porch, vsync_len;
@@ -1147,7 +1148,15 @@ static void d71_timing_ctrlr_update(struct komeda_component *c,
 	malidp_write32(reg, BS_PREFETCH_LINE, D71_DEFAULT_PREPRETCH_LINE);
 
 	/* configure bs control register */
-	value = BS_CTRL_EN | BS_CTRL_VM;
+	value = BS_CTRL_EN;
+
+	if (is_writeback_only(crtc_st))
+		value |= BS_CTRL_VD;
+
+	/* Enable video mode if command mode is disabled for non writeback */
+	else if (!st->command_mode)
+		value |= BS_CTRL_VM;
+
 	if (c->pipeline->dual_link) {
 		malidp_write32(reg, BS_DRIFT_TO, hfront_porch + 16);
 		value |= BS_CTRL_DL;

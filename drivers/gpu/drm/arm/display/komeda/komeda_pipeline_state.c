@@ -858,6 +858,11 @@ komeda_timing_ctrlr_validate(struct komeda_timing_ctrlr *ctrlr,
 	struct drm_crtc *crtc = kcrtc_st->base.crtc;
 	struct komeda_timing_ctrlr_state *st;
 	struct komeda_component_state *c_st;
+	struct drm_crtc_state *crtc_st = &kcrtc_st->base;
+	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
+	struct drm_connector *conn;
+	struct drm_connector_state *conn_st;
+	int i;
 
 	c_st = komeda_component_get_state_and_set_user(&ctrlr->base,
 			kcrtc_st->base.state, crtc, crtc);
@@ -865,6 +870,20 @@ komeda_timing_ctrlr_validate(struct komeda_timing_ctrlr *ctrlr,
 		return PTR_ERR(c_st);
 
 	st = to_ctrlr_st(c_st);
+
+	if (!is_writeback_only(crtc_st)) {
+
+		for_each_new_connector_in_state(crtc_st->state, conn, conn_st, i) {
+			if (conn_st->crtc != kcrtc->base.state->crtc)
+				continue;
+
+			if (&kcrtc->wb_conn->base.base == conn) {
+				continue;
+			}
+
+			st->command_mode = conn->display_info.command_mode;
+		}
+	}
 
 	komeda_component_add_input(&st->base, &dflow->input, 0);
 	komeda_component_set_output(&dflow->input, &ctrlr->base, 0);

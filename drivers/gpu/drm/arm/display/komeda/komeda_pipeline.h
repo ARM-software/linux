@@ -342,6 +342,7 @@ struct komeda_timing_ctrlr {
 
 struct komeda_timing_ctrlr_state {
 	struct komeda_component_state base;
+	bool command_mode;
 };
 
 /* Why define A separated structure but not use plane_state directly ?
