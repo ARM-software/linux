@@ -12,6 +12,7 @@
 #include <linux/debugfs.h>
 #include <linux/version.h>
 #include <linux/string.h>
+#include <linux/pm_runtime.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,12,0)
 #include <linux/uaccess.h>
 #else
@@ -31,6 +32,7 @@ static ssize_t ad_debugfs_register_read(struct file *file,
 					size_t count,
 					loff_t *ppos)
 {
+	int ret;
 	u32 val, r, i, offset, mask, len;
 	char buffer[512];
 	struct ad_debugfs_data *debugfs_data =
@@ -42,6 +44,12 @@ static ssize_t ad_debugfs_register_read(struct file *file,
 	mask = reg->mask;
 	len = 0;
 
+	ret = pm_runtime_get_sync(ad_dev->dev);
+	if (ret < 0) {
+		dev_err(ad_dev->dev, "Failed to get PM runtime\n");
+		return ret;
+	}
+
 	for (i = 0; i < reg->number; i++) {
 		ad_register_regmap_read(ad_dev->ad_regmap,
 				        offset, mask, &val);
@@ -52,6 +60,8 @@ static ssize_t ad_debugfs_register_read(struct file *file,
 
 	buffer[len] = '\n';
 
+	pm_runtime_put_sync(ad_dev->dev);
+
 	return simple_read_from_buffer(buff, count, ppos, buffer, len);
 }
 
@@ -60,6 +70,7 @@ static ssize_t ad_debugfs_register_write(struct file *file,
 				         size_t count,
 				         loff_t *ppos)
 {
+	int ret;
 	char *token;
 	u32 val, r, offset, mask;
 	char buffer[512];
@@ -83,6 +94,12 @@ static ssize_t ad_debugfs_register_write(struct file *file,
 	offset = reg->offset;
 	mask = reg->mask;
 
+	ret = pm_runtime_get_sync(ad_dev->dev);
+	if (ret < 0) {
+		dev_err(ad_dev->dev, "Failed to get PM runtime\n");
+		return ret;
+	}
+
 	for (token = strsep(&s, delim); token != NULL;
 		 token = strsep(&s, delim)) {
 		if (!*token)
@@ -92,9 +109,10 @@ static ssize_t ad_debugfs_register_write(struct file *file,
 		if (0 != r)
 			r = kstrtou32(token, 16, &val);
 
-		if ( 0 != r || written_reg_num > reg->number)
+		if ( 0 != r || written_reg_num > reg->number) {
+			pm_runtime_put_sync(ad_dev->dev);
 			return -EINVAL;
-
+		}
 		ad_register_regmap_write(ad_dev->ad_regmap,
 					 offset, mask, val);
 		ad_dev->ad_dev_funcs->ad_save_hw_status(ad_dev->dev,
@@ -105,6 +123,8 @@ static ssize_t ad_debugfs_register_write(struct file *file,
 	}
 
 	*ppos += count;
+	pm_runtime_put_sync(ad_dev->dev);
+
 	return count;
 }
 
@@ -133,6 +153,7 @@ int ad_debugfs_register(struct ad_dev *ad_dev)
 		struct dentry *registers_dir;
 		registers_dir = debugfs_create_dir("registers",
 					           ad_dev->ad_debugfs_dir);
+
 		if (registers_dir) {
 			int i;
 			for (i = 0; i < reg_num; i++) {
