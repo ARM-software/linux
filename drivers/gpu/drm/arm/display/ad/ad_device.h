@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 #include <linux/clk.h>
+#include "ad_regs.h"
 
 #define AD3_VERSION 0x3
 
@@ -46,6 +47,7 @@ struct ad_dev {
 	struct ad_chip_info chip_info;
 	struct clk *aclk;
 	void __iomem *regs_base;
+	struct regmap *ad_regmap;
 	struct resource *res;
 	u32 regs_size;
 	const struct ad_dev_data *dev_data;
