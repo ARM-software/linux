@@ -14,7 +14,7 @@
 #include "ad_device.h"
 
 extern struct ad_dev_funcs *ad3_identify(struct device *dev,
-					void __iomem *reg);
+					 void __iomem *reg);
 
 const struct ad_dev_data ad_products[] = {
 	[AD3] = {
