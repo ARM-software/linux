@@ -1,0 +1,76 @@
+#
+# (C) COPYRIGHT 2015 ARM Limited. All rights reserved.
+#
+# This program is free software and is provided to you under the terms of the
+# GNU General Public License version 2 as published by the Free Software
+# Foundation, and any use by you of this program is subject to the terms
+# of such GNU licence.
+#
+# A copy of the licence is included with the program, and can also be obtained
+# from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA  02110-1301, USA.
+#
+#
+
+* Mali-DP display-split FPGA test hardware
+
+Some Mali-DP development FPGA bitfiles have the ability to drive a pair of
+HDMI transmitters with display-split data.
+This node describes a driver for this FPGA hardware, driving a pair of
+video transmitters drivers.
+
+Required properties:
+- compatible: Should be "drm,split-connector"
+- reg: The address and size of the configuration register for the FPGA hardware.
+
+The device node must contain a 'ports' child node, with two child 'port'
+nodes, as described in Documentation/devicetree/bindings/media/video-interfaces.txt.
+The ports should be set up as follows:
+port 0: The input port, with two endpoint connected to both links of a
+DP output link.
+port 1: The output port, two endpoints, each pointing to the node for a video
+        transmitter. The endpoints are numbered like so:
+  endpoint 0: The transmitter which will be used for the first link.
+  endpoint 1: The transmitter to use for the secondary link in display-split.
+
+Example:
+    split_connector@c020054 {
+            compatible = "drm,split-connector";
+            reg = <0xc020054 0x4>;
+            dto = <64>;
+            ports {
+                    #address-cells = <1>;
+                    #size-cells = <0>;
+
+                    port@0 {
+                            reg = <0>;
+                            #address-cells = <1>;
+                            #size-cells = <0>;
+
+                            split_connector_in0: endpoint@0 {
+                                    reg = <0>;
+                                    remote-endpoint = <&dp0_pl0_link0>;
+                            };
+                            split_connector_in1: endpoint@1 {
+                                    reg = <1>;
+                                    remote-endpoint = <&dp0_pl0_link1>;
+                            };
+                    };
+
+                    port@1 {
+                            reg = <1>;
+                            #address-cells = <1>;
+                            #size-cells = <0>;
+
+                            split_connector_out0: endpoint@0 {
+                                    reg = <0>;
+                                    remote-endpoint = <&db_dvi0_in>;
+                            };
+
+                            split_connector_out1: endpoint@1 {
+                                    reg = <1>;
+                                    remote-endpoint = <&db_dvi1_in>;
+                            };
+                    };
+            };
+    };
