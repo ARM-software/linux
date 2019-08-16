@@ -29,9 +29,13 @@ struct ad_dev_funcs {
 	/* Load the ad firmware data. */
 	void (*ad_load_firmware)(struct device *dev, const u8 *data,
 				 size_t size);
+	/* Get all ad registers, set the reg and return the register number. */
+	unsigned int (*ad_reg_get_all)(const struct ad_reg **reg);
 	/* Save hw change. */
 	void (*ad_save_hw_status)(struct device *dev, unsigned int offset,
 				  unsigned int value);
+	/*Create debugfs for sw params.*/
+	void (*ad_create_debugfs_sw)(struct device *dev);
 };
 
 struct ad_dev_data {
@@ -55,6 +59,7 @@ struct ad_dev {
 	void __iomem *regs_base;
 	struct regmap *ad_regmap;
 	struct resource *res;
+	struct dentry *ad_debugfs_dir;
 	u32 regs_size;
 	const struct ad_dev_data *dev_data;
 	struct ad_dev_funcs *ad_dev_funcs;

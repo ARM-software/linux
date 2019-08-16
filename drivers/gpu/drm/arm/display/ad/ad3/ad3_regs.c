@@ -100,3 +100,8 @@ struct regmap *ad3_register_regmap_init(struct device *dev,
 	return ad_regmap;
 };
 
+unsigned int ad3_register_get_all(const struct ad_reg **reg)
+{
+	(*reg) = ad3_regs;
+	return AD3_REG_TOTAL_NUM;
+}
