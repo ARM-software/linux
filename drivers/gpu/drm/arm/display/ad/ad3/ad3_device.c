@@ -6,6 +6,7 @@
  */
 #include <linux/device.h>
 #include <linux/log2.h>
+#include <linux/pm_runtime.h>
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
 #include <linux/version.h>

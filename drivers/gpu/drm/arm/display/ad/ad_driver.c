@@ -221,11 +221,9 @@ static int ad_remove(struct platform_device *pdev)
 {
 	struct ad_dev *ad_dev = platform_get_drvdata(pdev);
 
+	if (pm_runtime_enabled(&pdev->dev))
+		pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-	if (!pm_runtime_status_suspended(&pdev->dev)) {
-		ad_driver_runtime_suspend(&pdev->dev);
-		pm_runtime_set_suspended(&pdev->dev);
-	}
 
 	ad_debugfs_unregister(ad_dev);
 	misc_deregister(&ad_dev->miscdev);
@@ -252,7 +250,8 @@ static int ad_driver_pm_suspend_late(struct device *dev)
 {
 	struct ad_dev *ad_dev = dev_get_drvdata(dev);
 
-	ad_dev->ad_dev_funcs->ad_runtime_suspend(dev);
+	if (!pm_runtime_status_suspended(dev))
+		ad_dev->ad_dev_funcs->ad_runtime_suspend(dev);
 
 	return 0;
 }
@@ -260,7 +259,9 @@ static int ad_driver_pm_suspend_late(struct device *dev)
 static int ad_driver_pm_resume_early(struct device *dev)
 {
 	struct ad_dev *ad_dev = dev_get_drvdata(dev);
-	ad_dev->ad_dev_funcs->ad_runtime_resume(dev);
+
+	if (!pm_runtime_status_suspended(dev))
+		ad_dev->ad_dev_funcs->ad_runtime_resume(dev);
 
 	return 0;
 }
