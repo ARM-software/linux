@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0
+
+mali-aeu-y := mali_aeu.o mali_aeu_v4l2.o mali_aeu_hw.o
+
+obj-$(CONFIG_MALI_AEU) += mali-aeu.o
