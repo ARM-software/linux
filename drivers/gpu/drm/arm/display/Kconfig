@@ -19,6 +19,24 @@ config DRM_KOMEDA_ERROR_PRINT
 	help
 	  Choose this option to enable error printing.
 
+config ASSERTIVE_DISPLAY_TEST_MODULE
+	tristate "ARM Assertive display test module driver"
+	select IIO
+	select IIO_BUFFER
+	select IIO_BUFFER_CB
+	select IIO_CONFIGFS
+	select IIO_TRIGGER
+	select IIO_SW_DEVICE
+	select IIO_SW_TRIGGER
+	select BACKLIGHT_LCD_SUPPORT
+	select BACKLIGHT_CLASS_DEVICE
+	select BACKLIGHT_GENERIC
+	help
+	  Choose this option if you want to enable backlight and ambient
+	  light sensor for AD.
+
+	  If compiled as a module it will be called ad_test_module.
+
 config ASSERTIVE_DISPLAY
 	tristate "ARM Assertive display driver"
 	depends on DRM_KOMEDA
@@ -33,7 +51,8 @@ config ASSERTIVE_DISPLAY
         select BACKLIGHT_CLASS_DEVICE
         select BACKLIGHT_GENERIC
 	help
-          Choose this option if you want to compile the ARM Assertive display
-          Processor driver. It supports the AD3 variants of the hardware.
+	  Choose this option if you want to compile the ARM Assertive display
+	  Processor driver. It supports the AD3 variants of the hardware.
 
-          If compiled as a module it will be called ad_drv.
+	  If compiled as a module it will be called ad_drv.
+
