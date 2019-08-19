@@ -19,6 +19,35 @@ static const struct of_device_id aeu_of_match[] = {
 	{},
 };
 
+#ifdef CONFIG_IOMMU_DMA
+#include <linux/dma-iommu.h>
+static int
+mali_aeu_iommu_fault_handler(struct iommu_domain *domain, struct device *dev,
+				unsigned long iova, int flags, void *data)
+{
+	pr_err_ratelimited("iommu fault in %s access (iova = %#lx)\n",
+			(flags & IOMMU_FAULT_WRITE) ? "write" : "read", iova);
+	return -EFAULT;
+}
+
+static struct iommu_domain *mali_aeu_get_iommu(struct device *dev)
+{
+	struct iommu_domain *domain;
+
+	domain = iommu_get_domain_for_dev(dev);
+	if (!domain)
+		dev_err(dev, "get iommu domain failed!\n");
+	else
+		iommu_set_fault_handler(domain,
+					mali_aeu_iommu_fault_handler,
+					dev);
+	return domain;
+}
+
+#else
+#define mali_aeu_get_iommu(...)	(NULL)
+#endif
+
 static int mali_aeu_probe(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -58,6 +87,10 @@ static int mali_aeu_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "register mapping is wrong!\n");
 		return PTR_ERR(reg_base);
 	}
+
+	adev->iommu = mali_aeu_get_iommu(&pdev->dev);
+	if (!adev->iommu)
+		dev_warn(&pdev->dev, "no smmu connected\n");
 
 	adev->hw_dev = mali_aeu_hw_init(reg_base, &pdev->dev, &adev->hw_info);
 	if (!adev->hw_dev) {

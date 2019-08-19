@@ -26,6 +26,8 @@ struct mali_aeu_device {
 	struct v4l2_device		v4l2_dev;
 	struct video_device		vdev;
 	struct v4l2_m2m_dev		*m2mdev;
+	struct iommu_domain		*iommu;
+	struct device_dma_parameters	dma_parms;
 	/* protect access in different instance */
 	struct mutex			aeu_mutex;
 
