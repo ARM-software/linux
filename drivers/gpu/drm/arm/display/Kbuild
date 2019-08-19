@@ -3,3 +3,5 @@
 obj-$(CONFIG_DRM_KOMEDA) += komeda/
 
 obj-$(CONFIG_ASSERTIVE_DISPLAY) += ad/
+
+obj-$(CONFIG_ASSERTIVE_DISPLAY_TEST_MODULE) += ad/test_module/
