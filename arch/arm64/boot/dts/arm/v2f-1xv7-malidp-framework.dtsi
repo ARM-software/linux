@@ -36,7 +36,7 @@
 		};
 	};
 
-	i2c_fpga: i2c@90000 {
+	i2c_fpga_tx0: i2c@90000 {
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "arm,versatile-i2c";
