@@ -360,11 +360,61 @@ struct komeda_timing_ctrlr_state {
 	bool command_mode;
 };
 
+enum komeda_atu_mode {
+	ATU_MODE_INVAL_OVERLAP	= -2,
+	ATU_MODE_INVAL_ORDER	= -1,
+	ATU_MODE_VP0_VP1_SEQ	= 0,
+	ATU_MODE_VP0		= 1,
+	ATU_MODE_VP1		= 2,
+	ATU_MODE_VP0_VP1_SIMULT	= 3,
+	ATU_MODE_VP0_VP1_INT	= 4
+};
+
+enum komeda_atu_vp_type {
+	ATU_VP_TYPE_NONE = 0,
+	ATU_VP_TYPE_PROJ = 1,
+	ATU_VP_TYPE_QUAD =2
+};
+
+struct komeda_atu_vp_state {
+	u16 out_hsize, out_vsize;
+	u16 out_hoffset, out_voffset;
+	u16 buf_hsize, buf_vsize;
+	u16 buf_hoffset, buf_voffset;
+	u16 hdnorm, vdnorm;
+	u16 left_crop, right_crop;
+	u16 top_crop, bottom_crop;
+
+	u8 hnodes, vnodes;
+	u8 hrshift, vrshift;
+	u16 hstep, vstep;
+	u32 hscale;
+	enum komeda_atu_vp_type vp_type;
+
+	struct drm_plane *plane;
+	struct drm_framebuffer *fb;
+
+	bool lc_enabled		: 1;
+	bool pr_enabled		: 1;
+	bool cac_enabled	: 1;
+	bool clamp_enabled	: 1;
+	bool matrix_changed	: 1;
+
+	dma_addr_t addr;
+
+	u32 *r_sp_table;
+	u32 *g_sp_table;
+	u32 *b_sp_table;
+};
+
 struct komeda_atu_state {
 	struct komeda_component_state base;
 	struct komeda_color_state color_st;
 
 	u16 hsize, vsize; /* out size */
+	enum komeda_atu_mode mode;
+	struct komeda_atu_vp_state left, right;
+	u32   single_buffer_enabled : 1; /* true if 2 vp share one buffer */
 };
 
 struct komeda_atu {
@@ -373,6 +423,16 @@ struct komeda_atu {
 	struct malidp_range h_size, v_size;
 	u32 slave_resource; /* connected rich layer component id */
 	u32 layer_type;
+
+	struct malidp_range vp_h_size, vp_v_size;
+	struct malidp_range vp_h_nodes, vp_v_nodes;
+	struct malidp_range vp_h_offset, vp_v_offset;
+	struct malidp_range vp_h_step, vp_v_step;
+	struct malidp_range vp_h_rshift, vp_v_rshift;
+	struct malidp_range vp_hscale;
+
+	u32 n_vp;
+	u32 __iomem *reg[2];	/* viewport register address */
 };
 
 /* Why define A separated structure but not use plane_state directly ?

@@ -42,6 +42,9 @@ static void get_resources_id(u32 hw_id, u32 *pipe_id, u32 *comp_id)
 		pipe = id / D77_PIPELINE_MAX_ATU;
 		id += KOMEDA_COMPONENT_ATU0;
 		break;
+	case D77_BLK_TYPE_ATU_VP:
+		pipe = id / (D77_PIPELINE_MAX_ATU << 1);
+		break;
 	case D71_BLK_TYPE_CU_MERGER:
 		id = KOMEDA_COMPONENT_MERGER;
 		break;
@@ -463,6 +466,35 @@ static int d77_atu_init(struct d71_dev *d71, struct block_header *blk,
 	get_resources_id(malidp_read32(reg, ATU_SLAVE_INFO) << 4,
 			 NULL, &atu->slave_resource);
 	atu->layer_type = KOMEDA_FMT_VR_LAYER;
+	return 0;
+}
+
+static int d77_atu_vp_init(struct d71_dev *d71, struct block_header *blk,
+			   u32 __iomem *reg)
+{
+	struct komeda_component *c;
+	struct komeda_atu *atu;
+	u32 pipe_id, vp_id;
+
+	get_resources_id(blk->block_info, &pipe_id, &vp_id);
+
+	c = komeda_pipeline_get_component(&d71->pipes[pipe_id]->base,
+					  vp_id / 2 + KOMEDA_COMPONENT_ATU0);
+	if (!c) {
+		DRM_ERROR("Get ATU failed for VP%d.\n", vp_id);
+		return -EINVAL;
+	}
+
+	atu = to_atu(c);
+	vp_id %= 2;
+	if (atu->n_vp != vp_id) {
+		DRM_ERROR("ATU%d-VP%d viewport initial error!\n",
+			  c->id - KOMEDA_COMPONENT_ATU0, vp_id);
+		return -1;
+	}
+
+	atu->reg[vp_id] = reg;
+	atu->n_vp++;
 	return 0;
 }
 
@@ -1437,6 +1469,7 @@ int d71_probe_block(struct d71_dev *d71,
 		break;
 
 	case D77_BLK_TYPE_ATU_VP:
+		err = d77_atu_vp_init(d71, blk, reg);
 		break;
 
 	case D77_BLK_TYPE_LPU_PERF:
