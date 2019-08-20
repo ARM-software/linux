@@ -17,6 +17,7 @@
 #define KOMEDA_PIPELINE_MAX_LAYERS	4
 #define KOMEDA_PIPELINE_MAX_SCALERS	2
 #define KOMEDA_COMPONENT_N_INPUTS	5
+#define KOMEDA_PIPELINE_MAX_ATU		2
 
 /* pipeline component IDs */
 enum {
@@ -36,6 +37,10 @@ enum {
 	KOMEDA_COMPONENT_TIMING_CTRLR	= 22, /* timing controller */
 	KOMEDA_COMPONENT_CROSSBAR0	= 24,
 	KOMEDA_COMPONENT_CROSSBAR1	= 25,
+	KOMEDA_COMPONENT_ATU0		= 26,
+	KOMEDA_COMPONENT_ATU1		= 27,
+	KOMEDA_COMPONENT_ATU2		= 28,
+	KOMEDA_COMPONENT_ATU3		= 29,
 };
 
 #define KOMEDA_PIPELINE_LAYERS		(BIT(KOMEDA_COMPONENT_LAYER0) |\
@@ -54,6 +59,11 @@ enum {
 
 #define KOMEDA_PIPELINE_IMPROCS		(BIT(KOMEDA_COMPONENT_IPS0) |\
 					 BIT(KOMEDA_COMPONENT_IPS1))
+
+#define KOMEDA_PIPELINE_ATUS		(BIT(KOMEDA_COMPONENT_ATU0) |\
+					 BIT(KOMEDA_COMPONENT_ATU1) |\
+					 BIT(KOMEDA_COMPONENT_ATU2) |\
+					 BIT(KOMEDA_COMPONENT_ATU3))
 struct komeda_component;
 struct komeda_component_state;
 
@@ -350,6 +360,21 @@ struct komeda_timing_ctrlr_state {
 	bool command_mode;
 };
 
+struct komeda_atu_state {
+	struct komeda_component_state base;
+	struct komeda_color_state color_st;
+
+	u16 hsize, vsize; /* out size */
+};
+
+struct komeda_atu {
+	struct komeda_component base;
+	struct komeda_color_manager color_mgr;
+	struct malidp_range h_size, v_size;
+	u32 slave_resource; /* connected rich layer component id */
+	u32 layer_type;
+};
+
 /* Why define A separated structure but not use plane_state directly ?
  * 1. Komeda supports layer_split which means a plane_state can be split and
  *    handled by two layers, one layer only handle half of plane image.
@@ -407,6 +432,10 @@ struct komeda_pipeline {
 	int n_layers;
 	/** @layers: the pipeline layers */
 	struct komeda_layer *layers[KOMEDA_PIPELINE_MAX_LAYERS];
+	/** @n_atus: the number of atu on @atu */
+	int n_atus;
+	/** @atu: the pipeline atus */
+	struct komeda_atu *atu[KOMEDA_PIPELINE_MAX_ATU];
 	/** @cbar: the pipeline crossbar */
 	struct komeda_component *cbar;
 	/** @n_scalers: the number of scaler on @scalers */
@@ -467,6 +496,7 @@ struct komeda_pipeline_state {
 #define to_merger(c)	container_of(c, struct komeda_merger, base)
 #define to_improc(c)	container_of(c, struct komeda_improc, base)
 #define to_ctrlr(c)	container_of(c, struct komeda_timing_ctrlr, base)
+#define to_atu(c)	container_of(c, struct komeda_atu, base)
 
 #define to_layer_st(c)	container_of(c, struct komeda_layer_state, base)
 #define to_compiz_st(c)	container_of(c, struct komeda_compiz_state, base)
@@ -475,6 +505,7 @@ struct komeda_pipeline_state {
 #define to_merger_st(c)	container_of(c, struct komeda_merger_state, base)
 #define to_improc_st(c)	container_of(c, struct komeda_improc_state, base)
 #define to_ctrlr_st(c)	container_of(c, struct komeda_timing_ctrlr_state, base)
+#define to_atu_st(c)	container_of(c, struct komeda_atu_state, base)
 
 #define priv_to_comp_st(o) container_of(o, struct komeda_component_state, obj)
 #define priv_to_pipe_st(o) container_of(o, struct komeda_pipeline_state, obj)

@@ -38,6 +38,10 @@ static void get_resources_id(u32 hw_id, u32 *pipe_id, u32 *comp_id)
 	case D71_BLK_TYPE_DOU_IPS:
 		id += KOMEDA_COMPONENT_IPS0;
 		break;
+	case D77_BLK_TYPE_ATU:
+		pipe = id / D77_PIPELINE_MAX_ATU;
+		id += KOMEDA_COMPONENT_ATU0;
+		break;
 	case D71_BLK_TYPE_CU_MERGER:
 		id = KOMEDA_COMPONENT_MERGER;
 		break;
@@ -423,6 +427,42 @@ static int d71_layer_init(struct d71_dev *d71,
 
 	layer->supported_rots = DRM_MODE_ROTATE_MASK | DRM_MODE_REFLECT_MASK;
 
+	return 0;
+}
+
+static struct komeda_component_funcs d77_atu_funcs = {
+	.disable	= NULL,
+	.dump_register	= NULL,
+	.update		= NULL,
+};
+
+static int d77_atu_init(struct d71_dev *d71, struct block_header *blk,
+			u32 __iomem *reg)
+{
+	struct komeda_component *c;
+	struct komeda_atu *atu;
+	u32 pipe_id, id;
+
+	get_resources_id(blk->block_info, &pipe_id, &id);
+	c = komeda_component_add(&d71->pipes[pipe_id]->base, sizeof(*atu),
+				 id, BLOCK_INFO_INPUT_ID(blk->block_info),
+				 &d77_atu_funcs, 0, get_valid_inputs(blk),
+				 1, reg,
+				 "ATU%d", id - KOMEDA_COMPONENT_ATU0);
+	if (!c) {
+		DRM_ERROR("Failed to add atu component\n");
+		return -EINVAL;
+	}
+
+	atu = to_atu(c);
+
+	set_range(&atu->h_size, 64, d71->max_line_size);
+	set_range(&atu->v_size, 64, d71->max_vsize);
+
+	malidp_write32(reg, ATU_PALPHA, D71_PALPHA_DEF_MAP);
+	get_resources_id(malidp_read32(reg, ATU_SLAVE_INFO) << 4,
+			 NULL, &atu->slave_resource);
+	atu->layer_type = KOMEDA_FMT_VR_LAYER;
 	return 0;
 }
 
@@ -1390,6 +1430,10 @@ int d71_probe_block(struct d71_dev *d71,
 		break;
 
 	case D77_BLK_TYPE_ATU:
+		malidp_write32(reg, BLK_STATUS, U32_MAX);
+		pipe = d71->pipes[blk_id / D77_PIPELINE_MAX_ATU];
+		pipe->atu_addr[blk_id % D77_PIPELINE_MAX_ATU] = reg;
+		err = d77_atu_init(d71, blk, reg);
 		break;
 
 	case D77_BLK_TYPE_ATU_VP:

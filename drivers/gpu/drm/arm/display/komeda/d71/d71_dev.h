@@ -16,6 +16,7 @@ struct d71_pipeline {
 
 	/* d71 private pipeline blocks */
 	u32 __iomem	*lpu_addr;
+	u32 __iomem	*atu_addr[D77_PIPELINE_MAX_ATU];
 	u32 __iomem	*cu_addr;
 	u32 __iomem	*dou_addr;
 	u32 __iomem	*dou_ft_coeff_addr; /* forward transform coeffs table */
