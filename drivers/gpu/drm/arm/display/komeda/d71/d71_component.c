@@ -1319,6 +1319,21 @@ int d71_probe_block(struct d71_dev *d71,
 		d71->glb_scl_coeff_addr[blk_id] = reg;
 		break;
 
+	case D71_BLK_TYPE_GLB_SC_COEFF:
+		break;
+
+	case D77_BLK_TYPE_CBU:
+		break;
+
+	case D77_BLK_TYPE_ATU:
+		break;
+
+	case D77_BLK_TYPE_ATU_VP:
+		break;
+
+	case D77_BLK_TYPE_LPU_PERF:
+		break;
+
 	default:
 		DRM_ERROR("Unknown block (block_info: 0x%x) is found\n",
 			  blk->block_info);
