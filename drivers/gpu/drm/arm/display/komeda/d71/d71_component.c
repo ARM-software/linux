@@ -44,6 +44,9 @@ static void get_resources_id(u32 hw_id, u32 *pipe_id, u32 *comp_id)
 	case D71_BLK_TYPE_DOU:
 		id = KOMEDA_COMPONENT_TIMING_CTRLR;
 		break;
+	case D77_BLK_TYPE_CBU:
+		id += KOMEDA_COMPONENT_CROSSBAR0;
+		break;
 	default:
 		id = 0xFFFFFFFF;
 	}
@@ -916,6 +919,63 @@ static int d71_splitter_init(struct d71_dev *d71,
 	return 0;
 }
 
+static void d77_crossbar_update(struct komeda_component *c,
+				struct komeda_component_state *state)
+{
+	u32 __iomem *reg;
+	u32 index, input_hw_id;
+
+	for_each_changed_input(state, index) {
+		reg = c->reg + index;
+		input_hw_id = to_d71_input_id(state, index);
+		if (state->active_inputs & BIT(index)) {
+			malidp_write32(reg, BLK_INPUT_ID0, input_hw_id);
+			malidp_write32(reg, BLK_CONTROL, CBU_INPUT_CTRL_EN);
+		} else {
+			malidp_write32(reg, BLK_INPUT_ID0, 0);
+			malidp_write32(reg, BLK_CONTROL, 0);
+		}
+	}
+}
+
+static void d77_crossbar_disable(struct komeda_component *c)
+{
+	u32 __iomem *reg = c->reg;
+	u32 i;
+
+	for (i = 0; i < c->max_active_inputs; i++) {
+		malidp_write32(reg, BLK_CONTROL + (i << 2), 0);
+		malidp_write32(reg, BLK_INPUT_ID0 + (i << 2), 0);
+	}
+}
+
+static struct komeda_component_funcs d77_crossbar_funcs = {
+	.update		= d77_crossbar_update,
+	.disable	= d77_crossbar_disable,
+};
+
+static int d77_crossbar_init(struct d71_dev *d71,
+			     struct block_header *blk, u32 __iomem *reg)
+{
+	struct komeda_component *c;
+	u32 pipe_id, comp_id;
+
+	get_resources_id(blk->block_info, &pipe_id, &comp_id);
+
+	c = komeda_component_add(&d71->pipes[pipe_id]->base, sizeof(*c), comp_id,
+				 BLOCK_INFO_INPUT_ID(blk->block_info),
+				 &d77_crossbar_funcs,
+				 CBU_NUM_INPUT_IDS, get_valid_inputs(blk),
+				 CBU_NUM_OUTPUT_IDS, reg,
+				 "CBU%d", pipe_id);
+	if (IS_ERR(c)) {
+		DRM_ERROR("Failed to add crossbar component\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static void d71_merger_update(struct komeda_component *c,
 			      struct komeda_component_state *state)
 {
@@ -1323,6 +1383,7 @@ int d71_probe_block(struct d71_dev *d71,
 		break;
 
 	case D77_BLK_TYPE_CBU:
+		err = d77_crossbar_init(d71, blk, reg);
 		break;
 
 	case D77_BLK_TYPE_ATU:

@@ -108,6 +108,49 @@ static int komeda_scaler_obj_add(struct komeda_kms_dev *kms,
 }
 
 static struct drm_private_state *
+komeda_crossbar_atomic_duplicate_state(struct drm_private_obj *obj)
+{
+	struct komeda_component_state *st;
+
+	st = kmemdup(obj->state, sizeof(*st), GFP_KERNEL);
+	if (!st)
+		return NULL;
+
+	komeda_component_state_reset(st);
+	__drm_atomic_helper_private_obj_duplicate_state(obj, &st->obj);
+
+	return &st->obj;
+}
+
+static void
+komeda_crossbar_atomic_destroy_state(struct drm_private_obj *obj,
+				     struct drm_private_state *state)
+{
+	kfree(priv_to_comp_st(state));
+}
+
+static const struct drm_private_state_funcs komeda_crossbar_obj_funcs = {
+	.atomic_duplicate_state = komeda_crossbar_atomic_duplicate_state,
+	.atomic_destroy_state	= komeda_crossbar_atomic_destroy_state,
+};
+
+static int komeda_crossbar_obj_add(struct komeda_kms_dev *kms,
+				   struct komeda_component *cbar)
+{
+	struct komeda_component_state *st;
+	struct drm_device *dev = &kms->base;
+
+	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	if (!st)
+		return -ENOMEM;
+	st->component = cbar;
+
+	drm_atomic_private_obj_init(dev, &cbar->obj, &st->obj,
+				    &komeda_crossbar_obj_funcs);
+	return 0;
+}
+
+static struct drm_private_state *
 komeda_compiz_atomic_duplicate_state(struct drm_private_obj *obj)
 {
 	struct komeda_compiz_state *st;
@@ -388,6 +431,12 @@ int komeda_kms_add_private_objs(struct komeda_kms_dev *kms,
 
 		if (pipe->wb_layer) {
 			err = komeda_layer_obj_add(kms, pipe->wb_layer);
+			if (err)
+				return err;
+		}
+
+		if (pipe->cbar) {
+			err = komeda_crossbar_obj_add(kms, pipe->cbar);
 			if (err)
 				return err;
 		}

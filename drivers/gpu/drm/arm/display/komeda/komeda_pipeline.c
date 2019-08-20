@@ -76,6 +76,15 @@ komeda_pipeline_get_component_pos(struct komeda_pipeline *pipe, int id)
 	case KOMEDA_COMPONENT_LAYER3:
 		pos = to_cpos(pipe->layers[id - KOMEDA_COMPONENT_LAYER0]);
 		break;
+	case KOMEDA_COMPONENT_CROSSBAR0:
+	case KOMEDA_COMPONENT_CROSSBAR1:
+		temp = mdev->pipelines[id - KOMEDA_COMPONENT_CROSSBAR0];
+		if (!temp) {
+			DRM_ERROR("crossbar-%d requested pipeline doesn't exist.\n", id);
+			return NULL;
+		}
+		pos = to_cpos(temp->cbar);
+		break;
 	case KOMEDA_COMPONENT_WB_LAYER:
 		pos = to_cpos(pipe->wb_layer);
 		break;
