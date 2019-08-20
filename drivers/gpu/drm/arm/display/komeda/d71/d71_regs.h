@@ -10,6 +10,7 @@
 /* Common block registers offset */
 #define BLK_BLOCK_INFO		0x000
 #define BLK_PIPELINE_INFO	0x004
+#define BLK_MAX_LINE_SIZE	0x008
 #define BLK_VALID_INPUT_ID0	0x020
 #define BLK_OUTPUT_ID0		0x060
 #define BLK_INPUT_ID0		0x080
@@ -449,6 +450,58 @@
 #define FT_COEFF0		0x80
 #define GLB_IT_COEFF		0x80
 
+/* ATU registers */
+#define ATU_SLAVE_INFO		0x00C4
+#define ATU_FMT			0x00D8
+#define ATU_LT_COEFFTAB		0x00DC
+#define ATU_PALPHA		0x00E4
+
+/* ATU VP registers */
+#define ATU_VP_OUT_OFFSET	0x00D8
+#define ATU_VP_BUF_OFFSET	0x00E4
+#define ATU_VP_DNORM		0x00E8
+#define ATU_VP_HSCALE		0x00EC
+#define ATU_VP_SC_NODES		0x00F0
+#define ATU_VP_SC_KNOTS		0x00F4
+#define ATU_VP_SC_RSHIFT	0x00F8
+#define ATU_VP_H_CROP		0x0134
+#define ATU_VP_V_CROP		0x0138
+#define ATU_VP_LATCH_A		0x0140
+#define ATU_VP_MATRIX_A_COEFF0	0x0144
+#define ATU_VP_LATCH_B		0x0170
+#define ATU_VP_MATRIX_B_COEFF0	0x0174
+
+#define ATU_VP_MATRIX_NUM	9
+
+/* ATU control register bits */
+#define ATU_EN			BIT(0)
+#define ATU_IT			BIT(4)
+#define ATU_RGB			BIT(5)
+#define ATU_FT			BIT(6)
+#define ATU_MODE(x)		(((x) & 0x7) << 8)
+#define ATU_SB			BIT(11)
+#define ATU_TBUEN		BIT(16)
+#define ATU_A_RCACHE(x)		(((x) & 0xF) << 28)
+
+/* ATU_VP control register bits */
+#define ATU_VP_EN		BIT(0)
+#define ATU_VP_LC		BIT(4)
+#define ATU_VP_CAC		BIT(5)
+#define ATU_VP_RP		BIT(8)
+#define ATU_VP_CLAMP		BIT(9)
+#define ATU_VP_INTERP(x)	(((x) & 0xFFFF) << 16)
+
+/* ATU_VP latch register */
+#define ATU_VP_MATRIX_LATCH(l)	((((l) & 0x1FFF) << 16) | 1)
+
+/* ATU IRQ bits */
+#define ATU_IRQ_ERR		BIT(11)
+
+/* ATU status register bits */
+#define ATU_STATUS_CIE		BIT(0)
+#define ATU_STATUS_CRE		BIT(1)
+#define ATU_STATUS_CACDIST	BIT(2)
+
 /* GLB_SC_COEFF registers */
 #define GLB_SC_COEFF_ADDR	0x0080
 #define GLB_SC_COEFF_DATA	0x0084
@@ -496,6 +549,7 @@ enum d71_blk_type {
 #define D71_MAX_PIPELINE		2
 #define D71_PIPELINE_MAX_SCALERS	2
 #define D71_PIPELINE_MAX_LAYERS		4
+#define D77_PIPELINE_MAX_ATU		2
 
 #define D71_MAX_GLB_IT_COEFF		3
 #define D71_MAX_GLB_SCL_COEFF		4
