@@ -76,6 +76,18 @@ komeda_pipeline_get_component_pos(struct komeda_pipeline *pipe, int id)
 	case KOMEDA_COMPONENT_LAYER3:
 		pos = to_cpos(pipe->layers[id - KOMEDA_COMPONENT_LAYER0]);
 		break;
+	case KOMEDA_COMPONENT_ATU0:
+	case KOMEDA_COMPONENT_ATU1:
+	case KOMEDA_COMPONENT_ATU2:
+	case KOMEDA_COMPONENT_ATU3:
+		temp = mdev->pipelines[(id - KOMEDA_COMPONENT_ATU0) / 2];
+		if (!temp) {
+			DRM_ERROR("ATU-%d requested pipeline doesn't exist.\n",
+				  id);
+			return NULL;
+		}
+		pos = to_cpos(temp->atu[(id - KOMEDA_COMPONENT_ATU0) % 2]);
+		break;
 	case KOMEDA_COMPONENT_CROSSBAR0:
 	case KOMEDA_COMPONENT_CROSSBAR1:
 		temp = mdev->pipelines[id - KOMEDA_COMPONENT_CROSSBAR0];
@@ -200,6 +212,16 @@ komeda_component_add(struct komeda_pipeline *pipe,
 			DRM_ERROR("please add Scaler by id sequence.\n");
 			return ERR_PTR(-EINVAL);
 		}
+	} else if (has_bit(id, KOMEDA_PIPELINE_ATUS)) {
+		if (pipe->id == 0)
+			idx = id - KOMEDA_COMPONENT_ATU0;
+		else
+			idx = id - KOMEDA_COMPONENT_ATU2;
+		num = &pipe->n_atus;
+		if (idx != pipe->n_atus) {
+			DRM_ERROR("pls add ATU by id sequence.\n");
+			return NULL;
+		}
 	}
 
 	c = devm_kzalloc(pipe->mdev->dev, comp_sz, GFP_KERNEL);
@@ -243,11 +265,11 @@ static void komeda_component_dump(struct komeda_component *c)
 	if (!c)
 		return;
 
-	DRM_DEBUG("	%s: ID %d-0x%08lx.\n",
+	DRM_INFO("	%s: ID %d-0x%08lx.\n",
 		  c->name, c->id, BIT(c->id));
-	DRM_DEBUG("		max_active_inputs:%d, supported_inputs: 0x%08x.\n",
+	DRM_INFO("		max_active_inputs:%d, supported_inputs: 0x%08x.\n",
 		  c->max_active_inputs, c->supported_inputs);
-	DRM_DEBUG("		max_active_outputs:%d, supported_outputs: 0x%08x.\n",
+	DRM_INFO("		max_active_outputs:%d, supported_outputs: 0x%08x.\n",
 		  c->max_active_outputs, c->supported_outputs);
 }
 
