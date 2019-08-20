@@ -40,19 +40,12 @@ static void komeda_unbind(struct device *dev)
 		komeda_dev_suspend(&mdrv->mdev);
 
 	komeda_dev_fini(&mdrv->mdev);
-
-	dev_set_drvdata(dev, NULL);
-	devm_kfree(dev, mdrv);
 }
 
 static int komeda_bind(struct device *dev)
 {
-	struct komeda_drv *mdrv;
+	struct komeda_drv *mdrv = dev_get_drvdata(dev);
 	int err;
-
-	mdrv = devm_kzalloc(dev, sizeof(*mdrv), GFP_KERNEL);
-	if (!mdrv)
-		return -ENOMEM;
 
 	err = komeda_dev_init(&mdrv->mdev, dev);
 	if (err) {
@@ -66,8 +59,6 @@ static int komeda_bind(struct device *dev)
 	err = komeda_kms_init(&mdrv->kms, &mdrv->mdev);
 	if (err)
 		goto fini_mdev;
-
-	dev_set_drvdata(dev, mdrv);
 
 	return 0;
 
@@ -113,9 +104,14 @@ static int komeda_platform_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct component_match *match = NULL;
 	struct device_node *child;
+	struct komeda_drv *mdrv;
 
 	if (!dev->of_node)
 		return -ENODEV;
+
+	mdrv = devm_kzalloc(dev, sizeof(*mdrv), GFP_KERNEL);
+	if (!mdrv)
+		return -ENOMEM;
 
 	for_each_available_child_of_node(dev->of_node, child) {
 		if (of_node_cmp(child->name, "pipeline") != 0)
@@ -129,12 +125,20 @@ static int komeda_platform_probe(struct platform_device *pdev)
 		komeda_add_slave(dev, &match, child, KOMEDA_OF_PORT_COPROC, 0);
 	}
 
+	dev_set_drvdata(dev, mdrv);
+
 	return component_master_add_with_match(dev, &komeda_master_ops, match);
 }
 
 static int komeda_platform_remove(struct platform_device *pdev)
 {
-	component_master_del(&pdev->dev, &komeda_master_ops);
+	struct device *dev = &pdev->dev;
+	struct komeda_drv *mdrv = dev_get_drvdata(dev);
+
+	component_master_del(dev, &komeda_master_ops);
+
+	dev_set_drvdata(dev, NULL);
+	devm_kfree(dev, mdrv);
 	return 0;
 }
 
