@@ -32,7 +32,7 @@
 	};
 };
 
-&i2c_fpga {
+&i2c_fpga_tx0 {
 	status = "okay";
 	/include/ "v2c-hdmi.dtsi"
 };
