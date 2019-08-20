@@ -9,6 +9,7 @@
 
 #include <media/v4l2-device.h>
 #include <media/v4l2-mem2mem.h>
+#include <linux/interrupt.h>
 
 #define ALIGN_UP(x, align_to)   (((x) + ((align_to)-1)) & ~((align_to)-1))
 
@@ -240,5 +241,6 @@ u16 mali_aeu_hw_pix_fmt_planes(enum aeu_hw_ds_format ifmt);
 u32 mali_aeu_hw_plane_stride(struct mali_aeu_hw_buf_fmt *bf, u32 n);
 bool mali_aeu_hw_pix_fmt_native(enum aeu_hw_ds_format ifmt);
 u32 mali_aeu_hw_plane_size(struct mali_aeu_hw_buf_fmt *bf, u32 n);
+u32 mali_aeu_hw_g_reg(mali_aeu_hw_ctx_t *hw_ctx, u32 table, u32 reg);
 bool mali_aeu_hw_job_done(struct mali_aeu_hw_ctx *hw_ctx);
 #endif

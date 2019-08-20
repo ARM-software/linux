@@ -11,6 +11,7 @@
 
 #include "mali_aeu_dev.h"
 #include "mali_aeu_hw.h"
+#include "mali_aeu_log.h"
 
 #define IRQ_NAME	"AEU"
 
@@ -876,7 +877,7 @@ int mali_aeu_device_init(struct mali_aeu_device *adev,
 	ret = devm_request_threaded_irq(&pdev->dev, irq,
 					mali_aeu_hw_irq_handler,
 					mali_aeu_irq_thread_handler,
-					IRQF_SHARED, "mali-aeu", adev->hw_dev);
+					IRQF_SHARED, AEU_NAME, adev->hw_dev);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "%s: failed to request aeu irq\n",
 			__func__);
@@ -917,6 +918,14 @@ int mali_aeu_device_init(struct mali_aeu_device *adev,
 	mali_aeu_hw_connect_m2m_device(adev->hw_dev, adev->m2mdev,
 				       get_curr_hw_ctx);
 
+	if (debugfs_initialized()) {
+		adev->dbg_folder = debugfs_create_dir(AEU_NAME, NULL);
+		if (IS_ERR(adev->dbg_folder))
+			adev->dbg_folder = NULL;
+		else
+			mali_aeu_log_init(adev->dbg_folder);
+	}
+
 	return ret;
 }
 
@@ -925,5 +934,12 @@ int mali_aeu_device_destroy(struct mali_aeu_device *adev)
 	v4l2_m2m_release(adev->m2mdev);
 	video_unregister_device(&adev->vdev);
 	v4l2_device_unregister(&adev->v4l2_dev);
+
+	if (adev->dbg_folder) {
+		mali_aeu_log_exit();
+		debugfs_remove_recursive(adev->dbg_folder);
+		adev->dbg_folder = NULL;
+	}
+
 	return 0;
 }
