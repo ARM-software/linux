@@ -196,10 +196,9 @@ static int komeda_parse_dt(struct device *dev, struct komeda_dev *mdev)
 			if (pipe_id >= mdev->n_pipelines) {
 				DRM_WARN("Skip the redandunt DT node: pipeline-%u.\n",
 					 pipe_id);
-				of_node_put(child);
 				continue;
 			}
-			mdev->pipelines[pipe_id]->of_node = child;
+			mdev->pipelines[pipe_id]->of_node = of_node_get(child);
 		}
 	}
 
