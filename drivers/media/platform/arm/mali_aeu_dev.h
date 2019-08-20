@@ -33,6 +33,8 @@ struct mali_aeu_device {
 
 	struct mali_aeu_hw_device	*hw_dev;
 	struct mali_aeu_hw_info		hw_info;
+
+	struct dentry			*dbg_folder;
 };
 
 int mali_aeu_device_init(struct mali_aeu_device *adev,

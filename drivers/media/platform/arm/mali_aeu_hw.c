@@ -7,8 +7,9 @@
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
-#include <linux/io.h>
 #include "mali_aeu_hw.h"
+#include "mali_aeu_io.h"
+#include "mali_aeu_reg_dump.h"
 
 #define MALI_AEU_VALID_TIMEOUT	5000
 
@@ -54,6 +55,10 @@ struct mali_aeu_hw_ctx {
 
 	wait_queue_head_t	wq;
 	atomic_t	event;
+
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+	struct mali_aeu_reg_file *reg_file;
+#endif
 };
 
 bool mali_aeu_hw_job_done(struct mali_aeu_hw_ctx *hw_ctx)
@@ -169,17 +174,6 @@ bool mali_aeu_hw_pix_fmt_native(enum aeu_hw_ds_format ifmt)
 	if (i == 0xFFFFFFFF)
 		return false;
 	return mali_aeu_hw_pixfmt_table[i].native_supported;
-}
-
-/* internal IO routines */
-static u32 mali_aeu_read(void __iomem *reg, u32 offset)
-{
-	return readl(reg + offset);
-}
-
-static void mali_aeu_write(void __iomem *reg, u32 offset, u32 val)
-{
-	writel(val, reg + offset);
 }
 
 static void reset_hw(struct mali_aeu_hw_device *hw_dev)
@@ -357,6 +351,10 @@ irqreturn_t mali_aeu_hw_irq_handler(int irq, void *data)
 		}
 
 		spin_lock_irqsave(&hw_dev->reglock, flags);
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+		if (!(ievnt & MALI_AEU_HW_EVENT_AES_CFGS) && hw_ctx)
+			mali_aeu_reg_dump(hw_ctx->reg_file, REG_FILE_AFT);
+#endif
 		mali_aeu_write(hw_dev->reg, AEU_AES_IRQ_CLEAR, val);
 		if (ievnt & MALI_AEU_HW_EVENT_AES_CFGS) {
 			val = mali_aeu_read(hw_dev->reg, AEU_AES_IRQ_MASK);
@@ -411,11 +409,20 @@ mali_aeu_hw_init_ctx(struct mali_aeu_hw_device *hw_dev)
 	hw_ctx->hw_dev = hw_dev;
 	init_waitqueue_head(&hw_ctx->wq);
 
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+	hw_ctx->reg_file = mali_aeu_init_reg_file(hw_dev->reg);
+	if (!hw_ctx->reg_file)
+		dev_err(hw_dev->dev, "%s: dumping register is disabled!\n",
+			__func__);
+#endif
 	return hw_ctx;
 }
 
 void mali_aeu_hw_free_ctx(mali_aeu_hw_ctx_t *hw_ctx)
 {
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+	mali_aeu_free_reg_file(hw_ctx->reg_file);
+#endif
 	devm_kfree(hw_ctx->hw_dev->dev, hw_ctx);
 }
 
@@ -581,6 +588,9 @@ int mali_aeu_hw_ctx_commit(mali_aeu_hw_ctx_t *hw_ctx)
 		mali_aeu_write(reg, AEU_DS_CONTROL, val);
 	}
 	mali_aeu_write(reg, AEU_DS_CONFIG_VALID, DS_CTRL_CVAL);
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+	mali_aeu_reg_dump(hw_ctx->reg_file, REG_FILE_BEF);
+#endif
 	spin_unlock_irqrestore(&hw_dev->reglock, flags);
 
 	dev_dbg(hw_dev->dev, "input h: %u, input v: %u\n",
@@ -746,4 +756,17 @@ u32 mali_aeu_hw_plane_size(struct mali_aeu_hw_buf_fmt *bf, u32 n)
 		h /= output_buf_height_subsampling(bf->output_format);
 calc_size:
 	return h * mali_aeu_hw_plane_stride(bf, n);
+}
+
+u32 mali_aeu_hw_g_reg(mali_aeu_hw_ctx_t *hw_ctx, u32 table, u32 reg)
+{
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+	u32 v;
+
+	if (mali_aeu_g_reg(hw_ctx->reg_file, table, reg, &v))
+		v = 0xDEADDEAD;
+	return v;
+#else
+	return 0;
+#endif
 }
