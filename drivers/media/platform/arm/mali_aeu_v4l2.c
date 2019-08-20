@@ -79,6 +79,8 @@ typedef struct {
 	struct v4l2_fh		fh;
 	struct mali_aeu_device	*adev;
 	struct v4l2_ctrl_handler	hdl;
+	u32	pm_enabled: 1,
+		reserved: 31;
 	/* protect access to the buffer status */
 	spinlock_t		buf_lock;
 	/* how many buffers per transaction */
@@ -241,9 +243,10 @@ aeu_queue_init(void *priv, struct vb2_queue *s_vq, struct vb2_queue *d_vq)
 	return init_vb2_queue(d_vq, V4L2_BUF_TYPE_VIDEO_CAPTURE, priv);
 }
 
-/* TODO: implement user control data structures and function */
-#define V4L2_CID_TRANS_NUM_BUFS         (V4L2_CID_USER_BASE + 0x1000)
-#define V4L2_CID_AFBC_MODIFIERS		(V4L2_CID_USER_BASE + 0x1001)
+/* Define user contrl ID */
+#define V4L2_CID_TRANS_NUM_BUFS	(V4L2_CID_USER_BASE + 0x1000)
+#define V4L2_CID_AFBC_MODIFIERS	(V4L2_CID_USER_BASE + 0x1001)
+#define V4L2_CID_PROTECTED_MODE	(V4L2_CID_USER_BASE + 0x1002)
 
 static bool modifiers_and(u64 m, u64 f)
 {
@@ -299,6 +302,12 @@ static int aeu_s_ctrl(struct v4l2_ctrl *ctrl)
 			actx->curr_buf_fmt[AEU_HW_OUTPUT_BUF].afbc_fmt_flags |=
 				MALI_AEU_HW_AFBC_SP;
 		break;
+	case V4L2_CID_PROTECTED_MODE:
+		if (ctrl->val)
+			dev_info(actx->adev->dev,
+				"AEU is running in protected mode!");
+		actx->pm_enabled = !!ctrl->val;
+		break;
 	default:
 		dev_warn(actx->adev->dev, "Unsupported ctrl (%u)\n", ctrl->id);
 		return -EINVAL;
@@ -318,6 +327,17 @@ static const struct v4l2_ctrl_config aeu_ctrl_trans_buf_num = {
 	.def = 1,
 	.min = 1,
 	.max = VIDEO_MAX_FRAME,
+	.step = 1,
+};
+
+static const struct v4l2_ctrl_config aeu_ctrl_protected_mode = {
+	.ops = &aeu_ctrl_ops,
+	.id = V4L2_CID_PROTECTED_MODE,
+	.name = "Protected Mode",
+	.type = V4L2_CTRL_TYPE_INTEGER,
+	.def = 0,
+	.min = 0,
+	.max = 0xffffffff,
 	.step = 1,
 };
 
@@ -365,9 +385,10 @@ static int aeu_open(struct file *file)
 	v4l2_fh_init(&ctx->fh, &adev->vdev);
 	file->private_data = &ctx->fh;
 
-	v4l2_ctrl_handler_init(&ctx->hdl, 2);
+	v4l2_ctrl_handler_init(&ctx->hdl, 3);
 	v4l2_ctrl_new_custom(&ctx->hdl, &aeu_ctrl_trans_buf_num, NULL);
 	v4l2_ctrl_new_custom(&ctx->hdl, &aeu_ctrl_afbc_modifiers, NULL);
+	v4l2_ctrl_new_custom(&ctx->hdl, &aeu_ctrl_protected_mode, NULL);
 	if (ctx->hdl.error) {
 		ret = ctx->hdl.error;
 		goto exit_aeu_hw_ctx;
@@ -795,8 +816,11 @@ static void aeu_m2m_device_run(void *priv)
 
 	mali_aeu_hw_set_buf_addr(ctx->hw_ctx, &buf_addr, AEU_HW_OUTPUT_BUF);
 
-	if (mali_aeu_hw_ctx_commit(ctx->hw_ctx))
+	mali_aeu_hw_protected_mode(ctx->hw_ctx, ctx->pm_enabled);
+	if (mali_aeu_hw_ctx_commit(ctx->hw_ctx)) {
 		dev_err(ctx->adev->dev, "%s: hw commit error!\n", __func__);
+		mali_aeu_hw_clear_ctrl(ctx->adev->hw_dev);
+	}
 }
 
 static int aeu_m2m_job_ready(void *priv)

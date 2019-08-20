@@ -243,4 +243,6 @@ bool mali_aeu_hw_pix_fmt_native(enum aeu_hw_ds_format ifmt);
 u32 mali_aeu_hw_plane_size(struct mali_aeu_hw_buf_fmt *bf, u32 n);
 u32 mali_aeu_hw_g_reg(mali_aeu_hw_ctx_t *hw_ctx, u32 table, u32 reg);
 bool mali_aeu_hw_job_done(struct mali_aeu_hw_ctx *hw_ctx);
+void mali_aeu_hw_protected_mode(struct mali_aeu_hw_ctx *hw_ctx, u32 enable);
+void mali_aeu_hw_clear_ctrl(struct mali_aeu_hw_device *hw_dev);
 #endif
