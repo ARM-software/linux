@@ -14,6 +14,14 @@
 		clock-output-names = "fpga:dpu_aclk";
 	};
 
+	pll_clk_in: pll_clk_in {
+		/* 24 MHz crystal on the juno<>profpga adapter board*/
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+		clock-output-names = "fpga:pll_clk";
+	};
+
 	dcc_lt {
 		compatible = "arm,vexpress,config-bus";
 		arm,vexpress,site = <2>;
@@ -36,11 +44,43 @@
 		};
 	};
 
+	i2c_fpga_pll: i2c@c070000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "arm,versatile-i2c";
+		reg = <0xc070000 0x1000>;
+		status = "disabled";
+	};
+
 	i2c_fpga_tx0: i2c@90000 {
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "arm,versatile-i2c";
 		reg = <0x90000 0x1000>;
+		status = "disabled";
+	};
+
+	i2c_fpga_ddc0: i2c@94000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "arm,versatile-i2c";
+		reg = <0x94000 0x1000>;
+		status = "disabled";
+	};
+
+	i2c_fpga_tx1: i2c@98000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "arm,versatile-i2c";
+		reg = <0x98000 0x1000>;
+		status = "disabled";
+	};
+
+	i2c_fpga_ddc1: i2c@9c000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "arm,versatile-i2c";
+		reg = <0x9c000 0x1000>;
 		status = "disabled";
 	};
 
