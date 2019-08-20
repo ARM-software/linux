@@ -34,12 +34,17 @@ enum {
 	KOMEDA_COMPONENT_IPS0		= 20, /* post image processor */
 	KOMEDA_COMPONENT_IPS1		= 21,
 	KOMEDA_COMPONENT_TIMING_CTRLR	= 22, /* timing controller */
+	KOMEDA_COMPONENT_CROSSBAR0	= 24,
+	KOMEDA_COMPONENT_CROSSBAR1	= 25,
 };
 
 #define KOMEDA_PIPELINE_LAYERS		(BIT(KOMEDA_COMPONENT_LAYER0) |\
 					 BIT(KOMEDA_COMPONENT_LAYER1) |\
 					 BIT(KOMEDA_COMPONENT_LAYER2) |\
 					 BIT(KOMEDA_COMPONENT_LAYER3))
+
+#define KOMEDA_PIPELINE_CROSSBARS	(BIT(KOMEDA_COMPONENT_CROSSBAR0) |\
+					 BIT(KOMEDA_COMPONENT_CROSSBAR1))
 
 #define KOMEDA_PIPELINE_SCALERS		(BIT(KOMEDA_COMPONENT_SCALER0) |\
 					 BIT(KOMEDA_COMPONENT_SCALER1))
@@ -402,6 +407,8 @@ struct komeda_pipeline {
 	int n_layers;
 	/** @layers: the pipeline layers */
 	struct komeda_layer *layers[KOMEDA_PIPELINE_MAX_LAYERS];
+	/** @cbar: the pipeline crossbar */
+	struct komeda_component *cbar;
 	/** @n_scalers: the number of scaler on @scalers */
 	int n_scalers;
 	/** @scalers: the pipeline scalers */

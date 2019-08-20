@@ -692,6 +692,32 @@ void pipeline_composition_size(struct komeda_crtc_state *kcrtc_st,
 }
 
 static int
+komeda_crossbar_set_input(struct komeda_component *cbar,
+			  struct komeda_crtc_state *kcrtc_st,
+			  struct komeda_data_flow_cfg *dflow)
+{
+	struct drm_atomic_state *drm_st = kcrtc_st->base.state;
+	struct drm_crtc *crtc = kcrtc_st->base.crtc;
+	struct komeda_component_state *st;
+	u32 idx = dflow->blending_zorder;
+
+	if (!cbar)
+		return 0;
+
+	st = komeda_component_get_state_and_set_user(cbar, drm_st, crtc, crtc);
+	if (IS_ERR(st))
+		return PTR_ERR(st);
+
+	if (komeda_component_check_input(st, &dflow->input, idx))
+		return -EINVAL;
+
+	komeda_component_add_input(st, &dflow->input, idx);
+	komeda_component_set_output(&dflow->input, cbar, idx);
+
+	return 0;
+}
+
+static int
 komeda_compiz_set_input(struct komeda_compiz *compiz,
 			struct komeda_crtc_state *kcrtc_st,
 			struct komeda_data_flow_cfg *dflow)
@@ -949,6 +975,10 @@ int komeda_build_layer_data_flow(struct komeda_layer *layer,
 			 dflow->out_x, dflow->out_y, dflow->out_w, dflow->out_h);
 
 	err = komeda_layer_validate(layer, kplane_st, dflow);
+	if (err)
+		return err;
+
+	err = komeda_crossbar_set_input(pipe->cbar, kcrtc_st, dflow);
 	if (err)
 		return err;
 
@@ -1496,6 +1526,12 @@ int komeda_build_display_data_flow(struct komeda_crtc *kcrtc,
 			return err;
 	} else if (slave && has_bit(slave->id, kcrtc_st->active_pipes)) {
 		err = komeda_compiz_validate(slave->compiz, kcrtc_st, &s_dflow);
+		if (err)
+			return err;
+
+		/* if master has crossbar, connect s_dflow to crossbar */
+		err = komeda_crossbar_set_input(master->cbar, kcrtc_st,
+						&s_dflow);
 		if (err)
 			return err;
 
