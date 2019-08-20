@@ -49,17 +49,24 @@ struct mali_aeu_hw_ctx {
 
 	enum aeu_hw_ds_format ds_format;
 	enum aeu_hw_aes_format aes_format;
-	u16	afbc_fmt_flags;
+	u16 afbc_fmt_flags;
 	/* aes_<h, v> is calculated by input_size */
 	u16 aes_h, aes_v;
 
-	wait_queue_head_t	wq;
-	atomic_t	event;
+	u32 protected; /* 0: normal mode, !0: protected mode */
+
+	wait_queue_head_t wq;
+	atomic_t event;
 
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 	struct mali_aeu_reg_file *reg_file;
 #endif
 };
+
+void mali_aeu_hw_protected_mode(struct mali_aeu_hw_ctx *hw_ctx, u32 enable)
+{
+	hw_ctx->protected = enable;
+}
 
 bool mali_aeu_hw_job_done(struct mali_aeu_hw_ctx *hw_ctx)
 {
@@ -192,6 +199,14 @@ static void reset_hw(struct mali_aeu_hw_device *hw_dev)
 	mali_aeu_write(hw_dev->reg, AEU_AES_CONTROL, AES_CTRL_EN);
 }
 
+void mali_aeu_hw_clear_ctrl(struct mali_aeu_hw_device *hw_dev)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&hw_dev->reglock, flags);
+	mali_aeu_write(hw_dev->reg, AEU_CONTROL, 0);
+	spin_unlock_irqrestore(&hw_dev->reglock, flags);
+}
 
 static int mali_aeu_soft_reset(struct mali_aeu_hw_device *hw_dev)
 {
@@ -517,6 +532,9 @@ int mali_aeu_hw_ctx_commit(mali_aeu_hw_ctx_t *hw_ctx)
 		fake_addr = DS_OUPUT_FAKE_ADDRESS + 0x90000000;
 
 	spin_lock_irqsave(&hw_dev->reglock, flags);
+	if (hw_ctx->protected)
+		mali_aeu_write(reg, AEU_CONTROL, AEU_CTRL_PM);
+
 	/* configure AES first */
 	mali_aeu_write(reg, AEU_AES_IN_HSIZE, hw_ctx->aes_h);
 	mali_aeu_write(reg, AEU_AES_IN_VSIZE, hw_ctx->aes_v);
