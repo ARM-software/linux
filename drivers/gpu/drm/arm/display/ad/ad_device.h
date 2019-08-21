@@ -14,6 +14,8 @@
 
 #include "ad_regs.h"
 #include "../include/ad_coprocessor_defs.h"
+#include "ad_ambient_light.h"
+#include "ad_backlight.h"
 
 #define AD3_VERSION 0x3
 
@@ -34,6 +36,12 @@ struct ad_dev_funcs {
 				 size_t size);
 	/* Get all ad registers, set the reg and return the register number. */
 	unsigned int (*ad_reg_get_all)(const struct ad_reg **reg);
+	/* update the ambient light value */
+	int (*ad_update_ambient_light)(struct device *dev, u16 value);
+	/* Get the backlight output. */
+	unsigned int (*ad_get_backlight)(struct device *dev);
+	/* Set the backlight input. */
+	int (*ad_set_backlight) (struct device *dev, u32 value);
 	/* Save hw change. */
 	void (*ad_save_hw_status)(struct device *dev, unsigned int offset,
 				  unsigned int value);
@@ -67,6 +75,8 @@ struct ad_dev {
 	u32 regs_size;
 	const struct ad_dev_data *dev_data;
 	struct ad_dev_funcs *ad_dev_funcs;
+	struct ad_ambient_light ambient_light;
+	struct ad_backlight backlight;
 	u32 is_enabled : 1;
 	void *private_data;
 };

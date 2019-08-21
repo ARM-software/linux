@@ -20,6 +20,17 @@
 #include "ad3_device.h"
 #include "ad3_regs.h"
 #include "ad3_firmware.h"
+#include "ad3_assertive_lut.h"
+
+#define AD3_MAX_ASSERTIVENESS	255
+#define AD3_MAX_STRENGTH_LIMIT	255
+#define AD3_MAX_DRC		65535
+
+/*define AD operation mode*/
+#define AD_OP_MODE_AUTO			0x0
+#define AD_OP_MODE_MANUAL_BL		0x1
+#define AD_OP_MODE_MANUAL_DRC		0x3
+#define AD_OP_MODE_MANUAL_STR		0x7
 
 struct ad3_data {
 	struct ad3_firmware_data fw_data;
@@ -116,6 +127,106 @@ static void ad3_load_firmware(struct device *dev, const u8 *data, size_t size)
 
 	ad3_firmware_load_data(dev, fw_data);
 	ad3_save_hw_stat(ad_dev);
+}
+
+static int ad3_update_ambient_light(struct device *dev, u16 value)
+{
+	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+	struct ad3_data *ad_data = ad_dev->private_data;
+
+	if (value < ad_data->fw_data.calc_data.calc_ambientlight_min) {
+		dev_err(dev, "The value is less than the min ambient light!\n");
+		return -1;
+	}
+
+	if (0 < pm_runtime_get_if_in_use(dev)) {
+		int ret = ad_register_regmap_write(ad_dev->ad_regmap,
+					           CALC_LIGHT_REG_OFFSET,
+					           CALC_LIGHT_REG_AL_MASK,
+					           value << CALC_LIGHT_REG_AL_SHIFT);
+		pm_runtime_put(dev);
+		return ret;
+	}
+	else {
+		struct ad3_data *ad_data = ad_dev->private_data;
+		ad_data->amb_light_value = value;
+	}
+
+	return 0;
+}
+
+static unsigned int ad3_get_backlight(struct device *dev)
+{
+	unsigned int value;
+	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+	struct ad3_data *ad_data = ad_dev->private_data;
+	ad_register_regmap_read(ad_dev->ad_regmap,
+				AD_BACKLIGHT_REG_OFFSET,
+				AD_BACKLIGHT_REG_MASK,
+				&value);
+
+	if (AD_OP_MODE_AUTO != ad_data->ad_op_mode) {
+		u32 max_bl_bits, backlight_max;
+
+		backlight_max = ad_data->fw_data.calc_data.calc_backlight_max;
+		max_bl_bits = ilog2(backlight_max);
+		if (backlight_max > (1 << max_bl_bits))
+			max_bl_bits += 1;
+
+		value = ad3_assertive_bl_lut(value,
+					   ad_data->fw_data.bl_linearity_inverse_lut);
+		value = value >> (BL_DATA_WIDH - max_bl_bits);
+	}
+
+	return value;
+}
+
+static int ad3_set_backlight(struct device *dev, u32 value)
+{
+	int ret = 0;
+	u32 backlight_min, backlight_max;
+	u32 calc_backlight;
+	u32 max_bl_bits;
+	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+	struct ad3_data *ad_data = ad_dev->private_data;
+
+	if (AD_OP_MODE_AUTO == ad_data->ad_op_mode) {
+		dev_warn(dev, "Manual backlight is not supported for AD auto mode.\n");
+		return -1;
+	}
+
+	backlight_min = ad_data->fw_data.calc_data.calc_backlight_min;
+	backlight_max = ad_data->fw_data.calc_data.calc_backlight_max;
+	if ((value < backlight_min) ||
+		(value > backlight_max)) {
+		dev_warn(dev, "The value is out of the backlight range: %d~ %d.\n",
+			backlight_min, backlight_max);
+		return -1;
+	}
+
+	max_bl_bits = ilog2(backlight_max);
+	if (backlight_max > (1 << max_bl_bits))
+		max_bl_bits += 1;
+
+	calc_backlight = ad3_assertive_calc_bl_input(ad_data->fw_data.bl_linearity_lut,
+					             ad_data->fw_data.bl_att_lut,
+					             ad_data->fw_data.alpha,
+					             max_bl_bits,
+					             value);
+
+	if (0 < pm_runtime_get_if_in_use(dev)) {
+		ret = ad_register_regmap_write(ad_dev->ad_regmap,
+					       CALC_LIGHT_REG_OFFSET,
+					       CALC_LIGHT_REG_BL_MASK,
+					       calc_backlight);
+		pm_runtime_put(dev);
+	}
+	else {
+		struct ad3_data *ad_data = ad_dev->private_data;
+		ad_data->back_light_input = value;
+	}
+
+	return ret;
 }
 
 static void ad3_save_hw_status(struct device *dev,
@@ -311,21 +422,147 @@ static void ad3_create_debugfs_sw(struct device *dev)
 
 }
 
+static ssize_t ad3_sys_assertiveness_set(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf,
+					 size_t size)
+{
+	int ret;
+	u32 value;
+	uint32_t assertive;
+	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+
+	ret = kstrtou32(buf, 0, &value);
+	if (ret)
+		return ret;
+
+	if (value > AD3_MAX_ASSERTIVENESS) {
+		dev_err(ad_dev->dev, "assertiveness is out of range.[%u]\n",
+			value);
+		return size;
+	}
+
+	assertive = assertive_lut[value];
+
+	ret = pm_runtime_get_sync(ad_dev->dev);
+	if (ret < 0) {
+		dev_err(ad_dev->dev, "Failed to get PM runtime\n");
+		return size;
+	}
+	ad3_update_calibration(ad_dev, assertive);
+	pm_runtime_put_sync(ad_dev->dev);
+
+	return size;
+}
+
+static DEVICE_ATTR(assertiveness, S_IWUSR,
+		   NULL, ad3_sys_assertiveness_set);
+
+static ssize_t ad3_sys_strength_set(struct device *dev,
+			            struct device_attribute *attr,
+				    const char *buf,
+			            size_t size)
+{
+	int ret;
+	u32 value;
+	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+
+	ret = kstrtou32(buf, 0, &value);
+	if (ret)
+		return ret;
+
+	if (value < AD_STRENGTH_MIN || value > AD3_MAX_STRENGTH_LIMIT) {
+		dev_err(ad_dev->dev, "strength_limit is out of range: [%u].\n",
+			value);
+		return size;
+	}
+
+	ret = pm_runtime_get_sync(ad_dev->dev);
+	if (ret < 0) {
+		dev_err(ad_dev->dev, "Failed to get PM runtime\n");
+		return size;
+	}
+	ad3_update_strength(ad_dev, value);
+	pm_runtime_put_sync(ad_dev->dev);
+
+	return size;
+}
+
+static DEVICE_ATTR(strength, S_IWUSR,
+		   NULL, ad3_sys_strength_set);
+
+static ssize_t ad3_sys_drc_set(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t size)
+{
+	int ret;
+	u32 value;
+	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+
+	ret = kstrtou32(buf, 0, &value);
+	if (ret)
+		return ret;
+
+	if (value > AD3_MAX_DRC) {
+		dev_err(ad_dev->dev, "drc is out of range: [%u].\n",
+			value);
+		return size;
+	}
+
+	ret = pm_runtime_get_sync(ad_dev->dev);
+	if (ret < 0) {
+		dev_err(ad_dev->dev, "Failed to get PM runtime\n");
+		return size;
+	}
+	ad3_update_drc(ad_dev, (u16)value);
+	pm_runtime_put_sync(ad_dev->dev);
+
+	return size;
+}
+
+static DEVICE_ATTR(drc, S_IWUSR,
+		   NULL, ad3_sys_drc_set);
+
 static int ad3_init(struct device *dev)
 {
+	int ret;
 	struct ad_dev *ad_dev = dev_get_drvdata(dev);
 	struct ad3_data *ad_data = ad_dev->private_data;
 	struct ad3_firmware_data *fw_data = &ad_data->fw_data;
 
+	ret = device_create_file(dev, &dev_attr_assertiveness);
+	if (ret) {
+		dev_err(dev, "failed to create sys file for assertiveness!\n");
+		return ret;
+	}
+
+	ret = device_create_file(dev, &dev_attr_strength);
+	if (ret) {
+		device_remove_file(dev, &dev_attr_assertiveness);
+		dev_err(dev, "failed to create sys file for strength!\n");
+		return ret;
+	}
+
+	ret = device_create_file(dev, &dev_attr_drc);
+	if (ret) {
+		device_remove_file(dev, &dev_attr_assertiveness);
+		device_remove_file(dev, &dev_attr_strength);
+		dev_err(dev, "failed to create sys file for drc!\n");
+		return ret;
+	}
+
 	ad3_firmware_data_reset(dev, fw_data);
 	ad3_save_hw_stat(ad_dev);
 
-	return 0;
+	return ret;
 }
 
 static void ad3_destroy(struct device *dev)
 {
-	return;
+	device_remove_file(dev, &dev_attr_assertiveness);
+	device_remove_file(dev, &dev_attr_strength);
+	device_remove_file(dev, &dev_attr_drc);
 }
 
 static struct ad_dev_funcs ad3_dev_func = {
@@ -335,6 +572,9 @@ static struct ad_dev_funcs ad3_dev_func = {
 	.ad_runtime_resume= ad3_runtime_resume,
 	.ad_load_firmware = ad3_load_firmware,
 	.ad_reg_get_all = ad3_register_get_all,
+	.ad_update_ambient_light = ad3_update_ambient_light,
+	.ad_get_backlight = ad3_get_backlight,
+	.ad_set_backlight = ad3_set_backlight,
 	.ad_save_hw_status = ad3_save_hw_status,
 	.ad_create_debugfs_sw = ad3_create_debugfs_sw,
 };
@@ -379,6 +619,37 @@ struct ad_dev_funcs *ad3_identify(struct device *dev,
 	return  &ad3_dev_func;
 }
 
+void ad3_update_strength(struct ad_dev *ad_dev, u32 s)
+{
+	struct ad3_data *ad_data = ad_dev->private_data;
+
+	ad_data->ad_strength = s;
+	ad3_write_strength(ad_dev->ad_regmap, s);
+}
+
+#define UPDATE_CALI(x, a)  (x) = (((x) * (a)) >> 12)
+void ad3_update_calibration(struct ad_dev *ad_dev, u32 assertive)
+{
+	struct ad3_data *ad_data = ad_dev->private_data;
+
+	UPDATE_CALI(ad_data->calc_calibration_a, assertive);
+	UPDATE_CALI(ad_data->calc_calibration_c, assertive);
+	UPDATE_CALI(ad_data->calc_calibration_d, assertive);
+	ad_data->assertive = assertive;
+	ad3_write_calibration(ad_dev->ad_regmap,
+			      ad_data->calc_calibration_a,
+			      ad_data->calc_calibration_c,
+			      ad_data->calc_calibration_d);
+}
+
+void ad3_update_drc(struct ad_dev *ad_dev, u16 drc)
+{
+	struct ad3_data *ad_data = ad_dev->private_data;
+
+	ad_data->ad_drc = drc;
+	ad3_write_drc(ad_dev->ad_regmap, ad_data->ad_drc);
+}
+
 void ad3_reload_hw_stat(struct ad_dev *ad_dev)
 {
 	struct ad3_data *ad_data = ad_dev->private_data;
@@ -403,6 +674,9 @@ void ad3_reload_hw_stat(struct ad_dev *ad_dev)
 				CALC_CALIBRATION_B_REG_OFFSET,
 				CALC_CALIBRATION_B_REG_MASK,
 				ad_data->calc_calibration_b);
+
+	ad3_update_ambient_light(ad_dev->dev, ad_data->amb_light_value);
+	ad3_set_backlight(ad_dev->dev, ad_data->back_light_input);
 
 	ad3_write_calibration(ad_dev->ad_regmap,
 			      ad_data->calc_calibration_a,

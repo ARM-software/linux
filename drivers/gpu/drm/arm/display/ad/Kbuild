@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
-ad3_obj = ad3/ad3_regs.o ad3/ad3_device.o ad3/ad3_firmware.o ad3/ad3_inf_funcs.o
-ad_drv-y += ad_driver.o ad_device.o ad_regs.o ad_debugfs.o $(ad3_obj)
+ad3_obj = ad3/ad3_regs.o ad3/ad3_device.o ad3/ad3_firmware.o ad3/ad3_inf_funcs.o ad3/ad3_assertive_lut.o
+ad_drv-y += ad_driver.o ad_device.o ad_regs.o ad_debugfs.o ad_ambient_light.o ad_backlight.o $(ad3_obj)
 
 obj-$(CONFIG_ASSERTIVE_DISPLAY) += ad_drv.o
