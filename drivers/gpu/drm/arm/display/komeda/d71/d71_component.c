@@ -446,9 +446,92 @@ static u32 get_blk_max_line_size(struct d71_dev *d71, u32 __iomem *reg)
 	return get_blk_max_line_size2(d71, reg, d71->max_line_size);
 }
 
+static void d77_atu_dump(struct komeda_component *c, struct seq_file *sf)
+{
+	struct komeda_atu *atu = to_atu(c);
+	u32 v[10], i;
+
+	dump_block_header(sf, c->reg);
+
+	get_values_from_reg(c->reg, 0xA0, 5, v);
+	seq_printf(sf, "ATU_IRQ_RAW_STATUS:\t0x%X\n", v[0]);
+	seq_printf(sf, "ATU_IRQ_CLEAR:\t\t0x%X\n", v[1]);
+	seq_printf(sf, "ATU_IRQ_MASK:\t\t0x%X\n", v[2]);
+	seq_printf(sf, "ATU_IRQ_STATUS:\t\t0x%X\n", v[3]);
+	seq_printf(sf, "ATU_STATUS:\t\t0x%X\n", v[4]);
+
+	get_values_from_reg(c->reg, 0xc4, 1, v);
+	seq_printf(sf, "ATU_SLAVE_INFO:\t\t0x%X\n", v[0]);
+
+	get_values_from_reg(c->reg, 0xd0, 1, v);
+	seq_printf(sf, "ATU_CONTROL:\t\t0x%X\n", v[0]);
+
+	get_values_from_reg(c->reg, 0xd8, 4, v);
+	seq_printf(sf, "ATU_FORMAT:\t\t0x%X\n", v[0]);
+	seq_printf(sf, "ATU_LT_COEFFTAB:\t0x%X\n", v[1]);
+	seq_printf(sf, "ATU_OUT_SIZE:\t\t0x%X\n", v[2]);
+	seq_printf(sf, "ATU_PALPHA:\t\t0x%X\n", v[3]);
+
+        get_values_from_reg(c->reg, 0x160, 1, v);
+	seq_printf(sf, "ATU_AD_CONTROL:\t\t0x%X\n", v[0]);
+
+	for (i = 0; i < atu->n_vp; i++) {
+		seq_printf(sf, "\n----%s_VP%d----\n", c->name, i);
+		dump_block_header(sf, atu->reg[i]);
+		get_values_from_reg(atu->reg[i], 0xD0, 3, v);
+		seq_printf(sf, "VP_CONTROL:\t\t0x%X\n", v[0]);
+		seq_printf(sf, "VP_OUT_SIZE:\t\t0x%X\n", v[1]);
+		seq_printf(sf, "VP_OUT_OFFSET:\t\t0x%X\n", v[2]);
+
+		get_values_from_reg(atu->reg[i], 0xE0, 10, v);
+		seq_printf(sf, "VP_BUF_SIZE:\t\t0x%X\n", v[0]);
+		seq_printf(sf, "VP_BUF_OFFSET:\t\t0x%X\n", v[1]);
+		seq_printf(sf, "VP_DNORM:\t\t0x%X\n", v[2]);
+		seq_printf(sf, "VP_HSCALE:\t\t0x%X\n", v[3]);
+		seq_printf(sf, "VP_SC_NODES:\t\t0x%X\n", v[4]);
+		seq_printf(sf, "VP_SC_KNOTS:\t\t0x%X\n", v[5]);
+		seq_printf(sf, "VP_SC_RSHIFT:\t\t0x%X\n", v[6]);
+		seq_printf(sf, "VP_SC_COEFFTAB:\t\t0x%X\n", v[7]);
+		seq_printf(sf, "VP_P0_PTR_LOW:\t\t0x%X\n", v[8]);
+		seq_printf(sf, "VP_P0_PTR_HIGH:\t\t0x%X\n", v[9]);
+
+		get_values_from_reg(atu->reg[i], 0x110, 2, v);
+		seq_printf(sf, "VP_P1_PTR_LOW:\t\t0x%X\n", v[0]);
+		seq_printf(sf, "VP_P1_PTR_HIGH:\t\t0x%X\n", v[1]);
+
+		get_values_from_reg(atu->reg[i], 0x134, 2, v);
+		seq_printf(sf, "VP_H_CROP:\t\t0x%X\n", v[0]);
+		seq_printf(sf, "VP_V_CROP:\t\t0x%X\n", v[1]);
+
+		get_values_from_reg(atu->reg[i], 0x140, 10, v);
+		seq_printf(sf, "VP_A_MATRIX_LATCH:\t\t0x%X\n",  v[0]);
+		seq_printf(sf, "VP_A_MATRIX_COEFF0:\t\t0x%X\n", v[1]);
+		seq_printf(sf, "VP_A_MATRIX_COEFF1:\t\t0x%X\n", v[2]);
+		seq_printf(sf, "VP_A_MATRIX_COEFF2:\t\t0x%X\n", v[3]);
+		seq_printf(sf, "VP_A_MATRIX_COEFF3:\t\t0x%X\n", v[4]);
+		seq_printf(sf, "VP_A_MATRIX_COEFF4:\t\t0x%X\n", v[5]);
+		seq_printf(sf, "VP_A_MATRIX_COEFF5:\t\t0x%X\n", v[6]);
+		seq_printf(sf, "VP_A_MATRIX_COEFF6:\t\t0x%X\n", v[7]);
+		seq_printf(sf, "VP_A_MATRIX_COEFF7:\t\t0x%X\n", v[8]);
+		seq_printf(sf, "VP_A_MATRIX_COEFF8:\t\t0x%X\n", v[9]);
+
+		get_values_from_reg(atu->reg[i], 0x170, 10, v);
+		seq_printf(sf, "VP_B_MATRIX_LATCH:\t\t0x%X\n",  v[0]);
+		seq_printf(sf, "VP_B_MATRIX_COEFF0:\t\t0x%X\n", v[1]);
+		seq_printf(sf, "VP_B_MATRIX_COEFF1:\t\t0x%X\n", v[2]);
+		seq_printf(sf, "VP_B_MATRIX_COEFF2:\t\t0x%X\n", v[3]);
+		seq_printf(sf, "VP_B_MATRIX_COEFF3:\t\t0x%X\n", v[4]);
+		seq_printf(sf, "VP_B_MATRIX_COEFF4:\t\t0x%X\n", v[5]);
+		seq_printf(sf, "VP_B_MATRIX_COEFF5:\t\t0x%X\n", v[6]);
+		seq_printf(sf, "VP_B_MATRIX_COEFF6:\t\t0x%X\n", v[7]);
+		seq_printf(sf, "VP_B_MATRIX_COEFF7:\t\t0x%X\n", v[8]);
+		seq_printf(sf, "VP_B_MATRIX_COEFF8:\t\t0x%X\n", v[9]);
+	}
+}
+
 static struct komeda_component_funcs d77_atu_funcs = {
 	.disable	= NULL,
-	.dump_register	= NULL,
+	.dump_register	= d77_atu_dump,
 	.update		= NULL,
 };
 
@@ -1024,6 +1107,28 @@ static void d77_crossbar_update(struct komeda_component *c,
 	}
 }
 
+static void d77_crossbar_dump(struct komeda_component *c, struct seq_file *sf)
+{
+	u32 v[5], i;
+
+	dump_block_header(sf, c->reg);
+
+	get_values_from_reg(c->reg, 0x80, 5, v);
+	for (i = 0; i < 5; i++)
+		seq_printf(sf, "CBU_INPUT_ID%u:\t\t0x%X\n", i, v[i]);
+
+	get_values_from_reg(c->reg, 0xA0, 5, v);
+	seq_printf(sf, "CBU_IRQ_RAW_STATUS:\t0x%X\n", v[0]);
+	seq_printf(sf, "CBU_IRQ_CLEAR:\t\t0x%X\n", v[1]);
+	seq_printf(sf, "CBU_IRQ_MASK:\t\t0x%X\n", v[2]);
+	seq_printf(sf, "CBU_IRQ_STATUS:\t\t0x%X\n", v[3]);
+	seq_printf(sf, "CBU_STATUS:\t\t0x%X\n", v[4]);
+
+	get_values_from_reg(c->reg, 0xd0, 5, v);
+	for (i = 0; i < 5; i++)
+		seq_printf(sf, "CBU_INPUT%u_CONTROL:\t0x%X\n", i, v[i]);
+}
+
 static void d77_crossbar_disable(struct komeda_component *c)
 {
 	u32 __iomem *reg = c->reg;
@@ -1038,6 +1143,7 @@ static void d77_crossbar_disable(struct komeda_component *c)
 static struct komeda_component_funcs d77_crossbar_funcs = {
 	.update		= d77_crossbar_update,
 	.disable	= d77_crossbar_disable,
+	.dump_register	= d77_crossbar_dump,
 };
 
 static int d77_crossbar_init(struct d71_dev *d71,
