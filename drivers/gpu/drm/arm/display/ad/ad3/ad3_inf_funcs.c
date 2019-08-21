@@ -7,6 +7,7 @@
 #include <linux/pm_runtime.h>
 #include "../ad_device.h"
 #include "ad3_regs.h"
+#include "ad3_assertive_lut.h"
 #include "ad3_device.h"
 
 static int
@@ -75,8 +76,49 @@ static int ad3_disable(struct ad_coprocessor *ad)
 	return ret;
 }
 
+static int ad3_assertiveness_set(struct ad_coprocessor *ad, u32 val)
+{
+	struct ad_dev *ad_dev = dev_get_drvdata(ad->dev);
+	uint32_t assertive;
+
+	if (val > AD_MAX_ASSERTIVENESS) {
+		dev_err(ad_dev->dev, "assertiveness is out of range.[%u]\n",
+			val);
+		return -EINVAL;
+	}
+
+	assertive = assertive_lut[val];
+	ad3_update_calibration(ad_dev, assertive);
+	return 0;
+}
+
+static int ad3_strength_set(struct ad_coprocessor *ad, u32 val)
+{
+	struct ad_dev *ad_dev = dev_get_drvdata(ad->dev);
+
+	if (val < AD_STRENGTH_MIN || val > AD_MAX_STRENGTH_LIMIT) {
+		dev_err(ad_dev->dev, "strength_limit is out of range: [%u].\n",
+			val);
+		return -EINVAL;
+	}
+
+	ad3_update_strength(ad_dev, val);
+	return 0;
+}
+
+static int ad3_drc_set(struct ad_coprocessor *ad, u16 drc)
+{
+	struct ad_dev *ad_dev = dev_get_drvdata(ad->dev);
+
+	ad3_update_drc(ad_dev, drc);
+	return 0;
+}
+
 struct ad_coprocessor_funcs ad3_intf_funcs = {
 	.mode_set		= ad3_mode_set,
 	.enable			= ad3_enable,
 	.disable		= ad3_disable,
+	.assertiveness_set	= ad3_assertiveness_set,
+	.strength_set		= ad3_strength_set,
+	.drc_set		= ad3_drc_set,
 };

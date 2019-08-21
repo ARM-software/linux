@@ -18,6 +18,8 @@
 #include <linux/firmware.h>
 #include "ad_device.h"
 #include "ad_debugfs.h"
+#include "ad_ambient_light.h"
+#include "ad_backlight.h"
 
 #define AD_NAME "assertive_display"
 
@@ -25,6 +27,9 @@
 static int ad_driver_runtime_suspend(struct device *dev)
 {
 	struct ad_dev *ad_dev = dev_get_drvdata(dev);
+
+	ad_ambient_light_stop_cb(dev);
+	ad_backlight_output_stop(dev);
 
 	ad_dev->ad_dev_funcs->ad_runtime_suspend(dev);
 
@@ -36,6 +41,9 @@ static int ad_driver_runtime_resume(struct device *dev)
 	struct ad_dev *ad_dev = dev_get_drvdata(dev);
 
 	ad_dev->ad_dev_funcs->ad_runtime_resume(dev);
+
+	ad_ambient_light_start_cb(dev);
+	ad_backlight_output_start(dev);
 
 	return 0;
 }
@@ -203,6 +211,20 @@ static int ad_probe(struct platform_device *pdev)
 
 	ad_request_firmware(ad_dev);
 
+	ret = ad_ambient_light_init(dev);
+	if (ret) {
+		dev_err(dev, "Failed to initialize AL!\n");
+		goto init_al_failed;
+	}
+	ad_ambient_light_start_cb(dev);
+
+	ret = ad_backlight_init(dev);
+	if (ret) {
+		dev_err(dev, "Failed to initialize BL!\n");
+		goto init_bl_failed;
+	}
+	ad_backlight_output_start(dev);
+
 	ad_dev->miscdev.minor	= MISC_DYNAMIC_MINOR;
 	ad_dev->miscdev.name	= ad_dev->name;
 	ad_dev->miscdev.fops	= &ad_fops;
@@ -236,6 +258,12 @@ add_component_failed:
 	ad_debugfs_unregister(ad_dev);
 	misc_deregister(&ad_dev->miscdev);
 reg_misc_failed:
+	ad_backlight_output_stop(dev);
+	ad_backlight_term(dev);
+init_bl_failed:
+	ad_ambient_light_stop_cb(dev);
+	ad_ambient_light_term(dev);
+init_al_failed:
 get_res_failed:
 	if (ad_dev->ad_dev_funcs && ad_dev->ad_dev_funcs->ad_destroy)
 		ad_dev->ad_dev_funcs->ad_destroy(ad_dev->dev);
@@ -256,6 +284,10 @@ static int ad_remove(struct platform_device *pdev)
 
 	ad_debugfs_unregister(ad_dev);
 	misc_deregister(&ad_dev->miscdev);
+	ad_backlight_output_stop(&pdev->dev);
+	ad_backlight_term(&pdev->dev);
+	ad_ambient_light_stop_cb(&pdev->dev);
+	ad_ambient_light_term(&pdev->dev);
 
 	if (ad_dev->ad_dev_funcs && ad_dev->ad_dev_funcs->ad_destroy)
 		ad_dev->ad_dev_funcs->ad_destroy(ad_dev->dev);
@@ -279,9 +311,12 @@ static int ad_driver_pm_suspend_late(struct device *dev)
 {
 	struct ad_dev *ad_dev = dev_get_drvdata(dev);
 
-	if (!pm_runtime_status_suspended(dev))
-		ad_dev->ad_dev_funcs->ad_runtime_suspend(dev);
+	if (!pm_runtime_status_suspended(dev)) {
+		ad_ambient_light_stop_cb(dev);
+		ad_backlight_output_stop(dev);
 
+		ad_dev->ad_dev_funcs->ad_runtime_suspend(dev);
+	}
 	return 0;
 }
 
@@ -289,8 +324,12 @@ static int ad_driver_pm_resume_early(struct device *dev)
 {
 	struct ad_dev *ad_dev = dev_get_drvdata(dev);
 
-	if (!pm_runtime_status_suspended(dev))
+	if (!pm_runtime_status_suspended(dev)) {
 		ad_dev->ad_dev_funcs->ad_runtime_resume(dev);
+
+		ad_ambient_light_start_cb(dev);
+		ad_backlight_output_start(dev);
+	}
 
 	return 0;
 }
