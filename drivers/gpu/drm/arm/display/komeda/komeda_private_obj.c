@@ -108,6 +108,55 @@ static int komeda_scaler_obj_add(struct komeda_kms_dev *kms,
 }
 
 static struct drm_private_state *
+komeda_atu_atomic_duplicate_state(struct drm_private_obj *obj)
+{
+	struct komeda_atu_state *old = to_atu_st(priv_to_comp_st(obj->state));
+	struct komeda_atu_state *st;
+
+	st = kmemdup(obj->state, sizeof(*st), GFP_KERNEL);
+	if (st == NULL)
+		return NULL;
+
+	komeda_color_duplicate_state(&st->color_st, &old->color_st);
+
+	komeda_component_state_reset(&st->base);
+
+	__drm_atomic_helper_private_obj_duplicate_state(obj, &st->base.obj);
+
+	return &st->base.obj;
+}
+static void komeda_atu_atomic_destroy_state(struct drm_private_obj *obj,
+					      struct drm_private_state *state)
+{
+	struct komeda_atu_state *st = to_atu_st(priv_to_comp_st(state));
+
+	komeda_color_cleanup_state(&st->color_st);
+	kfree(st);
+}
+
+static const struct drm_private_state_funcs komeda_atu_obj_funcs = {
+	.atomic_duplicate_state	= komeda_atu_atomic_duplicate_state,
+	.atomic_destroy_state	= komeda_atu_atomic_destroy_state,
+};
+
+static int komeda_atu_obj_add(struct komeda_kms_dev *kms,
+			      struct komeda_atu *atu)
+{
+	struct komeda_atu_state *st;
+	struct drm_device *dev = &kms->base;
+
+	st = kzalloc(sizeof(*st), GFP_KERNEL);
+	if (st == NULL)
+		return -ENOMEM;
+
+	st->base.component = &atu->base;
+	drm_atomic_private_obj_init(dev, &atu->base.obj, &st->base.obj,
+				    &komeda_atu_obj_funcs);
+
+	return 0;
+}
+
+static struct drm_private_state *
 komeda_crossbar_atomic_duplicate_state(struct drm_private_obj *obj)
 {
 	struct komeda_component_state *st;
@@ -425,6 +474,12 @@ int komeda_kms_add_private_objs(struct komeda_kms_dev *kms,
 
 		for (j = 0; j < pipe->n_layers; j++) {
 			err = komeda_layer_obj_add(kms, pipe->layers[j]);
+			if (err)
+				return err;
+		}
+
+		for (j = 0; j < pipe->n_atus; j++) {
+			err = komeda_atu_obj_add(kms, pipe->atu[j]);
 			if (err)
 				return err;
 		}
