@@ -8,6 +8,7 @@
 #include <linux/clk.h>
 #include <linux/of_device.h>
 #include <linux/of_reserved_mem.h>
+#include <linux/debugfs.h>
 #include "mali_aeu_dev.h"
 
 static struct clk *aclk;
@@ -53,6 +54,8 @@ static int mali_aeu_probe(struct platform_device *pdev)
 	struct resource *res;
 	void __iomem *reg_base;
 	struct mali_aeu_device *adev;
+	struct device_node *np = pdev->dev.of_node;
+	struct dentry *parent = NULL;
 	int ret;
 
 	if (!of_match_device(pdev->dev.driver->of_match_table, &pdev->dev))
@@ -68,16 +71,24 @@ static int mali_aeu_probe(struct platform_device *pdev)
 	if (ret)
 		dev_dbg(&pdev->dev, "%s: no memory region used\n", __func__);
 
+	if (debugfs_initialized()) {
+		parent = debugfs_create_dir(AEU_NAME, NULL);
+		if (IS_ERR(parent))
+			parent = NULL;
+	}
+
 	adev = devm_kzalloc(&pdev->dev, sizeof(*adev), GFP_KERNEL);
 	if (!adev) {
 		dev_err(&pdev->dev, "alloc adu deivce error!\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto dbg_free;
 	}
 
 	aclk = devm_clk_get(&pdev->dev, "aclk");
 	if (IS_ERR(aclk)) {
 		dev_err(&pdev->dev, "aclk failed!\n");
-		return -1;
+		ret = -1;
+		goto dbg_free;
 	}
 
 	clk_prepare_enable(aclk);
@@ -85,27 +96,35 @@ static int mali_aeu_probe(struct platform_device *pdev)
 	reg_base = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(reg_base)) {
 		dev_err(&pdev->dev, "register mapping is wrong!\n");
-		return PTR_ERR(reg_base);
+		ret = PTR_ERR(reg_base);
+		goto dbg_free;
 	}
 
 	adev->iommu = mali_aeu_get_iommu(&pdev->dev);
 	if (!adev->iommu)
 		dev_warn(&pdev->dev, "no smmu connected\n");
 
-	adev->hw_dev = mali_aeu_hw_init(reg_base, &pdev->dev, &adev->hw_info);
+	adev->hw_dev = mali_aeu_hw_init(reg_base, &pdev->dev, np, parent,
+					&adev->hw_info);
 	if (!adev->hw_dev) {
 		dev_err(&pdev->dev, "initialize aeu hardware error!\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto dbg_free;
 	}
 
-	ret = mali_aeu_device_init(adev, pdev);
+	ret = mali_aeu_device_init(adev, pdev, parent);
 	if (ret) {
 		dev_err(&pdev->dev, "init aeu device error!\n");
-		return ret;
+		goto dbg_free;
 	}
 
 	platform_set_drvdata(pdev, adev);
 	return 0;
+
+dbg_free:
+	if (parent)
+		debugfs_remove_recursive(parent);
+	return ret;
 }
 
 static int mali_aeu_remove(struct platform_device *pdev)

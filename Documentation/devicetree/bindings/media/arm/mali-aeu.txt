@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: GPL-2.0
+#
+# (C) COPYRIGHT 2019 ARM Limited. All rights reserved.
+# Author: Jonathan Chai (jonathan.chai@arm.com)
+#
+
+* ARM AFBC ENCODER Unit devices (mali-aeu)
+
+Required properties:
+- compatible: Should be "arm,mali-aeu".
+- reg: Physical base address and length of the registers in the system
+- interrupts: the interrupt line numbers of the device in the system
+- interrupt-names: contains the names of the IRQs in the order they were
+provided in the "interrupts" property. Must contain: "APU".
+- clocks: should contain a phandle + clock-specifier pair for each clock
+entry in clock-names.
+- clock-names: should contain:
+      * "aclk": AXI interface clock
+
+Optional properties:
+- iommus: configure the stream id to IOMMU, Must be configured if want to
+      enable iommu in aeu. for how to configure this node please reference
+          devicetree/bindings/iommu/arm,smmu-v3.txt,
+          devicetree/bindings/iommu/iommu.txt
+
+- aeu-axi-burst-length: this is the burst length in bytes that the AEU will use
+  for reading data from the AXI interface.
+  Allowed parameters are: <4>, <8>, <16>, <32>
+  The default value is 32.
+
+- aeu-axi-outstdcab: this is AXI outstanding transcations capability during
+  active region. Valid value range 4 - 16. The debault value is 16.
+
+- aeu-axi-arqos: AXI QoS. Valid value range 0 - 15. The default value is 15.
+
+- aeu-arcache: Layer AXI read transcations memory type. Valid value range 0 - 15.
+  The default value is 3.
+
+- aeu-axi-ord: AXI transactions generation mode. Value 0 means out-of-order AXI mode,
+  value 1 means in-order AXI mode. The default value is 0.
+
+- aeu-axi-awqos: AXI QoS for writing. Valid value range 0 - 15. The default value is 0.
+
+- aeu-awchache: Write-back layer AXI write transcations memory type.
+  Valid value range 0 - 15. The default value is 3.
+
+- memory-region: phandle to a node describing memory to be used for the video buffers.
+  If not present, the video buffers may be located in anywhere in memory.
+  (Refer to: Documentation/devicetree/bindings/reserved-memory/reserved-memory.txt)
+
+Example:
+
+/{
+	...
+
+	aeu@6fc20000 {
+		compatible = "arm,mali-aeu";
+		reg = <0 0x6fc20000 0 0x20000>;
+		clocks =  <&fpgaosc1>;
+		clock_names = "dp_aclk";
+		interrupts = <0 168 4>;
+		interrupt-names = "AEU";
+		iommus = <&smmu 10>, <&smmu 11>;
+		aeu-axi-ord = <0>;
+		memory-region = <&aeu_reserved>;
+	};
+
+	...
+};

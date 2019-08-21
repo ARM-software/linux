@@ -10,6 +10,8 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-mem2mem.h>
 #include <linux/interrupt.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
 
 #define ALIGN_UP(x, align_to)   (((x) + ((align_to)-1)) & ~((align_to)-1))
 
@@ -47,6 +49,11 @@
 
 #define AES_CTRL_EN		(1 << 0)
 #define AES_CMD_DS		(1 << 0)
+
+#define AES_AWQOS_BIT		0
+#define AES_AWCACHE_BIT		4
+#define AES_AWQOS_MASK		0xF
+#define AES_AWCACHE_MASK	0xF
 
 #define AEU_AES_BLOCK_INFO	_BLK_INFO(AEU_AES_OFFSET)
 #define AEU_AES_PIPELINE_INFO	_PPL_INFO(AEU_AES_OFFSET)
@@ -116,6 +123,18 @@
 #define DS_IRQ_ERR		(1 << 2)
 #define DS_IRQ_CVAL		(1 << 8)
 #define DS_IRQ_PL		(1 << 9)
+
+#define DS_OUTSTDCAPB_BIT	0
+#define DS_ARCACHE_BIT		12
+#define DS_BURSTLEN_BIT		16
+#define DS_ARQOS_BIT		24
+#define DS_ORD_BIT		31
+
+#define DS_OUTSTDCAPB_MASK	0x1F
+#define DS_ARCACHE_MASK		0xF
+#define DS_BURSTLEN_MASK	0x3F
+#define DS_ARQOS_MASK		0xF
+#define DS_ORD_MASK		0x1
 
 #define DS_CTRL_EN		(1 << 0)
 #define DS_CTRL_TH		(1 << 1)
@@ -216,8 +235,8 @@ typedef struct mali_aeu_hw_ctx mali_aeu_hw_ctx_t;
 struct mali_aeu_hw_device;
 
 struct mali_aeu_hw_device *
-mali_aeu_hw_init(void __iomem *r, struct device *dev,
-		 struct mali_aeu_hw_info *hw_info);
+mali_aeu_hw_init(void __iomem *r, struct device *dev, struct device_node *np,
+		 struct dentry *parent, struct mali_aeu_hw_info *hw_info);
 void mali_aeu_hw_exit(struct mali_aeu_hw_device *hw_dev);
 
 irqreturn_t mali_aeu_hw_irq_handler(int irq, void *data);

@@ -5,6 +5,7 @@
  *
  */
 #include <linux/slab.h>
+#include <linux/debugfs.h>
 #include <uapi/drm/drm_fourcc.h>
 #include <media/videobuf2-memops.h>
 #include <media/videobuf2-dma-sg.h>
@@ -883,7 +884,7 @@ static mali_aeu_hw_ctx_t *get_curr_hw_ctx(struct v4l2_m2m_dev *m2mdev)
 }
 
 int mali_aeu_device_init(struct mali_aeu_device *adev,
-			 struct platform_device *pdev)
+			 struct platform_device *pdev, struct dentry *parent)
 {
 	int ret, irq;
 
@@ -942,13 +943,9 @@ int mali_aeu_device_init(struct mali_aeu_device *adev,
 	mali_aeu_hw_connect_m2m_device(adev->hw_dev, adev->m2mdev,
 				       get_curr_hw_ctx);
 
-	if (debugfs_initialized()) {
-		adev->dbg_folder = debugfs_create_dir(AEU_NAME, NULL);
-		if (IS_ERR(adev->dbg_folder))
-			adev->dbg_folder = NULL;
-		else
-			mali_aeu_log_init(adev->dbg_folder);
-	}
+	adev->dbg_folder = parent;
+	if (parent)
+		mali_aeu_log_init(adev->dbg_folder);
 
 	return ret;
 }
