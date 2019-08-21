@@ -257,6 +257,8 @@ static void komeda_kms_mode_config_init(struct komeda_kms_dev *kms,
 
 	config->funcs = &komeda_mode_config_funcs;
 	config->helper_private = &komeda_mode_config_helpers;
+
+	komeda_kms_create_plane_properties(kms, mdev);
 }
 
 struct komeda_kms_dev *komeda_kms_attach(struct komeda_dev *mdev)

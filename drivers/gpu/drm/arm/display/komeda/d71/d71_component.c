@@ -433,6 +433,19 @@ static int d71_layer_init(struct d71_dev *d71,
 	return 0;
 }
 
+static u32 get_blk_max_line_size2(struct d71_dev *d71, u32 __iomem *reg,
+		u32 max_default)
+{
+	if (!d71->periph_addr)
+		max_default = malidp_read32(reg, BLK_MAX_LINE_SIZE);
+	return max_default;
+}
+
+static u32 get_blk_max_line_size(struct d71_dev *d71, u32 __iomem *reg)
+{
+	return get_blk_max_line_size2(d71, reg, d71->max_line_size);
+}
+
 static struct komeda_component_funcs d77_atu_funcs = {
 	.disable	= NULL,
 	.dump_register	= NULL,
@@ -445,6 +458,7 @@ static int d77_atu_init(struct d71_dev *d71, struct block_header *blk,
 	struct komeda_component *c;
 	struct komeda_atu *atu;
 	u32 pipe_id, id;
+	u32 max_atu_ln_sz = get_blk_max_line_size(d71, reg);
 
 	get_resources_id(blk->block_info, &pipe_id, &id);
 	c = komeda_component_add(&d71->pipes[pipe_id]->base, sizeof(*atu),
@@ -459,8 +473,8 @@ static int d77_atu_init(struct d71_dev *d71, struct block_header *blk,
 
 	atu = to_atu(c);
 
-	set_range(&atu->h_size, 64, d71->max_line_size);
-	set_range(&atu->v_size, 64, d71->max_vsize);
+	set_range(&atu->h_size, 64, max_atu_ln_sz);
+	set_range(&atu->v_size, 64, max_atu_ln_sz);
 
 	malidp_write32(reg, ATU_PALPHA, D71_PALPHA_DEF_MAP);
 	get_resources_id(malidp_read32(reg, ATU_SLAVE_INFO) << 4,
@@ -1467,14 +1481,11 @@ int d71_probe_block(struct d71_dev *d71,
 		pipe->atu_addr[blk_id % D77_PIPELINE_MAX_ATU] = reg;
 		err = d77_atu_init(d71, blk, reg);
 		break;
-
 	case D77_BLK_TYPE_ATU_VP:
 		err = d77_atu_vp_init(d71, blk, reg);
 		break;
-
 	case D77_BLK_TYPE_LPU_PERF:
 		break;
-
 	default:
 		DRM_ERROR("Unknown block (block_info: 0x%x) is found\n",
 			  blk->block_info);

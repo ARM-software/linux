@@ -18,6 +18,7 @@
 #define KOMEDA_PIPELINE_MAX_SCALERS	2
 #define KOMEDA_COMPONENT_N_INPUTS	5
 #define KOMEDA_PIPELINE_MAX_ATU		2
+#define KOMEDA_SPLINE_COEFF_SIZE	1024
 
 /* pipeline component IDs */
 enum {
@@ -456,6 +457,7 @@ struct komeda_data_flow_cfg {
 	   en_img_enhancement : 1,
 	   en_split : 1,
 	   is_yuv : 1,
+	   en_atu : 1,
 	   right_part : 1; /* right part of display image if split enabled */
 };
 

@@ -929,8 +929,12 @@ void komeda_complete_data_flow_cfg(struct komeda_layer *layer,
 	dflow->total_in_h = dflow->in_h;
 	dflow->total_out_w = dflow->out_w;
 
-	/* if format doesn't have alpha, fix blend mode to PIXEL_NONE */
-	if (!fb->format->has_alpha)
+	/* if format doesn't have alpha, fixup blend mode to PIXEL_NONE
+	 * but in ATU cases, any pixels which are "invalid" should end up being transparent
+	 * where "invalid" means outside the buffer. So, even no alpha format like YUV,
+	 * we also need enable pixel alpha blend for ATU.
+	 */
+	if (!fb->format->has_alpha && !dflow->en_atu)
 		dflow->pixel_blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 
 	if (drm_rotation_90_or_270(dflow->rot))
