@@ -31,6 +31,31 @@ struct komeda_plane {
 	 * Layers with same capabilities.
 	 */
 	struct komeda_layer *layer;
+
+	/**
+	 * @atu: represents which ATU this plane belongs to.
+	 * if it's not a ATU plane, leave this field to be NULL;
+	 */
+	struct komeda_atu *atu;
+	/**
+	 * @atu_vp_buddy: points to its viewport buddy.
+	 *
+	 * Note:
+	 * every ATU has 2 vp(viewports), and each vp is binded with a plane.
+	 * and these 2 vp are buddies.
+	 */
+	struct komeda_plane *atu_vp_buddy; /* point to it's vp buddy */
+
+	/** @prop_viewport_outrect: describe a viewport rect start point and size */
+	struct drm_property *prop_viewport_outrect;
+	/** @prop_viewport_trans: represents head position when gpu render the framebuffer */
+	struct drm_property *prop_viewport_trans;
+	/** @prop_layer_projection: represents head position of XR devices in reprojection mode*/
+	struct drm_property *prop_layer_projection;
+	/** @prop_layer_quad: represents head position of XR devices in quad mode*/
+	struct drm_property *prop_layer_quad;
+	/** @prop_viewport_clamp: represents clamp effect */
+	struct drm_property *prop_viewport_clamp;
 };
 
 /**
@@ -45,8 +70,29 @@ struct komeda_plane_state {
 	/** @zlist_node: zorder list node */
 	struct list_head zlist_node;
 
+	bool viewport_clamp;
+
 	/** @layer_split: on/off layer_split */
 	u8 layer_split : 1;
+
+	/** @spline_coeff_r_changed: the value in "spline_coeff_r" changed or not */
+	u8 spline_coeff_r_changed : 1,
+	/** @spline_coeff_g_changed: the value in "spline_coeff_r" changed or not */
+	   spline_coeff_g_changed : 1,
+	/** @spline_coeff_b_changed: the value in "spline_coeff_r" changed or not */
+	   spline_coeff_b_changed : 1,
+	/** @mat_coeff_changed: any matrix props value changed or not */
+		mat_coeff_changed : 1,
+	/** @vp_rect_changed: the value in "vp_outrect" changed or not */
+		  vp_rect_changed : 1;
+
+	struct drm_property_blob *spline_coeff_r;
+	struct drm_property_blob *spline_coeff_g;
+	struct drm_property_blob *spline_coeff_b;
+	struct drm_property_blob *vp_outrect;
+	struct drm_property_blob *viewport_trans;
+	struct drm_property_blob *layer_project;
+	struct drm_property_blob *layer_quad;
 };
 
 /**
@@ -136,6 +182,13 @@ struct komeda_kms_dev {
 	int n_crtcs;
 	/** @crtcs: crtcs list */
 	struct komeda_crtc crtcs[KOMEDA_MAX_PIPELINES];
+
+	/** @prop_spline_coeff_r: ATU LDC spline coefficients prop for red channel */
+	struct drm_property *prop_spline_coeff_r;
+	/** @prop_spline_coeff_g: ATU LDC spline coefficients prop for green channel */
+	struct drm_property *prop_spline_coeff_g;
+	/** @prop_spline_coeff_b: ATU LDC spline coefficients prop for blue channel */
+	struct drm_property *prop_spline_coeff_b;
 };
 
 #define to_kplane(p)	container_of(p, struct komeda_plane, base)
@@ -192,7 +245,8 @@ int komeda_kms_add_private_objs(struct komeda_kms_dev *kms,
 int komeda_kms_add_wb_connectors(struct komeda_kms_dev *kms,
 				 struct komeda_dev *mdev);
 void komeda_kms_cleanup_private_objs(struct komeda_kms_dev *kms);
-
+int komeda_kms_create_plane_properties(struct komeda_kms_dev *kms,
+				       struct komeda_dev *mdev);
 void komeda_crtc_handle_event(struct komeda_crtc   *kcrtc,
 			      struct komeda_events *evts);
 
