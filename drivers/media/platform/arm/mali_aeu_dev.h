@@ -38,6 +38,6 @@ struct mali_aeu_device {
 };
 
 int mali_aeu_device_init(struct mali_aeu_device *adev,
-			 struct platform_device *pdev);
+			 struct platform_device *pdev, struct dentry *parent);
 int mali_aeu_device_destroy(struct mali_aeu_device *adev);
 #endif

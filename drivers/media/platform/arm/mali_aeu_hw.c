@@ -257,14 +257,229 @@ static void mali_aeu_hw_enable_irq(struct mali_aeu_hw_device *hw_dev)
 	spin_unlock_irqrestore(&hw_dev->reglock, flags);
 }
 
+enum mali_aeu_axi_prop_type {
+	AEU_AXI_PROP_BOOL,
+	AEU_AXI_PROP_INT_RANGE,
+	AEU_AXI_PROP_INT_LIST
+};
+
+struct mali_aeu_axi_prop {
+	struct mali_aeu_hw_device *hw_dev;
+	char node_name[32];
+	struct dentry *dbg_file;
+	enum mali_aeu_axi_prop_type type;
+	u32 val;
+	u32 reg;
+	u16 bit;
+	u32 bit_mask;
+	union {
+		struct {
+			u32 min, max;
+		} range;
+
+		struct {
+			u32 n_value;
+			u32 *val_list;
+		} list;
+	};
+};
+
+struct mali_aeu_axi_prop axi_props[] = {
+	{
+		.node_name = "aeu-axi-awqos",
+		.type = AEU_AXI_PROP_INT_RANGE,
+		.val = 0,
+		.reg = AEU_AES_AXI_CONTROL,
+		.bit = AES_AWQOS_BIT,
+		.bit_mask = AES_AWQOS_MASK,
+		.range.min = 0,
+		.range.max = 15,
+	},
+	{
+		.node_name = "aeu-awchache",
+		.type = AEU_AXI_PROP_INT_LIST,
+		.val = 3,
+		.reg = AEU_AES_AXI_CONTROL,
+		.bit = AES_AWCACHE_BIT,
+		.bit_mask = AES_AWCACHE_MASK,
+		.list.n_value = 10,
+		.list.val_list = (u32 []){0x0, 0x1, 0x2, 0x3, 0x6,
+					0x7, 0xA, 0xB, 0xE, 0xF},
+	},
+	{
+		.node_name = "aeu-axi-outstdcab",
+		.type = AEU_AXI_PROP_INT_RANGE,
+		.val = 16,
+		.reg = AEU_DS_AXI_CONTROL,
+		.bit = DS_OUTSTDCAPB_BIT,
+		.bit_mask = DS_OUTSTDCAPB_MASK,
+		.range.min = 4,
+		.range.max = 16,
+	},
+	{
+		.node_name = "aeu-arcache",
+		.type = AEU_AXI_PROP_INT_LIST,
+		.val = 3,
+		.reg = AEU_DS_AXI_CONTROL,
+		.bit = DS_ARCACHE_BIT,
+		.bit_mask = DS_ARCACHE_MASK,
+		.list.n_value = 10,
+		.list.val_list = (u32 []){0x0, 0x1, 0x2, 0x3, 0x6,
+					0x7, 0xA, 0xB, 0xE, 0xF},
+	},
+	{
+		.node_name = "aeu-axi-burst-length",
+		.type = AEU_AXI_PROP_INT_LIST,
+		.val =32,
+		.reg = AEU_DS_AXI_CONTROL,
+		.bit = DS_BURSTLEN_BIT,
+		.bit_mask = DS_BURSTLEN_MASK,
+		.list.n_value = 4,
+		.list.val_list = (u32 []){4, 8, 16, 32},
+	},
+	{
+		.node_name = "aeu-axi-arqos",
+		.type = AEU_AXI_PROP_INT_RANGE,
+		.val = 15,
+		.reg = AEU_DS_AXI_CONTROL,
+		.bit = DS_ARQOS_BIT,
+		.bit_mask = DS_ARQOS_MASK,
+		.range.min = 0,
+		.range.max = 15,
+	},
+	{
+		.node_name = "aeu-axi-ord",
+		.type = AEU_AXI_PROP_BOOL,
+		.val = 0,
+		.reg = AEU_DS_AXI_CONTROL,
+		.bit = DS_ORD_BIT,
+		.bit_mask = DS_ORD_MASK,
+	}
+};
+
+#define NUM_AXI_PROPS (sizeof(axi_props)/sizeof(struct mali_aeu_axi_prop))
+
+static int mali_aeu_axi_prop_valid_set(struct mali_aeu_axi_prop *p, u32 new)
+{
+	u32 i;
+
+	if (p->val == new)
+		return 1;
+
+	switch (p->type) {
+	case AEU_AXI_PROP_BOOL:
+		new = !!new;
+		if (p->val == new)
+			return 1;
+		break;
+	case AEU_AXI_PROP_INT_RANGE:
+		if (new < p->range.min || new > p->range.max)
+			return -1;
+		break;
+	case AEU_AXI_PROP_INT_LIST:
+		for (i = 0; i < p->list.n_value; i++)
+			if (p->list.val_list[i] == new)
+				break;
+		if (i == p->list.n_value)
+			return -1;
+		break;
+	default:
+		WARN_ON(1);
+	}
+	p->val = new;
+	return 0;
+}
+
+static void mali_aeu_commit_axi_prop(struct mali_aeu_hw_device *hw_dev,
+			struct mali_aeu_axi_prop *prop)
+{
+	u32 v;
+	unsigned long flags;
+
+	spin_lock_irqsave(&hw_dev->reglock, flags);
+	v = mali_aeu_read(hw_dev->reg, prop->reg);
+	if (((v >> prop->bit) & prop->bit_mask) == prop->val) {
+		spin_unlock_irqrestore(&hw_dev->reglock, flags);
+		return;
+	}
+
+	v &= ~(prop->bit_mask << prop->bit);
+	v |= prop->val << prop->bit;
+	mali_aeu_write(hw_dev->reg, prop->reg, v);
+	spin_unlock_irqrestore(&hw_dev->reglock, flags);
+}
+
+static int axi_prop_set(void *data, u64 val)
+{
+	struct mali_aeu_axi_prop *prop = data;
+
+	switch (mali_aeu_axi_prop_valid_set(prop, val)) {
+	case 0:
+		mali_aeu_commit_axi_prop(prop->hw_dev, prop);
+	case 1:
+		break;
+	default:
+		dev_err(prop->hw_dev->dev, "the value is invalid\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int axi_prop_get(void *data, u64 *val)
+{
+	struct mali_aeu_axi_prop *prop = data;
+	*val = prop->val;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(f_ops_axi_prop, axi_prop_get, axi_prop_set, "%lld\n");
+
+static int mali_aeu_axi_prop_init(struct mali_aeu_hw_device *hw_dev,
+		struct dentry *parent, struct device_node *np, u32 n,
+		struct mali_aeu_axi_prop *props)
+{
+	u32 i, v;
+	struct property *p;
+	struct dentry *axi_folder = NULL;
+
+	if (parent)
+		axi_folder = debugfs_create_dir("axi", parent);
+
+	for (i = 0; i < n; i++) {
+		props[i].hw_dev = hw_dev;
+		p = of_find_property(np, props[i].node_name, NULL);
+		if (p) {
+			const u32 *prop_u32_be = of_prop_next_u32(p, NULL, &v);
+			if (!prop_u32_be ||
+				mali_aeu_axi_prop_valid_set(&props[i], v) < 0)
+				dev_err(hw_dev->dev, "%s: Invalid DT init value for %s\n",
+					__func__, props[i].node_name);
+		}
+		mali_aeu_commit_axi_prop(hw_dev, &props[i]);
+
+		if (props[i].dbg_file == NULL && axi_folder) {
+			props[i].dbg_file = debugfs_create_file(props[i].node_name,
+								S_IRUSR | S_IWUSR,
+								axi_folder, &props[i],
+								&f_ops_axi_prop);
+			if (props[i].dbg_file == NULL)
+				dev_warn(hw_dev->dev, "%s: create debugfs <%s> failed\n",
+					 __func__, props[i].node_name);
+		}
+	}
+
+	return 0;
+}
+
 struct mali_aeu_hw_device *
-mali_aeu_hw_init(void __iomem *r, struct device *dev,
-		 struct mali_aeu_hw_info *hw_info)
+mali_aeu_hw_init(void __iomem *r, struct device *dev, struct device_node *np,
+		 struct dentry *parent, struct mali_aeu_hw_info *hw_info)
 {
 	struct mali_aeu_hw_device *hw_dev = NULL;
 	u32 v;
 
-	BUG_ON(r == NULL);
+	WARN_ON(r == NULL);
 	/* read registers to ensure adu */
 	v = mali_aeu_read(r, AEU_BLOCK_INFO);
 	if ((v & 0xFFFF) != 0x402)
@@ -287,6 +502,7 @@ mali_aeu_hw_init(void __iomem *r, struct device *dev,
 	if (hw_info)
 		*hw_info = aeu_hw_info;
 
+	mali_aeu_axi_prop_init(hw_dev, parent, np, NUM_AXI_PROPS, axi_props);
 	mali_aeu_hw_enable_irq(hw_dev);
 
 	return hw_dev;
