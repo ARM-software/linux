@@ -757,6 +757,7 @@ komeda_compiz_set_input(struct komeda_compiz *compiz,
 	cin->voffset = dflow->out_y;
 	cin->pixel_blend_mode = dflow->pixel_blend_mode;
 	cin->layer_alpha = dflow->layer_alpha;
+	cin->channel_scaling = dflow->channel_scaling;
 
 	old_st = komeda_component_get_old_state(&compiz->base, drm_st);
 	WARN_ON(!old_st);
@@ -806,6 +807,8 @@ komeda_compiz_validate(struct komeda_compiz *compiz,
 		dflow->pixel_blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 		dflow->layer_alpha = 0xFF;
 		dflow->blending_zorder = 0;
+		/* Disable the color channel scaling by maximum value.*/
+		dflow->channel_scaling = KOMEDA_MAX_CHANNEL_SCALING;
 	}
 
 	return 0;
