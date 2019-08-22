@@ -1861,6 +1861,11 @@ static void d71_lpu_dump(struct d71_pipeline *pipe, struct seq_file *sf)
 	seq_printf(sf, "LPU_RAXI_CONTROL:\t0x%X\n", v[0]);
 	seq_printf(sf, "LPU_WAXI_CONTROL:\t0x%X\n", v[1]);
 	seq_printf(sf, "LPU_TBU_CONTROL:\t0x%X\n", v[2]);
+
+	if (pipe->lpu_perf) {
+		get_values_from_reg(pipe->lpu_perf, 0xC0, 1, v);
+		seq_printf(sf, "LPU_PERF_INFO:\t\t0x%X\n", v[0]);
+	}
 }
 
 static void d71_dou_dump(struct d71_pipeline *pipe, struct seq_file *sf)

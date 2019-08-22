@@ -354,6 +354,7 @@
 #define PERF_MASK1		0x0D8
 
 #define PERF_Cx(n)		(0x0E0 + ((n) << 2))
+#define PERF_INFO		0x0C0
 
 /* Scaler registers */
 #define SC_COEFFTAB		0x0DC

@@ -7,6 +7,7 @@
 
 #include <drm/drm_print.h>
 #include "d71_dev.h"
+#include "d77_debugfs.h"
 #include "malidp_io.h"
 
 static u64 get_lpu_event(struct d71_pipeline *d71_pipeline)
@@ -614,6 +615,8 @@ static void d77_pipeline_enable_perf(struct d71_pipeline *pipe)
 	if (!pipe->perf || !pipe->perf->perf_mask)
 		return;
 
+	pipe->perf->perf_mask &= pipe->perf->perf_valid_mask;
+
 	malidp_write32(pipe->lpu_perf, PERF_MASK0,
 			lower_32_bits(pipe->perf->perf_mask));
 	malidp_write32(pipe->lpu_perf, PERF_MASK1,
@@ -681,6 +684,20 @@ static int d71_disconnect_iommu(struct komeda_dev *mdev)
 	return ret;
 }
 
+static int d77_init_hw(struct komeda_dev *mdev)
+{
+	struct d71_dev *d77 = mdev->chip_data;
+	int i, err = 0;
+
+	for (i = 0; i < d77->num_pipelines; i++) {
+		err = d77_setup_perf_counters(d77->pipes[i]);
+		if (err) {
+			DRM_ERROR("create performance counter debugfs node fail!\n");
+		}
+	}
+	return err;
+}
+
 static const struct komeda_dev_funcs d71_chip_funcs = {
 	.init_format_table	= d71_init_fmt_tbl,
 	.enum_resources		= d71_enum_resources,
@@ -709,6 +726,7 @@ static const struct komeda_dev_funcs d77_chip_funcs = {
 	.connect_iommu		= d71_connect_iommu,
 	.disconnect_iommu	= d71_disconnect_iommu,
 	.dump_register		= d71_dump,
+	.init_hw 		= d77_init_hw,
 };
 
 const struct komeda_dev_funcs *
