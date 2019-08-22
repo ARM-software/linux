@@ -4,14 +4,16 @@
  * Author: Jonathan Chai (jonathan.chai@arm.com)
  *
  */
+
 #include <linux/slab.h>
-#include <linux/debugfs.h>
+#include <linux/pm.h>
+#include <linux/pm_runtime.h>
 #include <uapi/drm/drm_fourcc.h>
 #include <media/videobuf2-memops.h>
 #include <media/videobuf2-dma-sg.h>
-
 #include "mali_aeu_dev.h"
 #include "mali_aeu_hw.h"
+#include "mali_aeu_reg_dump.h"
 #include "mali_aeu_log.h"
 
 #define IRQ_NAME	"AEU"
@@ -80,8 +82,10 @@ typedef struct {
 	struct v4l2_fh		fh;
 	struct mali_aeu_device	*adev;
 	struct v4l2_ctrl_handler	hdl;
-	u32	pm_enabled: 1,
-		reserved: 31;
+	u32	running: 1,
+		pm_enabled: 1,
+		reserved: 30;
+	wait_queue_head_t	idle;
 	/* protect access to the buffer status */
 	spinlock_t		buf_lock;
 	/* how many buffers per transaction */
@@ -135,6 +139,23 @@ static int aeu_queue_setup(struct vb2_queue *q,
 
 static int aeu_buf_prepare(struct vb2_buffer *buf)
 {
+	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(buf);
+	aeu_ctx_t *ctx = vb2_get_drv_priv(buf->vb2_queue);
+	u32 i;
+
+	if (V4L2_TYPE_IS_OUTPUT(buf->vb2_queue->type)) {
+		if (vbuf->field == V4L2_FIELD_ANY)
+			vbuf->field = V4L2_FIELD_NONE;
+		if (vbuf->field != V4L2_FIELD_NONE) {
+			dev_err(ctx->adev->dev, "%s:field isn't supported\n",
+					__func__);
+			return -EINVAL;
+		}
+	}
+
+	for (i = 0; i < buf->num_planes; i++)
+		vb2_set_plane_payload(buf, i, vb2_plane_size(buf, i));
+
 	return 0;
 }
 
@@ -155,6 +176,10 @@ static void aeu_buf_queue(struct vb2_buffer *buf)
 
 static int aeu_start_streaming(struct vb2_queue *q, unsigned int count)
 {
+	aeu_ctx_t *ctx = vb2_get_drv_priv(q);
+
+	pm_runtime_get_sync(ctx->adev->dev);
+	dev_dbg(ctx->adev->dev, "%s:start\n", __func__);
 	return 0;
 }
 
@@ -177,7 +202,8 @@ static void aeu_stop_streaming(struct vb2_queue *q)
 		}
 
 	} while (vbuf != NULL);
-	dev_info(ctx->adev->dev, "%s:stop\n", __func__);
+	pm_runtime_put(ctx->adev->dev);
+	dev_dbg(ctx->adev->dev, "%s:stop\n", __func__);
 }
 
 static void aeu_buf_finish_and_cleanup(struct vb2_buffer *buf)
@@ -305,7 +331,7 @@ static int aeu_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_PROTECTED_MODE:
 		if (ctrl->val)
-			dev_info(actx->adev->dev,
+			dev_dbg(actx->adev->dev,
 				"AEU is running in protected mode!");
 		actx->pm_enabled = !!ctrl->val;
 		break;
@@ -382,6 +408,7 @@ static int aeu_open(struct file *file)
 		goto exit_aeu_ctx;
 	}
 
+	init_waitqueue_head(&ctx->idle);
 	ctx->adev = adev;
 	v4l2_fh_init(&ctx->fh, &adev->vdev);
 	file->private_data = &ctx->fh;
@@ -444,7 +471,7 @@ static const struct v4l2_file_operations mali_aeu_fops = {
 	.mmap		= v4l2_m2m_fop_mmap,
 };
 
-/* Implement adu v4l2 ioctl operations */
+/* Implement aeu v4l2 ioctl operations */
 static int aeu_drv_cap(struct file *file, void *priv,
 		       struct v4l2_capability *cap)
 {
@@ -457,7 +484,6 @@ static int aeu_drv_cap(struct file *file, void *priv,
 	return 0;
 }
 
-/* TODO (DISPLAYSW-550): format implementation */
 static void align_size(struct mali_aeu_device *adev, u32 *h, u32 *w)
 {
 	if (adev->hw_info.min_width > *w)
@@ -487,12 +513,12 @@ static int enum_fmt(struct v4l2_fmtdesc *f, u32 type)
 
 	np = mali_aeu_hw_pix_fmt_planes(fmt_table[i].hw_fmt);
 	if (type == AEU_HW_INPUT_BUF) {
-		f->type = (np > 1) ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
-				V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		f->flags = 0;
-	} else {
 		f->type = (np > 1) ? V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE :
 				V4L2_BUF_TYPE_VIDEO_OUTPUT;
+		f->flags = 0;
+	} else {
+		f->type = (np > 1) ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
+				V4L2_BUF_TYPE_VIDEO_CAPTURE;
 		f->flags = V4L2_FMT_FLAG_COMPRESSED;
 		if (!mali_aeu_hw_pix_fmt_native(fmt_table[i].hw_fmt))
 			f->flags |= V4L2_FMT_FLAG_EMULATED;
@@ -586,6 +612,7 @@ static int mali_aeu_set_fmt(aeu_ctx_t *ctx, struct v4l2_format *f)
 
 	memset(&ctx->curr_buf_fmt[type], 0,
 				sizeof(struct mali_aeu_hw_buf_fmt));
+
 	ctx->curr_buf_fmt[type].buf_type = type;
 	ctx->curr_buf_fmt[type].buf_h = fmt->height;
 	ctx->curr_buf_fmt[type].buf_w = fmt->width;
@@ -597,6 +624,7 @@ static int mali_aeu_set_fmt(aeu_ctx_t *ctx, struct v4l2_format *f)
 		ctx->curr_buf_fmt[type].output_format =
 					mali_aeu_hw_convert_fmt(in_fmt);
 		ctx->curr_buf_fmt[type].nplanes = 1;
+		ctx->curr_buf_fmt[type].size[0] = fmt->sizeimage;
 	} else {
 		u32 align = ctx->adev->hw_info.raddr_align;
 
@@ -610,11 +638,14 @@ static int mali_aeu_set_fmt(aeu_ctx_t *ctx, struct v4l2_format *f)
 			for(i = 0; i < fmt_mp->num_planes; i++) {
 				ctx->curr_buf_fmt[type].stride[i] =
 					fmt_mp->plane_fmt[i].bytesperline;
+				ctx->curr_buf_fmt[type].size[i] =
+					fmt_mp->plane_fmt[i].sizeimage;
 				if (ctx->curr_buf_fmt[type].stride[i] % align)
 					return -EINVAL;
 			}
 		} else {
 			ctx->curr_buf_fmt[type].nplanes = 1;
+			ctx->curr_buf_fmt[type].size[0] = fmt->sizeimage;
 			if (fmt->bytesperline % align)
 				return -EINVAL;
 			ctx->curr_buf_fmt[type].stride[0] = fmt->bytesperline;
@@ -666,6 +697,19 @@ static int aeu_s_fmt_vid_out(struct file *file, void *p,
 	return mali_aeu_set_fmt(ctx, f);
 }
 
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+static int aeu_g_reg(struct file *file, void *fh,
+		struct v4l2_dbg_register *reg)
+{
+	u32 reg_idx = reg->reg & 0xFFFF;
+	u32 table = (reg->reg >> 16) & 0xFFFF;
+	aeu_ctx_t *ctx = file2ctx(file);
+
+	reg->val = mali_aeu_hw_g_reg(ctx->hw_ctx, table, reg_idx);
+	return 0;
+}
+#endif
+
 static const struct v4l2_ioctl_ops mali_aeu_ioctl_ops = {
 	.vidioc_querycap		= aeu_drv_cap,
 
@@ -695,6 +739,10 @@ static const struct v4l2_ioctl_ops mali_aeu_ioctl_ops = {
 
 	.vidioc_subscribe_event = v4l2_ctrl_subscribe_event,
 	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,
+
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+	.vidioc_g_register	= aeu_g_reg,
+#endif
 };
 
 /* m2m ops functions */
@@ -727,7 +775,7 @@ dma_addr_t get_aeu_buffer_plane_addr(aeu_ctx_t *ctx,
 
 		if (new->sgl) {
 			sg_free_table(new);
-			BUG();
+			WARN_ON(1);
 		}
 
 		if (sg_alloc_table(new, dma_sgt->orig_nents, GFP_KERNEL))
@@ -817,10 +865,17 @@ static void aeu_m2m_device_run(void *priv)
 
 	mali_aeu_hw_set_buf_addr(ctx->hw_ctx, &buf_addr, AEU_HW_OUTPUT_BUF);
 
+	if (ctx->adev->status == AEU_PAUSED)
+		return;
+
 	mali_aeu_hw_protected_mode(ctx->hw_ctx, ctx->pm_enabled);
+	ctx->running = 1;
 	if (mali_aeu_hw_ctx_commit(ctx->hw_ctx)) {
 		dev_err(ctx->adev->dev, "%s: hw commit error!\n", __func__);
+		ctx->running = 0;
+		v4l2_m2m_job_finish(ctx->adev->m2mdev, ctx->fh.m2m_ctx);
 		mali_aeu_hw_clear_ctrl(ctx->adev->hw_dev);
+		wake_up(&ctx->idle);
 	}
 }
 
@@ -838,7 +893,6 @@ static void aeu_m2m_job_abort(void *priv)
 {
 }
 
-/* TODO: Implement m2m device operations */
 static const struct v4l2_m2m_ops mali_aeu_m2m_ops = {
 	.device_run	= aeu_m2m_device_run,
 	.job_ready	= aeu_m2m_job_ready,
@@ -870,9 +924,36 @@ irqreturn_t mali_aeu_irq_thread_handler(int irq, void *data)
 	vb2_buffer_done(&s_buf->vb2_buf, buf_flag);
 	vb2_buffer_done(&d_buf->vb2_buf, buf_flag);
 	spin_unlock_irqrestore(&ctx->buf_lock, flags);
+
+	ctx->running = 0;
+	wake_up(&ctx->idle);
+
 	v4l2_m2m_job_finish(ctx->adev->m2mdev, ctx->fh.m2m_ctx);
 
 	return IRQ_HANDLED;
+}
+
+void mali_aeu_paused(struct mali_aeu_device *adev)
+{
+	aeu_ctx_t *ctx = v4l2_m2m_get_curr_priv(adev->m2mdev);
+
+	WARN_ON(adev->status != AEU_PAUSED);
+
+	if (ctx && ctx->running)
+		wait_event(ctx->idle, ctx->running == 0);
+}
+
+void mali_aeu_resume(struct mali_aeu_device *adev)
+{
+	aeu_ctx_t *ctx = v4l2_m2m_get_curr_priv(adev->m2mdev);
+
+	if (mali_aeu_soft_reset(adev->hw_dev))
+		dev_err(adev->dev, "%s: reset HW error!\n", __func__);
+
+	adev->status = AEU_ACTIVE;
+
+	if (ctx)
+		v4l2_m2m_try_schedule(ctx->fh.m2m_ctx);
 }
 
 static mali_aeu_hw_ctx_t *get_curr_hw_ctx(struct v4l2_m2m_dev *m2mdev)

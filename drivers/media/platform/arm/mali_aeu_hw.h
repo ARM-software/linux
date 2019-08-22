@@ -4,6 +4,7 @@
  * Author: Jonathan Chai (jonathan.chai@arm.com)
  *
  */
+
 #ifndef _MALI_AEU_HW_H_
 #define _MALI_AEU_HW_H_
 
@@ -41,19 +42,6 @@
 
 #define AEU_CTRL_SRST		(1 << 16)
 #define AEU_CTRL_PM		(1 << 20)
-
-#define AES_IRQ_EOW		(1 << 0)
-#define AES_IRQ_CFGS		(1 << 1)
-#define AES_IRQ_ERR		(1 << 2)
-#define AES_IRQ_TERR		(1 << 3)
-
-#define AES_CTRL_EN		(1 << 0)
-#define AES_CMD_DS		(1 << 0)
-
-#define AES_AWQOS_BIT		0
-#define AES_AWCACHE_BIT		4
-#define AES_AWQOS_MASK		0xF
-#define AES_AWCACHE_MASK	0xF
 
 #define AEU_AES_BLOCK_INFO	_BLK_INFO(AEU_AES_OFFSET)
 #define AEU_AES_PIPELINE_INFO	_PPL_INFO(AEU_AES_OFFSET)
@@ -93,12 +81,18 @@
 #define AES_CTRL_EN		(1 << 0)
 #define AES_CMD_DS		(1 << 0)
 
+#define AES_AWQOS_BIT		0
+#define AES_AWCACHE_BIT		4
+#define AES_AWQOS_MASK		0xF
+#define AES_AWCACHE_MASK	0xF
+
 #define AEU_DS_BLOCK_INFO	_BLK_INFO(AEU_DS_OFFSET)
 #define AEU_DS_PIPELINE_INFO	_PPL_INFO(AEU_DS_OFFSET)
 #define AEU_DS_IRQ_RAW_STATUS	_DS_REG(0x0A0)
 #define AEU_DS_IRQ_CLEAR	_DS_REG(0x0A4)
 #define AEU_DS_IRQ_MASK		_DS_REG(0x0A8)
 #define AEU_DS_IRQ_STATUS	_DS_REG(0x0AC)
+#define AEU_DS_STATUS		_DS_REG(0x0B0)
 #define AEU_DS_CONTROL		_DS_REG(0x0D0)
 #define AEU_DS_CONFIG_VALID	_DS_REG(0x0D4)
 #define AEU_DS_PROG_LINE	_DS_REG(0x0D8)
@@ -196,8 +190,8 @@ struct mali_aeu_hw_info {
 };
 
 /* buffer type */
-#define AEU_HW_INPUT_BUF        0
-#define AEU_HW_OUTPUT_BUF       1
+#define AEU_HW_INPUT_BUF	0
+#define AEU_HW_OUTPUT_BUF	1
 
 /* AFBC flags (features) */
 #define MALI_AEU_HW_AFBC_YT	(1 << 0)
@@ -208,7 +202,7 @@ struct mali_aeu_hw_info {
 #define MALI_AEU_HW_AFBC_TH	(1 << 10)
 #define MALI_AEU_HW_AFBC_SC	(1 << 11)
 
-#define MALI_AEU_HW_PLANES      3
+#define MALI_AEU_HW_PLANES	3
 struct mali_aeu_hw_buf_fmt {
 	u32 buf_h, buf_w;
 	u32 nplanes;
@@ -219,7 +213,10 @@ struct mali_aeu_hw_buf_fmt {
 		enum aeu_hw_ds_format input_format;
 		enum aeu_hw_aes_format output_format;
 	};
-	u32 afbc_fmt_flags; /* only for output buffer */
+	/* For input format, it contains AFBC constraints.
+	 * For output format, it is modified by format modifiers.
+	 */
+	u32 afbc_fmt_flags;
 };
 
 struct mali_aeu_hw_buf_addr {
@@ -244,24 +241,27 @@ irqreturn_t mali_aeu_hw_irq_handler(int irq, void *data);
 mali_aeu_hw_ctx_t *
 mali_aeu_hw_init_ctx(struct mali_aeu_hw_device *hw_dev);
 void mali_aeu_hw_free_ctx(mali_aeu_hw_ctx_t *hw_ctx);
-void mali_aeu_hw_connect_m2m_device(struct mali_aeu_hw_device *hw_dev,
-		struct v4l2_m2m_dev *m2mdev,
-		mali_aeu_hw_ctx_t* (*cb)(struct v4l2_m2m_dev *));
 void mali_aeu_hw_set_buffer_fmt(mali_aeu_hw_ctx_t *hw_ctx,
-				struct mali_aeu_hw_buf_fmt *in_fmt,
-				struct mali_aeu_hw_buf_fmt *out_fmt);
+	struct mali_aeu_hw_buf_fmt *in_fmt,
+	struct mali_aeu_hw_buf_fmt *out_fmt);
 int mali_aeu_hw_ctx_commit(mali_aeu_hw_ctx_t *hw_ctx);
 void mali_aeu_hw_set_buf_addr(mali_aeu_hw_ctx_t *hw_ctx,
 	struct mali_aeu_hw_buf_addr *addr, u32 type);
-enum aeu_hw_aes_format mali_aeu_hw_convert_fmt(enum aeu_hw_ds_format ifmt);
+void mali_aeu_hw_connect_m2m_device(struct mali_aeu_hw_device *hw_dev,
+		struct v4l2_m2m_dev *m2mdev,
+		mali_aeu_hw_ctx_t* (*cb)(struct v4l2_m2m_dev *));
 struct v4l2_m2m_dev *
 mali_aeu_hw_get_m2m_device(struct mali_aeu_hw_device *hw_dev);
+enum aeu_hw_aes_format mali_aeu_hw_convert_fmt(enum aeu_hw_ds_format ifmt);
 u16 mali_aeu_hw_pix_fmt_planes(enum aeu_hw_ds_format ifmt);
 u32 mali_aeu_hw_plane_stride(struct mali_aeu_hw_buf_fmt *bf, u32 n);
 bool mali_aeu_hw_pix_fmt_native(enum aeu_hw_ds_format ifmt);
 u32 mali_aeu_hw_plane_size(struct mali_aeu_hw_buf_fmt *bf, u32 n);
 u32 mali_aeu_hw_g_reg(mali_aeu_hw_ctx_t *hw_ctx, u32 table, u32 reg);
 bool mali_aeu_hw_job_done(struct mali_aeu_hw_ctx *hw_ctx);
+void mali_aeu_hw_active(struct mali_aeu_hw_device *hw_dev);
+void mali_aeu_hw_deactive(struct mali_aeu_hw_device *hw_dev);
+int mali_aeu_soft_reset(struct mali_aeu_hw_device *hw_dev);
 void mali_aeu_hw_protected_mode(struct mali_aeu_hw_ctx *hw_ctx, u32 enable);
 void mali_aeu_hw_clear_ctrl(struct mali_aeu_hw_device *hw_dev);
 #endif
