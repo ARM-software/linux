@@ -98,6 +98,10 @@ struct komeda_dev_funcs {
 	 * for CHIP to report or add pipeline and component resources to CORE
 	 */
 	int (*enum_resources)(struct komeda_dev *mdev);
+	/* Optional: Notify HW to do some hw initialization, generally chip
+	 * supply this function to configure the register to default value
+	 */
+	int (*init_hw)(struct komeda_dev *mdev);
 	/** @cleanup: call to chip to cleanup komeda_dev->chip data */
 	void (*cleanup)(struct komeda_dev *mdev);
 	/** @connect_iommu: Optional, connect to external iommu */

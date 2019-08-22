@@ -15,6 +15,7 @@
 
 struct d77_perf {
 	u64	perf_mask;
+	u64	perf_valid_mask;
 	union {
 		u32 perf_counters[MAX_PERF_COUNTERS];
 		struct {

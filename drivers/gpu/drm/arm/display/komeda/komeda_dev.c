@@ -52,10 +52,6 @@ static const struct file_operations komeda_register_fops = {
 #ifdef CONFIG_DEBUG_FS
 static void komeda_debugfs_init(struct komeda_dev *mdev)
 {
-	if (!debugfs_initialized())
-		return;
-
-	mdev->debugfs_root = debugfs_create_dir("komeda", NULL);
 	debugfs_create_file("register", 0444, mdev->debugfs_root,
 			    mdev, &komeda_register_fops);
 }
@@ -241,7 +237,13 @@ struct komeda_dev *komeda_dev_create(struct device *dev)
 	mdev = devm_kzalloc(dev, sizeof(*mdev), GFP_KERNEL);
 	if (!mdev)
 		return ERR_PTR(-ENOMEM);
-
+#ifdef CONFIG_DEBUG_FS
+	if (debugfs_initialized()) {
+		mdev->debugfs_root = debugfs_create_dir("komeda", NULL);
+		if (IS_ERR(mdev->debugfs_root))
+			mdev->debugfs_root = NULL;
+	}
+#endif
 	mutex_init(&mdev->lock);
 
 	mdev->dev = dev;
@@ -293,6 +295,14 @@ struct komeda_dev *komeda_dev_create(struct device *dev)
 	if (err) {
 		DRM_ERROR("assemble display pipelines failed.\n");
 		goto disable_clk;
+	}
+
+	if (mdev->funcs->init_hw) {
+		err = mdev->funcs->init_hw(mdev);
+		if (err) {
+			DRM_ERROR("Initialize hardware failed!\n");
+			goto disable_clk;
+		}
 	}
 
 	dev->dma_parms = &mdev->dma_parms;
