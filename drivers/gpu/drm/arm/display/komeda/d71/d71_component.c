@@ -1792,6 +1792,14 @@ int d71_probe_block(struct d71_dev *d71,
 		err = d77_atu_vp_init(d71, blk, reg);
 		break;
 	case D77_BLK_TYPE_LPU_PERF:
+		pipe = d71->pipes[blk_id];
+		pipe->lpu_perf = reg;
+		pipe->perf = devm_kzalloc(d71->mdev->dev, sizeof(*pipe->perf),
+						GFP_KERNEL);
+		if (!pipe->perf) {
+			DRM_ERROR("Initial performance counters error!\n");
+			err = -ENOMEM;
+		}
 		break;
 	default:
 		DRM_ERROR("Unknown block (block_info: 0x%x) is found\n",
