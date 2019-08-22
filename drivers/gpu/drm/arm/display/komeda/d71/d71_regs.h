@@ -103,6 +103,8 @@
 #define GLB_IRQ_STATUS_ATU3	BIT(13)
 #define GLB_IRQ_STATUS_CU0	BIT(16)
 #define GLB_IRQ_STATUS_CU1	BIT(17)
+#define GLB_IRQ_STATUS_CBU0	BIT(18)
+#define GLB_IRQ_STATUS_CBU1	BIT(19)
 #define GLB_IRQ_STATUS_DOU0	BIT(24)
 #define GLB_IRQ_STATUS_DOU1	BIT(25)
 
@@ -110,12 +112,14 @@
 				 GLB_IRQ_STATUS_ATU0 |\
 				 GLB_IRQ_STATUS_ATU1 |\
 				 GLB_IRQ_STATUS_CU0 |\
+				 GLB_IRQ_STATUS_CBU0 |\
 				 GLB_IRQ_STATUS_DOU0)
 
 #define GLB_IRQ_STATUS_PIPE1	(GLB_IRQ_STATUS_LPU1 |\
 				 GLB_IRQ_STATUS_ATU2 |\
 				 GLB_IRQ_STATUS_ATU3 |\
 				 GLB_IRQ_STATUS_CU1 |\
+				 GLB_IRQ_STATUS_CBU1 |\
 				 GLB_IRQ_STATUS_DOU1)
 
 #define GLB_IRQ_STATUS_ATU	(GLB_IRQ_STATUS_ATU0 |\
@@ -175,10 +179,12 @@
 #define TBU_DOUTSTDCAPB_MASK	0x3F
 
 /* LPU_IRQ_BITS */
+#define LPU_IRQ_OVR		BIT(9)
 #define LPU_IRQ_IBSY		BIT(10)
 #define LPU_IRQ_ERR		BIT(11)
 #define LPU_IRQ_EOW		BIT(12)
 #define LPU_IRQ_PL0		BIT(13)
+#define LPU_IRQ_PCCPY		BIT(28)
 
 /* LPU_STATUS_BITS */
 #define LPU_STATUS_AXIED(x)	((x) & 0xF)
@@ -341,6 +347,13 @@
 #define L_INFO_CM		BIT(1)
 #define L_INFO_ABUF_SIZE(x)	(((x) >> 4) & 0x7)
 #define L_INFO_YUV_MAX_LINESZ(x)	(((x) >> 16) & 0xFFFF)
+
+
+/* LPU PERF registers */
+#define PERF_MASK0		0x0D4
+#define PERF_MASK1		0x0D8
+
+#define PERF_Cx(n)		(0x0E0 + ((n) << 2))
 
 /* Scaler registers */
 #define SC_COEFFTAB		0x0DC

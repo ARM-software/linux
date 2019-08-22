@@ -75,6 +75,20 @@ static u64 get_lpu_event(struct d71_pipeline *d71_pipeline)
 			malidp_write32_mask(reg, LPU_TBU_STATUS, restore, 0);
 	}
 
+	if (raw_status & LPU_IRQ_PCCPY) {
+		struct d77_perf *pf = d71_pipeline->perf;
+		u32 __iomem *reg = d71_pipeline->lpu_perf;
+		int i;
+
+		for (i = 0; i < MAX_PERF_COUNTERS; i++) {
+			if (!has_bit(i, pf->perf_mask))
+				continue;
+
+			pf->perf_counters[i] = malidp_read32(reg, PERF_Cx(i));
+		}
+	}
+
+
 	malidp_write32(reg, BLK_IRQ_CLEAR, raw_status);
 	return evts;
 }
@@ -239,7 +253,7 @@ d71_irq_handler(struct komeda_dev *mdev, struct komeda_events *evts)
 
 #define ENABLED_GCU_IRQS	(GCU_IRQ_CVAL0 | GCU_IRQ_CVAL1 | \
 				 GCU_IRQ_MODE | GCU_IRQ_ERR)
-#define ENABLED_LPU_IRQS	(LPU_IRQ_IBSY | LPU_IRQ_ERR | LPU_IRQ_EOW)
+#define ENABLED_LPU_IRQS	(LPU_IRQ_IBSY | LPU_IRQ_ERR | LPU_IRQ_EOW | LPU_IRQ_PCCPY)
 #define ENABLED_CU_IRQS		(CU_IRQ_OVR | CU_IRQ_ERR)
 #define ENABLED_DOU_IRQS	(DOU_IRQ_UND | DOU_IRQ_ERR)
 #define ENABLED_ATU_IRQS	(ATU_IRQ_ERR)
@@ -381,6 +395,25 @@ static void d71_cleanup(struct komeda_dev *mdev)
 
 	devm_kfree(mdev->dev, d71);
 	mdev->chip_data = NULL;
+}
+
+static void d77_cleanup(struct komeda_dev *mdev)
+{
+	struct d71_dev *d77 = mdev->chip_data;
+	u32 i;
+
+	if (!d77)
+		return;
+
+	for (i = 0; i < d77->num_pipelines; i++) {
+		struct d71_pipeline *pipe = d77->pipes[i];
+
+		if (!pipe || !pipe->perf)
+			continue;
+		devm_kfree(mdev->dev, pipe->perf);
+	}
+
+	d71_cleanup(mdev);
 }
 
 static int d71_enum_resources(struct komeda_dev *mdev)
@@ -576,6 +609,31 @@ static void d71_init_fmt_tbl(struct komeda_dev *mdev)
 	table->n_formats = ARRAY_SIZE(d71_format_caps_table);
 }
 
+static void d77_pipeline_enable_perf(struct d71_pipeline *pipe)
+{
+	if (!pipe->perf || !pipe->perf->perf_mask)
+		return;
+
+	malidp_write32(pipe->lpu_perf, PERF_MASK0,
+			lower_32_bits(pipe->perf->perf_mask));
+	malidp_write32(pipe->lpu_perf, PERF_MASK1,
+			upper_32_bits(pipe->perf->perf_mask));
+	malidp_write32(pipe->lpu_perf, BLK_CONTROL, BLK_CTRL_EN);
+}
+
+static void d77_flush(struct komeda_dev *mdev, int master_id, u32 active_pipes)
+{
+	struct d71_dev *d77 = mdev->chip_data;
+
+	if (has_bit(0, active_pipes))
+		d77_pipeline_enable_perf(d77->pipes[0]);
+
+	if (has_bit(1, active_pipes))
+		d77_pipeline_enable_perf(d77->pipes[1]);
+
+	d71_flush(mdev, master_id, active_pipes);
+}
+
 static int d71_connect_iommu(struct komeda_dev *mdev)
 {
 	struct d71_dev *d71 = mdev->chip_data;
@@ -638,6 +696,21 @@ static const struct komeda_dev_funcs d71_chip_funcs = {
 	.dump_register		= d71_dump,
 };
 
+static const struct komeda_dev_funcs d77_chip_funcs = {
+	.init_format_table	= d71_init_fmt_tbl,
+	.enum_resources		= d71_enum_resources,
+	.cleanup		= d77_cleanup,
+	.irq_handler		= d71_irq_handler,
+	.enable_irq		= d71_enable_irq,
+	.disable_irq		= d71_disable_irq,
+	.on_off_vblank		= d71_on_off_vblank,
+	.change_opmode		= d71_change_opmode,
+	.flush			= d77_flush,
+	.connect_iommu		= d71_connect_iommu,
+	.disconnect_iommu	= d71_disconnect_iommu,
+	.dump_register		= d71_dump,
+};
+
 const struct komeda_dev_funcs *
 d71_identify(u32 __iomem *reg_base, struct komeda_chip_info *chip)
 {
@@ -651,8 +724,10 @@ d71_identify(u32 __iomem *reg_base, struct komeda_chip_info *chip)
 	switch (product_id) {
 	case MALIDP_D71_PRODUCT_ID:
 	case MALIDP_D32_PRODUCT_ID:
-	case MALIDP_D77_PRODUCT_ID:
 		funcs = &d71_chip_funcs;
+		break;
+	case MALIDP_D77_PRODUCT_ID:
+		funcs = &d77_chip_funcs;
 		break;
 	default:
 		funcs = NULL;
