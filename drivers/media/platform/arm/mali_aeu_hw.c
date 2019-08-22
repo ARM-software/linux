@@ -4,8 +4,9 @@
  * Author: Jonathan Chai (jonathan.chai@arm.com)
  *
  */
+
+#include <linux/clk.h>
 #include <linux/device.h>
-#include <linux/interrupt.h>
 #include <linux/delay.h>
 #include "mali_aeu_hw.h"
 #include "mali_aeu_io.h"
@@ -23,10 +24,19 @@
 #define MALI_AEU_HW_EVENT_AES_ERR	(1 << 5)
 #define MALI_AEU_HW_EVENT_AES_TERR	(1 << 6)
 
+enum mali_aeu_hw_status {
+	AEU_ACTIVE,
+	AEU_DEACTIVE,
+};
+
 struct mali_aeu_hw_device {
 	void __iomem	*reg;
 	struct device	*dev;
 	struct v4l2_m2m_dev *m2mdev;
+	/* Must be held when accessing 'status' */
+	struct mutex power_mutex;
+	enum mali_aeu_hw_status status;
+	struct clk	*aclk;
 	/* protect for access registers and status */
 	spinlock_t	reglock;
 	u32	irq_on: 1,
@@ -168,7 +178,7 @@ enum aeu_hw_aes_format mali_aeu_hw_convert_fmt(enum aeu_hw_ds_format ifmt)
 
 u16 mali_aeu_hw_pix_fmt_planes(enum aeu_hw_ds_format ifmt)
 {
-	u32 i = mali_aeu_hw_ds_fmt_index(ifmt);;
+	u32 i = mali_aeu_hw_ds_fmt_index(ifmt);
 
 	if (i == 0xFFFFFFFF)
 		return 0xFFFF;
@@ -208,7 +218,7 @@ void mali_aeu_hw_clear_ctrl(struct mali_aeu_hw_device *hw_dev)
 	spin_unlock_irqrestore(&hw_dev->reglock, flags);
 }
 
-static int mali_aeu_soft_reset(struct mali_aeu_hw_device *hw_dev)
+int mali_aeu_soft_reset(struct mali_aeu_hw_device *hw_dev)
 {
 	unsigned long flags;
 	unsigned int count, val;
@@ -238,6 +248,32 @@ static int mali_aeu_soft_reset(struct mali_aeu_hw_device *hw_dev)
 exit_reset:
 	spin_unlock_irqrestore(&hw_dev->reglock, flags);
 	return ret;
+}
+
+static void mali_aeu_hw_disable_irq(struct mali_aeu_hw_device *hw_dev)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&hw_dev->reglock, flags);
+	if (hw_dev->irq_on) {
+		mali_aeu_write(hw_dev->reg, AEU_AES_IRQ_MASK, 0);
+		mali_aeu_write(hw_dev->reg, AEU_DS_IRQ_MASK, 0);
+		hw_dev->irq_on = 0;
+	}
+	spin_unlock_irqrestore(&hw_dev->reglock, flags);
+}
+
+static void mali_aeu_hw_disable(struct mali_aeu_hw_device *hw_dev)
+{
+	unsigned long flags;
+
+	mali_aeu_hw_disable_irq(hw_dev);
+
+	spin_lock_irqsave(&hw_dev->reglock, flags);
+	mali_aeu_write(hw_dev->reg, AEU_AES_CONTROL, 0);
+	mali_aeu_write(hw_dev->reg, AEU_DS_CONTROL, 0);
+	mali_aeu_write(hw_dev->reg, AEU_DS_STATUS, 0);
+	spin_unlock_irqrestore(&hw_dev->reglock, flags);
 }
 
 static void mali_aeu_hw_enable_irq(struct mali_aeu_hw_device *hw_dev)
@@ -478,25 +514,35 @@ mali_aeu_hw_init(void __iomem *r, struct device *dev, struct device_node *np,
 {
 	struct mali_aeu_hw_device *hw_dev = NULL;
 	u32 v;
+	struct clk *aclk = devm_clk_get(dev, "aclk");
+
+	if (IS_ERR(aclk)) {
+		dev_err(dev, "aclk failed!\n");
+		return NULL;
+	}
 
 	WARN_ON(r == NULL);
-	/* read registers to ensure adu */
+	clk_prepare_enable(aclk);
+
+	/* read registers to ensure aeu */
 	v = mali_aeu_read(r, AEU_BLOCK_INFO);
 	if ((v & 0xFFFF) != 0x402)
-		return NULL;
+		goto init_err;
 
 	hw_dev = devm_kzalloc(dev, sizeof(*hw_dev), GFP_KERNEL);
 	if (!hw_dev)
-		return NULL;
+		goto init_err;
 
 	hw_dev->dev = dev;
 	hw_dev->reg = r;
+	hw_dev->aclk = aclk;
 	spin_lock_init(&hw_dev->reglock);
+	mutex_init(&hw_dev->power_mutex);
 
 	if (mali_aeu_soft_reset(hw_dev)) {
 		devm_kfree(dev, hw_dev);
 		dev_err(dev, "%s: hardware reset error!\n", __func__);
-		return NULL;
+		goto init_err;
 	}
 
 	if (hw_info)
@@ -505,27 +551,21 @@ mali_aeu_hw_init(void __iomem *r, struct device *dev, struct device_node *np,
 	mali_aeu_axi_prop_init(hw_dev, parent, np, NUM_AXI_PROPS, axi_props);
 	mali_aeu_hw_enable_irq(hw_dev);
 
+	mali_aeu_hw_deactive(hw_dev);
 	return hw_dev;
-}
 
-static void mali_aeu_hw_disable_irq(struct mali_aeu_hw_device *hw_dev)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&hw_dev->reglock, flags);
-	if (hw_dev->irq_on) {
-		mali_aeu_write(hw_dev->reg, AEU_AES_IRQ_MASK, 0);
-		mali_aeu_write(hw_dev->reg, AEU_DS_IRQ_MASK, 0);
-		hw_dev->irq_on = 0;
-	}
-	spin_unlock_irqrestore(&hw_dev->reglock, flags);
+init_err:
+	clk_disable_unprepare(aclk);
+	devm_clk_put(dev, aclk);
+	return NULL;
 }
 
 void mali_aeu_hw_exit(struct mali_aeu_hw_device *hw_dev)
 {
 	if (hw_dev) {
-		/* TODO: clear status */
-		mali_aeu_hw_disable_irq(hw_dev);
+		mali_aeu_hw_disable(hw_dev);
+		mali_aeu_hw_deactive(hw_dev);
+		devm_clk_put(hw_dev->dev, hw_dev->aclk);
 		devm_kfree(hw_dev->dev, hw_dev);
 	}
 }
@@ -558,12 +598,12 @@ irqreturn_t mali_aeu_hw_irq_handler(int irq, void *data)
 	if (aeu_irq & AEU_IRQ_AES) {
 		val = mali_aeu_read(hw_dev->reg, AEU_AES_IRQ_STATUS);
 		if (val & AES_IRQ_EOW) {
-			dev_info(hw_dev->dev, "AES EOW (irq)\n");
+			dev_dbg(hw_dev->dev, "AES EOW (irq)\n");
 			ievnt |= MALI_AEU_HW_EVENT_AES_EOW;
 			iret = IRQ_WAKE_THREAD;
 		}
 		if (val & AES_IRQ_CFGS) {
-			dev_info(hw_dev->dev, "AES CFGS (irq)\n");
+			dev_dbg(hw_dev->dev, "AES CFGS (irq)\n");
 			ievnt |= MALI_AEU_HW_EVENT_AES_CFGS;
 			val &= ~AES_IRQ_CFGS;
 		}
@@ -602,11 +642,11 @@ irqreturn_t mali_aeu_hw_irq_handler(int irq, void *data)
 			ievnt |= MALI_AEU_HW_EVENT_DS_ERR;
 		}
 		if (val & DS_IRQ_CVAL) {
-			dev_info(hw_dev->dev, "DS CVAL (irq)\n");
+			dev_dbg(hw_dev->dev, "DS CVAL (irq)\n");
 			ievnt |= MALI_AEU_HW_EVENT_DS_CVAL;
 		}
 		if (val & DS_IRQ_PL) {
-			dev_info(hw_dev->dev, "DS PL (irq)\n");
+			dev_dbg(hw_dev->dev, "DS PL (irq)\n");
 			ievnt |= MALI_AEU_HW_EVENT_DS_PL;
 		}
 
@@ -646,6 +686,7 @@ mali_aeu_hw_init_ctx(struct mali_aeu_hw_device *hw_dev)
 		dev_err(hw_dev->dev, "%s: dumping register is disabled!\n",
 			__func__);
 #endif
+
 	return hw_ctx;
 }
 
@@ -669,9 +710,12 @@ static void mali_aeu_hw_set_input_size(mali_aeu_hw_ctx_t *hw_ctx, u32 h, u32 w)
 	hw_ctx->input_size_v = h;
 
 	hw_ctx->aes_h = 128; /* it is fixed size */
-	hw_ctx->aes_v = aeu_hw_ceil(hw_ctx->input_size_h, 128) *
-			aeu_hw_ceil(hw_ctx->input_size_v, 16);
-	hw_ctx->aes_v <<= 4;
+	if (hw_ctx->afbc_fmt_flags & MALI_AEU_HW_AFBC_TH)
+		hw_ctx->aes_v = aeu_hw_ceil(hw_ctx->input_size_h, 128) *
+				aeu_hw_ceil(hw_ctx->input_size_v, 128) << 7;
+	else
+		hw_ctx->aes_v = aeu_hw_ceil(hw_ctx->input_size_h, 128) *
+				aeu_hw_ceil(hw_ctx->input_size_v, 16) << 4;
 }
 
 void mali_aeu_hw_set_buffer_fmt(mali_aeu_hw_ctx_t *hw_ctx,
@@ -946,6 +990,9 @@ u32 mali_aeu_hw_plane_stride(struct mali_aeu_hw_buf_fmt *bf, u32 n)
 	bool is_yuv420_p3 = false;
 	u32 w = bf->buf_w;
 
+	if (bf->stride[n] != 0)
+		return bf->stride[n];
+
 	if (bf->buf_type == AEU_HW_INPUT_BUF) {
 		idx = mali_aeu_hw_ds_fmt_index(bf->input_format);
 		align = aeu_hw_info.raddr_align;
@@ -980,7 +1027,10 @@ u32 mali_aeu_hw_plane_stride(struct mali_aeu_hw_buf_fmt *bf, u32 n)
 u32 mali_aeu_hw_plane_size(struct mali_aeu_hw_buf_fmt *bf, u32 n)
 {
 	u32 h = bf->buf_h;
+	if(bf->size[n] > 0)
+		return bf->size[n];
 
+	/* if we doesn't get plane size from user mode, calculate it by ourself */
 	if (n == 0)
 		goto calc_size;
 
@@ -1003,4 +1053,31 @@ u32 mali_aeu_hw_g_reg(mali_aeu_hw_ctx_t *hw_ctx, u32 table, u32 reg)
 #else
 	return 0;
 #endif
+}
+
+static
+int mali_aeu_hw_set_status(struct mali_aeu_hw_device *hw_dev,
+	enum mali_aeu_hw_status s)
+{
+	int ret = 1;
+
+	mutex_lock(&hw_dev->power_mutex);
+	if (hw_dev->status != s) {
+		hw_dev->status = s;
+		ret = 0;
+	}
+	mutex_unlock(&hw_dev->power_mutex);
+	return ret;
+}
+
+void mali_aeu_hw_active(struct mali_aeu_hw_device *hw_dev)
+{
+	if (!mali_aeu_hw_set_status(hw_dev, AEU_ACTIVE))
+		clk_prepare_enable(hw_dev->aclk);
+}
+
+void mali_aeu_hw_deactive(struct mali_aeu_hw_device *hw_dev)
+{
+	if (!mali_aeu_hw_set_status(hw_dev, AEU_DEACTIVE))
+		clk_disable_unprepare(hw_dev->aclk);
 }

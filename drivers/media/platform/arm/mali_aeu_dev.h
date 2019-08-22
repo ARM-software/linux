@@ -4,6 +4,7 @@
  * Author: Jonathan Chai (jonathan.chai@arm.com)
  *
  */
+
 #ifndef _MALI_AEU_DEV_H_
 #define _MALI_AEU_DEV_H_
 
@@ -20,6 +21,11 @@
 
 #define AEU_NAME	"mali-aeu"
 
+enum aeu_device_status {
+	AEU_ACTIVE = 0,
+	AEU_PAUSED,
+};
+
 struct mali_aeu_device {
 	struct device			*dev;
 
@@ -27,6 +33,7 @@ struct mali_aeu_device {
 	struct video_device		vdev;
 	struct v4l2_m2m_dev		*m2mdev;
 	struct iommu_domain		*iommu;
+	enum aeu_device_status		status;
 	struct device_dma_parameters	dma_parms;
 	/* protect access in different instance */
 	struct mutex			aeu_mutex;
@@ -35,9 +42,15 @@ struct mali_aeu_device {
 	struct mali_aeu_hw_info		hw_info;
 
 	struct dentry			*dbg_folder;
+
+#if defined(CONFIG_PM_SLEEP)
+	struct notifier_block aeu_pm_nb;
+#endif
 };
 
 int mali_aeu_device_init(struct mali_aeu_device *adev,
 			 struct platform_device *pdev, struct dentry *parent);
 int mali_aeu_device_destroy(struct mali_aeu_device *adev);
+void mali_aeu_paused(struct mali_aeu_device *adev);
+void mali_aeu_resume(struct mali_aeu_device *adev);
 #endif
