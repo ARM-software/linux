@@ -704,7 +704,8 @@ static void d71_component_disable(struct komeda_component *c)
 	}
 }
 
-static void compiz_enable_input(u32 __iomem *id_reg,
+static void compiz_enable_input(struct komeda_component *c,
+				u32 __iomem *id_reg,
 				u32 __iomem *cfg_reg,
 				u32 input_hw_id,
 				struct komeda_compiz_input_cfg *cin)
@@ -726,6 +727,9 @@ static void compiz_enable_input(u32 __iomem *id_reg,
 	malidp_write32(cfg_reg, CU_INPUT0_OFFSET,
 		       HV_OFFSET(cin->hoffset, cin->voffset));
 	malidp_write32(cfg_reg, CU_INPUT0_CONTROL, ctrl);
+
+	if (to_compiz(c)->support_channel_scaling)
+		malidp_write32(cfg_reg, CU_INPUT0_CSCALE, cin->channel_scaling);
 }
 
 static void d71_compiz_update(struct komeda_component *c,
@@ -740,7 +744,7 @@ static void d71_compiz_update(struct komeda_component *c,
 		id_reg = reg + index;
 		cfg_reg = reg + index * CU_PER_INPUT_REGS;
 		if (state->active_inputs & BIT(index)) {
-			compiz_enable_input(id_reg, cfg_reg,
+			compiz_enable_input(c, id_reg, cfg_reg,
 					    to_d71_input_id(state, index),
 					    &st->cins[index]);
 		} else {
@@ -814,6 +818,9 @@ static int d71_compiz_init(struct d71_dev *d71,
 		return PTR_ERR(c);
 
 	compiz = to_compiz(c);
+
+	if (komeda_product_match(d71->mdev, MALIDP_D77_PRODUCT_ID))
+		compiz->support_channel_scaling = true;
 
 	set_range(&compiz->hsize, D71_MIN_LINE_SIZE, d71->max_line_size);
 	set_range(&compiz->vsize, D71_MIN_VERTICAL_SIZE, d71->max_vsize);

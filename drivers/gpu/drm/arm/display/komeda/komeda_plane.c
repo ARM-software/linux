@@ -62,6 +62,7 @@ komeda_plane_init_data_flow(struct drm_plane_state *st,
 	dflow->en_atu = !!kplane_st->vp_outrect;
 	dflow->pixel_blend_mode = st->pixel_blend_mode;
 	komeda_complete_data_flow_cfg(kplane->layer, dflow, fb);
+	dflow->channel_scaling = kplane_st->channel_scaling;
 
 	return 0;
 }
@@ -159,6 +160,8 @@ static void komeda_plane_reset(struct drm_plane *plane)
 		state->base.alpha = DRM_BLEND_ALPHA_OPAQUE;
 		state->base.color_encoding = DRM_COLOR_YCBCR_BT601;
 		state->base.color_range = DRM_COLOR_YCBCR_LIMITED_RANGE;
+		/* Disable the color channel scaling by maximum value.*/
+		state->channel_scaling = KOMEDA_MAX_CHANNEL_SCALING;
 		if (kplane->layer)
 			state->base.zpos = kplane->layer->base.id;
 		else
@@ -173,6 +176,7 @@ static struct drm_plane_state *
 komeda_plane_atomic_duplicate_state(struct drm_plane *plane)
 {
 	struct komeda_plane_state *new;
+	struct komeda_plane_state *old;
 
 	if (WARN_ON(!plane->state))
 		return NULL;
@@ -182,6 +186,10 @@ komeda_plane_atomic_duplicate_state(struct drm_plane *plane)
 		return NULL;
 
 	__drm_atomic_helper_plane_duplicate_state(plane, &new->base);
+
+	old = to_kplane_st(plane->state);
+
+	new->channel_scaling = old->channel_scaling;
 
 	return &new->base;
 }
@@ -219,6 +227,8 @@ komeda_plane_atomic_get_property(struct drm_plane *plane,
 		*val = (st->layer_project) ? st->layer_project->base.id : 0;
 	else if (property == kplane->prop_layer_quad)
 		*val = (st->layer_quad) ? st->layer_quad->base.id : 0;
+	else if (property == kplane->prop_channel_scaling)
+		*val = st->channel_scaling;
 
 	return 0;
 }
@@ -287,6 +297,8 @@ komeda_plane_atomic_set_property(struct drm_plane *plane,
 		kplane_st->mat_coeff_changed = replaced;
 	} else if (property == kplane->prop_viewport_clamp) {
 		kplane_st->viewport_clamp = !!val;
+	} else if (property == kplane->prop_channel_scaling) {
+		kplane_st->channel_scaling = val;
 	}
 
 	return ret;
@@ -413,6 +425,31 @@ attach_atu_property_to_plane(struct komeda_kms_dev *kms,
 	return 0;
 }
 
+static int
+create_plane_private_properties(struct komeda_plane *kplane)
+{
+	struct drm_plane *plane = &kplane->base;
+	struct komeda_layer *layer = kplane->layer;
+	struct komeda_atu *atu = kplane->atu;
+	struct komeda_compiz *compiz = NULL;
+	struct drm_property *prop = NULL;
+
+	u32 flags = DRM_MODE_PROP_ATOMIC;
+
+	compiz = layer ? layer->base.pipeline->compiz : atu->base.pipeline->compiz;
+	if (compiz->support_channel_scaling) {
+		prop = drm_property_create_range(plane->dev, flags, "channel_scaling",
+					         0, KOMEDA_MAX_CHANNEL_SCALING);
+		if (!prop)
+			return -ENOMEM;
+		kplane->prop_channel_scaling = prop;
+		drm_object_attach_property(&plane->base, kplane->prop_channel_scaling,
+				           KOMEDA_MAX_CHANNEL_SCALING);
+	}
+
+	return 0;
+}
+
 static int komeda_plane_add(struct komeda_kms_dev *kms,
 			    struct komeda_layer *layer, struct komeda_atu *atu)
 {
@@ -455,6 +492,10 @@ static int komeda_plane_add(struct komeda_kms_dev *kms,
 		attach_atu_property_to_plane(kms, kplane, atu);
 
 	drm_plane_helper_add(plane, &komeda_plane_helper_funcs);
+
+	err = create_plane_private_properties(kplane);
+	if (err)
+		goto cleanup;
 
 	err = drm_plane_create_alpha_property(plane);
 	if (err)

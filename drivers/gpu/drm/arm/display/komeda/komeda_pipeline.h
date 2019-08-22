@@ -19,6 +19,7 @@
 #define KOMEDA_COMPONENT_N_INPUTS	5
 #define KOMEDA_PIPELINE_MAX_ATU		2
 #define KOMEDA_SPLINE_COEFF_SIZE	1024
+#define KOMEDA_MAX_CHANNEL_SCALING	0x3FFFFFFF
 
 /* pipeline component IDs */
 enum {
@@ -293,12 +294,14 @@ struct komeda_scaler_state {
 struct komeda_compiz {
 	struct komeda_component base;
 	struct malidp_range hsize, vsize;
+	bool support_channel_scaling;
 };
 
 struct komeda_compiz_input_cfg {
 	u16 hsize, vsize;
 	u16 hoffset, voffset;
 	u8 pixel_blend_mode, layer_alpha;
+	u32 channel_scaling;
 };
 
 struct komeda_compiz_state {
@@ -453,6 +456,7 @@ struct komeda_data_flow_cfg {
 	u32 rot;
 	int blending_zorder;
 	u8 pixel_blend_mode, layer_alpha;
+	u32 channel_scaling;
 	u8 en_scaling : 1,
 	   en_img_enhancement : 1,
 	   en_split : 1,

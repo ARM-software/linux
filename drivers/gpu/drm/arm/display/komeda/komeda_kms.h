@@ -56,6 +56,8 @@ struct komeda_plane {
 	struct drm_property *prop_layer_quad;
 	/** @prop_viewport_clamp: represents clamp effect */
 	struct drm_property *prop_viewport_clamp;
+	/** @prop_channel_scaling: represents channel scaling*/
+	struct drm_property *prop_channel_scaling;
 };
 
 /**
@@ -85,6 +87,8 @@ struct komeda_plane_state {
 		mat_coeff_changed : 1,
 	/** @vp_rect_changed: the value in "vp_outrect" changed or not */
 		  vp_rect_changed : 1;
+
+	u32 channel_scaling;
 
 	struct drm_property_blob *spline_coeff_r;
 	struct drm_property_blob *spline_coeff_g;
