@@ -26,6 +26,12 @@
 	(__cond) ? 0 : -ETIMEDOUT;			\
 })
 
+struct malidp_rect
+{
+    u32 x, y;
+    u32 w, h;
+};
+
 /* the restriction of range is [start, end] */
 struct malidp_range {
 	u32 start;

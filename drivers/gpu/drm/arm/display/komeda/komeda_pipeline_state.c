@@ -295,6 +295,82 @@ komeda_rotate_data_flow(struct komeda_data_flow_cfg *dflow, u32 rot)
 }
 
 static int
+komeda_atu_vp_validate(struct komeda_atu *atu,
+		       struct komeda_atu_vp_state *v_st,
+		       struct komeda_data_flow_cfg *dflow,
+		       struct komeda_plane_state *kplane_st)
+{
+	struct drm_plane_state *plane_st = &kplane_st->base;
+	struct komeda_fb *kfb = to_kfb(plane_st->fb);
+	struct malidp_rect *vp_rect;
+
+	if (!komeda_fb_is_layer_supported(kfb, atu->layer_type, dflow->rot))
+		return -EINVAL;
+
+	if (komeda_fb_check_src_coords(kfb, dflow->in_x, dflow->in_y,
+					dflow->in_w, dflow->in_h))
+		return -EINVAL;
+
+	/* Check against max line size */
+	if (dflow->in_w > atu->vp_h_size.end)
+		return -EINVAL;
+
+	v_st->plane = plane_st->plane;
+	v_st->fb = plane_st->fb;
+	v_st->addr = komeda_fb_get_pixel_addr(kfb, dflow->in_x, dflow->in_y, 0);
+
+	if (!!kplane_st->layer_project)
+		v_st->vp_type = ATU_VP_TYPE_PROJ;
+	else if (!!kplane_st->layer_quad)
+		v_st->vp_type = ATU_VP_TYPE_QUAD;
+	else
+		v_st->vp_type = ATU_VP_TYPE_NONE;
+
+	vp_rect = kplane_st->vp_outrect->data;
+	v_st->out_hsize = vp_rect->w;
+	v_st->out_vsize = vp_rect->h;
+	v_st->out_hoffset = vp_rect->x;
+	v_st->out_voffset = vp_rect->y;
+	v_st->buf_hsize = kfb->aligned_w;
+	v_st->buf_vsize = kfb->aligned_h;
+
+	v_st->buf_hoffset = dflow->in_x;
+	v_st->buf_voffset = dflow->in_y;
+
+	v_st->left_crop = dflow->in_x;
+	v_st->top_crop  = dflow->in_y;
+	v_st->bottom_crop = kfb->aligned_h - dflow->in_y - dflow->in_h;
+	v_st->right_crop  = kfb->aligned_w - dflow->in_x - dflow->in_w;
+
+	return 0;
+}
+
+int komeda_atu_set_vp(struct komeda_atu *atu,
+		      struct komeda_plane_state *kplane_st,
+		      struct komeda_data_flow_cfg *dflow)
+{
+	struct drm_plane_state *plane_st = &kplane_st->base;
+	struct komeda_component_state *c_st;
+	struct komeda_atu_state *st;
+	struct komeda_plane *kplane = to_kplane(kplane_st->base.plane);
+	bool is_left = (kplane->layer) ? true : false;
+	struct malidp_rect *vp_rect = kplane_st->vp_outrect->data;
+
+	if (!in_range(&atu->vp_h_size, vp_rect->w) ||
+	    !in_range(&atu->vp_v_size, vp_rect->h))
+		return -EINVAL;
+
+	c_st = komeda_component_get_state_and_set_user(&atu->base,
+			plane_st->state, plane_st->crtc, plane_st->crtc);
+	if (IS_ERR(c_st))
+		return PTR_ERR(c_st);
+	st = to_atu_st(c_st);
+
+	return komeda_atu_vp_validate(atu, (is_left) ? &st->left : &st->right,
+				      dflow, kplane_st);
+}
+
+static int
 komeda_validate_plane_color(struct komeda_component *c,
 			    struct komeda_color_manager *color_mgr,
 			    struct komeda_color_state *color_st,
