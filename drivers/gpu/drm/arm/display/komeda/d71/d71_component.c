@@ -534,6 +534,95 @@ static u32 get_blk_max_line_size(struct d71_dev *d71, u32 __iomem *reg)
 	return get_blk_max_line_size2(d71, reg, d71->max_line_size);
 }
 
+static void
+d77_atu_vp_update(struct komeda_atu_vp_state *v_st, u32 payload,
+		u32 __iomem *reg)
+{
+	u32 i;
+	dma_addr_t addr = v_st->addr;
+
+	malidp_write32(reg, BLK_P0_PTR_LOW, lower_32_bits(addr));
+	malidp_write32(reg, BLK_P0_PTR_HIGH, upper_32_bits(addr));
+	addr += payload;
+	malidp_write32(reg, BLK_P1_PTR_LOW, lower_32_bits(addr));
+	malidp_write32(reg, BLK_P1_PTR_HIGH, upper_32_bits(addr));
+
+	malidp_write32(reg, BLK_IN_SIZE,/* buffer size */
+			HV_SIZE(v_st->buf_hsize, v_st->buf_vsize));
+	malidp_write32(reg, ATU_VP_BUF_OFFSET,
+			HV_SIZE(v_st->buf_hoffset, v_st->buf_voffset));
+	malidp_write32(reg, BLK_SIZE,	/* out size */
+			HV_SIZE(v_st->out_hsize, v_st->out_vsize));
+	malidp_write32(reg, ATU_VP_OUT_OFFSET,
+			HV_SIZE(v_st->out_hoffset, v_st->out_voffset));
+
+	malidp_write32(reg, ATU_VP_H_CROP,
+			HV_SIZE(v_st->left_crop, v_st->right_crop));
+	malidp_write32(reg, ATU_VP_V_CROP,
+			HV_SIZE(v_st->top_crop, v_st->bottom_crop));
+
+	i = ((1 << 16) / (v_st->out_vsize - 1)) << 16; /* INTERP */
+	i |= ATU_VP_EN;
+	malidp_write32(reg, BLK_CONTROL, i);
+}
+
+static void d77_atu_update(struct komeda_component *c,
+			   struct komeda_component_state *state)
+{
+	struct komeda_atu_state *st = to_atu_st(state);
+	struct komeda_atu *atu = to_atu(c);
+	struct drm_plane_state *plane_st = NULL;
+	struct komeda_fb *kfb = NULL;
+	u32 v, mask = L_TBU_EN | ATU_EN | ATU_SB | ATU_MODE(0x7);
+	u32 __iomem *atu_reg = c->reg;
+	u32 __iomem *vp0_reg = atu->reg[0];
+	u32 __iomem *vp1_reg = atu->reg[1];
+
+	malidp_write32(atu_reg, ATU_PALPHA, D71_PALPHA_DEF_MAP);
+
+	if (st->left.plane) {
+		plane_st = st->left.plane->state;
+		kfb = to_kfb(plane_st->fb);
+		d77_atu_vp_update(&st->left, kfb->offset_payload,
+				  vp0_reg);
+	} else {
+		malidp_write32_mask(vp0_reg, BLK_CONTROL, ATU_VP_EN, 0);
+	}
+
+	if (st->right.plane) {
+		plane_st = st->right.plane->state;
+		kfb = to_kfb(plane_st->fb);
+		d77_atu_vp_update(&st->right, kfb->offset_payload,
+				  vp1_reg);
+	} else {
+		malidp_write32_mask(vp1_reg, BLK_CONTROL, ATU_VP_EN, 0);
+	}
+
+	v = HV_SIZE(st->hsize, st->vsize);
+	malidp_write32(atu_reg, BLK_IN_SIZE, v);
+	malidp_write32(atu_reg, ATU_FMT, kfb->format_caps->hw_id);
+	malidp_write32(atu_reg, AD_CONTROL, to_ad_ctrl(kfb->base.modifier));
+
+	v |= ATU_MODE(st->mode) | ATU_EN;
+	if (st->single_buffer_enabled)
+		v |= ATU_SB;
+	if (kfb->is_va)
+		v |= L_TBU_EN;
+	malidp_write32_mask(atu_reg, BLK_CONTROL, mask, v);
+}
+
+static void d77_atu_disable(struct komeda_component *c)
+{
+	u32 __iomem *reg = c->reg;
+	struct komeda_atu *atu = to_atu(c);
+	int i;
+
+	malidp_write32(reg, AD_CONTROL, 0);
+	malidp_write32(reg, BLK_CONTROL, 0);
+	for (i = 0; i < atu->n_vp; i++)
+		malidp_write32(atu->reg[i], BLK_CONTROL, 0);
+}
+
 static void d77_atu_dump(struct komeda_component *c, struct seq_file *sf)
 {
 	struct komeda_atu *atu = to_atu(c);
@@ -618,9 +707,9 @@ static void d77_atu_dump(struct komeda_component *c, struct seq_file *sf)
 }
 
 static struct komeda_component_funcs d77_atu_funcs = {
-	.disable	= NULL,
+	.disable	= d77_atu_disable,
 	.dump_register	= d77_atu_dump,
-	.update		= NULL,
+	.update		= d77_atu_update,
 };
 
 static int d77_atu_init(struct d71_dev *d71, struct block_header *blk,
@@ -646,6 +735,15 @@ static int d77_atu_init(struct d71_dev *d71, struct block_header *blk,
 
 	set_range(&atu->h_size, 64, max_atu_ln_sz);
 	set_range(&atu->v_size, 64, max_atu_ln_sz);
+	set_range(&atu->vp_h_nodes, 3, 341);
+	set_range(&atu->vp_v_nodes, 3, 341);
+	set_range(&atu->vp_h_offset, 0, max_atu_ln_sz - 64);
+	set_range(&atu->vp_v_offset, 0, max_atu_ln_sz - 64);
+	set_range(&atu->vp_h_step, 1, 270);
+	set_range(&atu->vp_v_step, 1, 270);
+	set_range(&atu->vp_h_rshift, 0, 20);
+	set_range(&atu->vp_v_rshift, 0, 20);
+	set_range(&atu->vp_hscale, 0, 0x8000);
 
 	malidp_write32(reg, ATU_PALPHA, D71_PALPHA_DEF_MAP);
 	get_resources_id(malidp_read32(reg, ATU_SLAVE_INFO) << 4,
@@ -660,6 +758,7 @@ static int d77_atu_vp_init(struct d71_dev *d71, struct block_header *blk,
 	struct komeda_component *c;
 	struct komeda_atu *atu;
 	u32 pipe_id, vp_id;
+	u32 max_atu_vp_ln_sz;
 
 	get_resources_id(blk->block_info, &pipe_id, &vp_id);
 
@@ -677,6 +776,10 @@ static int d77_atu_vp_init(struct d71_dev *d71, struct block_header *blk,
 			  c->id - KOMEDA_COMPONENT_ATU0, vp_id);
 		return -1;
 	}
+
+	max_atu_vp_ln_sz = get_blk_max_line_size2(d71, reg, 2160);
+	set_range(&atu->vp_h_size, 64, max_atu_vp_ln_sz);
+	set_range(&atu->vp_v_size, 64, max_atu_vp_ln_sz);
 
 	atu->reg[vp_id] = reg;
 	atu->n_vp++;
