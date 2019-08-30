@@ -126,6 +126,18 @@ komeda_component_get_state(struct komeda_component *c,
 }
 
 static struct komeda_component_state *
+komeda_component_get_new_state(struct komeda_component *c,
+			       struct drm_atomic_state *state)
+{
+	struct drm_private_state *priv_st;
+
+	priv_st = drm_atomic_get_new_private_obj_state(state, &c->obj);
+	if (priv_st)
+		return priv_to_comp_st(priv_st);
+	return NULL;
+}
+
+static struct komeda_component_state *
 komeda_component_get_old_state(struct komeda_component *c,
 			       struct drm_atomic_state *state)
 {
@@ -907,6 +919,175 @@ komeda_compiz_validate(struct komeda_compiz *compiz,
 	return 0;
 }
 
+static enum
+komeda_atu_mode check_vp_and_get_mode(struct komeda_atu_vp_state *vp0,
+				      struct komeda_atu_vp_state *vp1,
+				      u32 *max_w, u32 *max_h)
+{
+	bool is_intersect;
+
+	u32 l1 = vp0->out_hoffset, l2 = vp1->out_hoffset; /*left*/
+	u32 r1 = l1 + vp0->out_hsize - 1, r2 = l2 + vp1->out_hsize - 1; /*right*/
+	u32 t1 = vp0->out_voffset, t2 = vp1->out_voffset; /*top*/
+	u32 b1 = t1 + vp0->out_vsize - 1, b2 = t2 + vp1->out_vsize - 1; /*bottom*/
+
+	*max_w = (r2 > r1) ? r2 : r1;
+	*max_h = (b2 > b1) ? b2 : b1;
+
+	/* VP0 should always in the left/above of VP1 */
+	if (l1 > l2 || t1 > t2)
+		return ATU_MODE_INVAL_ORDER;
+
+	is_intersect = !(l2 > r1 || t2 > b1);
+	if (is_intersect)
+		return ATU_MODE_INVAL_OVERLAP;
+
+	t1 = (t1 < t2) ? t1 : t2;
+	if ((vp0->out_vsize + vp1->out_vsize) > (*max_h - t1 + 1))
+		return ATU_MODE_VP0_VP1_SIMULT;
+
+	return ATU_MODE_VP0_VP1_SEQ;
+}
+
+static int
+komeda_atu_validate(struct komeda_atu *atu,
+		    struct komeda_crtc_state *kcrtc_st,
+		    struct komeda_data_flow_cfg *dflow)
+{
+	struct drm_plane_state *plane_st, *plane_st2 = NULL;
+	struct komeda_component_state *c_st;
+	struct komeda_atu_state *st;
+	struct komeda_pipeline_state *pipe_st;
+	struct drm_crtc_state *crtc_st = &kcrtc_st->base;
+	u32 w, h;
+	int err;
+
+	c_st = komeda_component_get_new_state(&atu->base, crtc_st->state);
+	if (IS_ERR(c_st))
+		return PTR_ERR(c_st);
+
+	pipe_st = komeda_pipeline_get_new_state(atu->base.pipeline, crtc_st->state);
+	if (IS_ERR(pipe_st))
+		return PTR_ERR(pipe_st);
+
+	st = to_atu_st(c_st);
+	st->single_buffer_enabled = 0;
+	if (st->left.plane && st->right.plane) {
+		plane_st2 = drm_atomic_get_new_plane_state(crtc_st->state,
+							   st->right.plane);
+		plane_st = drm_atomic_get_new_plane_state(crtc_st->state,
+							   st->left.plane);
+		st->mode = check_vp_and_get_mode(&st->left, &st->right, &w, &h);
+		if (st->mode == ATU_MODE_INVAL_OVERLAP) {
+			DRM_DEBUG_ATOMIC("viewports overlap!\n");
+			return -EINVAL;
+		} else if (st->mode == ATU_MODE_INVAL_ORDER) {
+			DRM_DEBUG_ATOMIC("viewports' order is wrong, VP0 should be prior to VP1 !\n");
+			return -EINVAL;
+		}
+
+		if (st->left.fb == st->right.fb)
+			st->single_buffer_enabled = 1;
+
+		if (st->mode == ATU_MODE_VP0_VP1_SIMULT) {
+			if (!st->single_buffer_enabled) {
+				DRM_DEBUG_ATOMIC("ATU simult mode needs a single buffer\n");
+				return -EINVAL;
+			}
+		}
+	} else if (st->right.plane) {
+		plane_st = drm_atomic_get_new_plane_state(crtc_st->state,
+							  st->right.plane);
+		st->mode = ATU_MODE_VP1;
+		w = st->right.out_hoffset + st->right.out_hsize;
+		h = st->right.out_voffset + st->right.out_vsize;
+	} else if (st->left.plane) {
+		plane_st = drm_atomic_get_new_plane_state(crtc_st->state,
+							   st->left.plane);
+		st->mode = ATU_MODE_VP0;
+		w = st->left.out_hoffset + st->left.out_hsize;
+		h = st->left.out_voffset + st->left.out_vsize;
+	} else
+		return -EINVAL;
+
+	if (plane_st2) {
+		struct komeda_fb *kfb = to_kfb(plane_st->fb);
+		struct komeda_fb *kfb2 = to_kfb(plane_st2->fb);
+
+		if ((kfb2->format_caps != kfb->format_caps) ||
+		    (kfb2->base.modifier != kfb->base.modifier)) {
+			DRM_DEBUG_ATOMIC("the pixel formats of two viewports are not matched!\n");
+			return -EINVAL;
+		}
+	}
+
+	st->hsize = w;
+	st->vsize = h;
+
+	/* adjust view for containing two viewports */
+	dflow->out_x = dflow->in_x = 0;
+	dflow->out_y = dflow->in_y = 0;
+	dflow->out_w = dflow->total_out_w = dflow->in_w = dflow->total_in_w = w;
+	dflow->out_h = dflow->total_in_h = dflow->in_h = h;
+
+	err = komeda_validate_plane_color(&atu->base, &atu->color_mgr,
+					  &st->color_st, plane_st);
+	if (err)
+		return err;
+
+	komeda_component_set_output(&dflow->input, &atu->base, 0);
+
+	return 0;
+}
+
+static int
+komeda_build_atu_data_flow(struct komeda_pipeline *pipe,
+			   struct komeda_atu *atu,
+			   struct komeda_crtc_state *kcrtc_st)
+{
+	struct komeda_data_flow_cfg dflow;
+	int err;
+
+	err = komeda_atu_validate(atu, kcrtc_st, &dflow);
+	if (err)
+		return err;
+
+	err = komeda_crossbar_set_input(pipe->cbar, kcrtc_st, &dflow);
+	if (err)
+		return err;
+
+	err = komeda_compiz_set_input(pipe->compiz, kcrtc_st, &dflow);
+
+	return err;
+}
+
+
+int komeda_pipeline_setup_atu(struct komeda_pipeline *pipe,
+			      struct komeda_crtc_state *kcrtc_st)
+{
+	struct komeda_pipeline_state *pipe_st;
+	u32 active_atus;
+	int i, err = 0;
+
+	if (!pipe->n_atus)
+		return 0;
+
+	pipe_st = komeda_pipeline_get_new_state(pipe, kcrtc_st->base.state);
+	if (!pipe_st)
+		return 0;
+
+	active_atus = pipe_st->active_comps & KOMEDA_PIPELINE_ATUS;
+	dp_for_each_set_bit(i, active_atus) {
+		struct komeda_atu *atu;
+		atu = to_atu(komeda_pipeline_get_component(pipe, i));
+		err = komeda_build_atu_data_flow(pipe, atu, kcrtc_st);
+		if (err)
+			break;
+	}
+
+	return err;
+}
+
 static int
 komeda_improc_validate(struct komeda_improc *improc,
 		       struct komeda_crtc_state *kcrtc_st,
@@ -1625,6 +1806,10 @@ int komeda_build_display_data_flow(struct komeda_crtc *kcrtc,
 		if (err)
 			return err;
 	} else if (slave && has_bit(slave->id, kcrtc_st->active_pipes)) {
+		err = komeda_pipeline_setup_atu(slave, kcrtc_st);
+		if (err)
+			return err;
+
 		err = komeda_compiz_validate(slave->compiz, kcrtc_st, &s_dflow);
 		if (err)
 			return err;
@@ -1641,6 +1826,10 @@ int komeda_build_display_data_flow(struct komeda_crtc *kcrtc,
 		if (err)
 			return err;
 	}
+
+	err = komeda_pipeline_setup_atu(master, kcrtc_st);
+	if (err)
+		return err;
 
 	err = komeda_compiz_validate(master->compiz, kcrtc_st, &m_dflow);
 	if (err)

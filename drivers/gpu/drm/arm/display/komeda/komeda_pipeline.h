@@ -683,6 +683,9 @@ void komeda_complete_data_flow_cfg(struct komeda_layer *layer,
 				   struct komeda_data_flow_cfg *dflow,
 				   struct drm_framebuffer *fb);
 
+int komeda_pipeline_setup_atu(struct komeda_pipeline *pipe,
+			      struct komeda_crtc_state *kcrtc_st);
+
 int komeda_atu_set_vp(struct komeda_atu *atu,
 		      struct komeda_plane_state *kplane_st,
 		      struct komeda_data_flow_cfg *dflow);
