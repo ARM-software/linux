@@ -82,6 +82,7 @@ komeda_plane_atomic_check(struct drm_plane *plane,
 	struct komeda_plane *kplane = to_kplane(plane);
 	struct komeda_plane_state *kplane_st = to_kplane_st(state);
 	struct komeda_layer *layer = kplane->layer;
+	struct komeda_atu *atu = kplane->atu;
 	struct drm_crtc_state *crtc_st;
 	struct komeda_crtc *kcrtc;
 	struct komeda_crtc_state *kcrtc_st;
@@ -108,12 +109,19 @@ komeda_plane_atomic_check(struct drm_plane *plane,
 	if (err)
 		return err;
 
+	if (dflow.en_atu && (kcrtc->side_by_side || dflow.en_split)) {
+		DRM_DEBUG_ATOMIC("atu doesn't support layer split or SBS.\n");
+		return -EINVAL;
+	}
+
 	if (kcrtc->side_by_side)
 		err = komeda_build_layer_sbs_data_flow(layer,
 				kplane_st, kcrtc_st, &dflow);
 	else if (dflow.en_split)
 		err = komeda_build_layer_split_data_flow(layer,
 				kplane_st, kcrtc_st, &dflow);
+	else if (dflow.en_atu)
+		err = komeda_atu_set_vp(atu, kplane_st, &dflow);
 	else
 		err = komeda_build_layer_data_flow(layer,
 				kplane_st, kcrtc_st, &dflow);
