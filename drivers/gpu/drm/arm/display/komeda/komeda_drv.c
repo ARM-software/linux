@@ -14,15 +14,15 @@
 #include "komeda_kms.h"
 
 struct komeda_drv {
-	struct komeda_dev *mdev;
-	struct komeda_kms_dev *kms;
+	struct komeda_dev mdev;
+	struct komeda_kms_dev kms;
 };
 
 struct komeda_dev *dev_to_mdev(struct device *dev)
 {
 	struct komeda_drv *mdrv = dev_get_drvdata(dev);
 
-	return mdrv ? mdrv->mdev : NULL;
+	return mdrv ? &mdrv->mdev : NULL;
 }
 
 static void komeda_unbind(struct device *dev)
@@ -32,14 +32,14 @@ static void komeda_unbind(struct device *dev)
 	if (!mdrv)
 		return;
 
-	komeda_kms_detach(mdrv->kms);
+	komeda_kms_fini(&mdrv->kms);
 
 	if (pm_runtime_enabled(dev))
 		pm_runtime_disable(dev);
 	else
-		komeda_dev_suspend(mdrv->mdev);
+		komeda_dev_suspend(&mdrv->mdev);
 
-	komeda_dev_destroy(mdrv->mdev);
+	komeda_dev_fini(&mdrv->mdev);
 
 	dev_set_drvdata(dev, NULL);
 	devm_kfree(dev, mdrv);
@@ -54,33 +54,30 @@ static int komeda_bind(struct device *dev)
 	if (!mdrv)
 		return -ENOMEM;
 
-	mdrv->mdev = komeda_dev_create(dev);
-	if (IS_ERR(mdrv->mdev)) {
-		err = PTR_ERR(mdrv->mdev);
+	err = komeda_dev_init(&mdrv->mdev, dev);
+	if (err) {
 		goto free_mdrv;
 	}
 
 	pm_runtime_enable(dev);
 	if (!pm_runtime_enabled(dev))
-		komeda_dev_resume(mdrv->mdev);
+		komeda_dev_resume(&mdrv->mdev);
 
-	mdrv->kms = komeda_kms_attach(mdrv->mdev);
-	if (IS_ERR(mdrv->kms)) {
-		err = PTR_ERR(mdrv->kms);
-		goto destroy_mdev;
-	}
+	err = komeda_kms_init(&mdrv->kms, &mdrv->mdev);
+	if (err)
+		goto fini_mdev;
 
 	dev_set_drvdata(dev, mdrv);
 
 	return 0;
 
-destroy_mdev:
+fini_mdev:
 	if (pm_runtime_enabled(dev))
 		pm_runtime_disable(dev);
 	else
-		komeda_dev_suspend(mdrv->mdev);
+		komeda_dev_suspend(&mdrv->mdev);
 
-	komeda_dev_destroy(mdrv->mdev);
+	komeda_dev_fini(&mdrv->mdev);
 
 free_mdrv:
 	devm_kfree(dev, mdrv);
@@ -154,14 +151,14 @@ static int komeda_rt_pm_suspend(struct device *dev)
 {
 	struct komeda_drv *mdrv = dev_get_drvdata(dev);
 
-	return komeda_dev_suspend(mdrv->mdev);
+	return komeda_dev_suspend(&mdrv->mdev);
 }
 
 static int komeda_rt_pm_resume(struct device *dev)
 {
 	struct komeda_drv *mdrv = dev_get_drvdata(dev);
 
-	return komeda_dev_resume(mdrv->mdev);
+	return komeda_dev_resume(&mdrv->mdev);
 }
 
 static int __maybe_unused komeda_pm_suspend(struct device *dev)
@@ -169,10 +166,10 @@ static int __maybe_unused komeda_pm_suspend(struct device *dev)
 	struct komeda_drv *mdrv = dev_get_drvdata(dev);
 	int res;
 
-	res = drm_mode_config_helper_suspend(&mdrv->kms->base);
+	res = drm_mode_config_helper_suspend(&mdrv->kms.base);
 
 	if (!pm_runtime_status_suspended(dev))
-		komeda_dev_suspend(mdrv->mdev);
+		komeda_dev_suspend(&mdrv->mdev);
 
 	return res;
 }
@@ -182,9 +179,9 @@ static int __maybe_unused komeda_pm_resume(struct device *dev)
 	struct komeda_drv *mdrv = dev_get_drvdata(dev);
 
 	if (!pm_runtime_status_suspended(dev))
-		komeda_dev_resume(mdrv->mdev);
+		komeda_dev_resume(&mdrv->mdev);
 
-	return drm_mode_config_helper_resume(&mdrv->kms->base);
+	return drm_mode_config_helper_resume(&mdrv->kms.base);
 }
 
 static const struct dev_pm_ops komeda_pm_ops = {

@@ -223,27 +223,23 @@ static int komeda_parse_dt(struct device *dev, struct komeda_dev *mdev)
 	return ret;
 }
 
-struct komeda_dev *komeda_dev_create(struct device *dev)
+int komeda_dev_init(struct komeda_dev *mdev, struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	komeda_identify_func komeda_identify;
-	struct komeda_dev *mdev;
 	struct resource *io_res;
 	int err = 0;
 
 	komeda_identify = of_device_get_match_data(dev);
 	if (!komeda_identify)
-		return ERR_PTR(-ENODEV);
+		return -ENODEV;
 
 	io_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!io_res) {
 		DRM_ERROR("No registers defined.\n");
-		return ERR_PTR(-ENODEV);
+		return -ENODEV;
 	}
 
-	mdev = devm_kzalloc(dev, sizeof(*mdev), GFP_KERNEL);
-	if (!mdev)
-		return ERR_PTR(-ENOMEM);
 #ifdef CONFIG_DEBUG_FS
 	if (debugfs_initialized()) {
 		mdev->debugfs_root = debugfs_create_dir("komeda", NULL);
@@ -333,16 +329,16 @@ struct komeda_dev *komeda_dev_create(struct device *dev)
 	komeda_debugfs_init(mdev);
 #endif
 
-	return mdev;
+	return 0;
 
 disable_clk:
 	clk_disable_unprepare(mdev->aclk);
 err_cleanup:
-	komeda_dev_destroy(mdev);
-	return ERR_PTR(err);
+	komeda_dev_fini(mdev);
+	return err;
 }
 
-void komeda_dev_destroy(struct komeda_dev *mdev)
+void komeda_dev_fini(struct komeda_dev *mdev)
 {
 	struct device *dev = mdev->dev;
 	const struct komeda_dev_funcs *funcs = mdev->funcs;
@@ -379,8 +375,6 @@ void komeda_dev_destroy(struct komeda_dev *mdev)
 		devm_clk_put(dev, mdev->aclk);
 		mdev->aclk = NULL;
 	}
-
-	devm_kfree(dev, mdev);
 }
 
 int komeda_dev_resume(struct komeda_dev *mdev)
