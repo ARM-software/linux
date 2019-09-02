@@ -737,3 +737,305 @@ __u32 to_q1_30(float32 a, struct round_exception *extra_data)
 {
 	return to_fixedpoint(a, 1, 1, 30, extra_data);
 }
+
+/************************* MATRIX ***********************************/
+void matrix_4X4_to_3X3(struct malidp_matrix4 *a, struct malidp_matrix3 *res)
+{
+	int i, j, k = 0;
+	for (i = 0; i < 4; i++) {
+		if (i == 2)
+			continue;
+		for (j = 0; j < 4; j++) {
+			if (j == 2)
+				continue;
+			res->data[k++] = a->data[i*4 + j];
+		}
+	}
+}
+
+int matrix_mul_4X4(struct malidp_matrix4 *a, struct malidp_matrix4 *b,
+		   struct malidp_matrix4 *res)
+{
+	int i, j, k;
+	struct round_exception extra_data = {.exception = 0};
+
+	if (!a || !b || !res)
+		return -1;
+
+	for (i = 0; i < 4; i++)
+		for (j = 0; j < 4; j++) {
+			res->data[i*4 + j] = 0;
+			for (k = 0; k < 4; k++) {
+				res->data[i*4 + j] =
+					float32_add(res->data[i*4 + j],
+						float32_mul(a->data[i*4 + k],
+							    b->data[k*4 + j],
+							    &extra_data),
+						    &extra_data);
+				if (extra_data.exception & float32_exception_invalid)
+					return -1;
+			}
+		}
+	return 0;
+}
+
+static float32 minor_matrix(float32 m1, float32 m2, float32 m3,
+			    float32 m4, float32 m5, float32 m6,
+			    float32 m7, float32 m8, float32 m9)
+{
+	float32 res;
+	float32 val1, val2, val3,val4, val5, val6;
+	struct round_exception extra_data = {.exception = 0};
+
+	val1 = float32_mul(m1, m5, &extra_data);
+	val1 = float32_mul(val1, m9, &extra_data);
+
+	val2 = float32_mul(m1, m6, &extra_data);
+	val2 = float32_mul(val2, m8, &extra_data);
+
+	val3 = float32_mul(m4, m2, &extra_data);
+	val3 = float32_mul(val3, m9, &extra_data);
+
+	val4 = float32_mul(m4, m3, &extra_data);
+	val4 = float32_mul(val4, m8, &extra_data);
+
+	val5 = float32_mul(m7, m2, &extra_data);
+	val5 = float32_mul(val5, m6, &extra_data);
+
+	val6 = float32_mul(m7, m3, &extra_data);
+	val6 = float32_mul(val6, m5, &extra_data);
+
+	res = float32_sub(val1, val2, &extra_data);
+	res = float32_sub(res, val3, &extra_data);
+	res = float32_add(res, val4, &extra_data);
+	res = float32_add(res, val5, &extra_data);
+	res = float32_sub(res, val6, &extra_data);
+
+	return res;
+}
+
+int inverse_matrix_4X4(struct malidp_matrix4 *m, struct malidp_matrix4 *res)
+{
+	float32 inv[16], det;
+	float32 val1, val2, val3, val4;
+	struct round_exception extra_data = {.exception = 0};
+	int i;
+
+	if (!m || !res)
+		return -1;
+
+	inv[0] = minor_matrix(m->data[5],  m->data[6],  m->data[7],
+			      m->data[9],  m->data[10], m->data[11],
+			      m->data[13], m->data[14], m->data[15]);
+
+	inv[4] = negative(minor_matrix(m->data[4],  m->data[6],  m->data[7],
+				       m->data[8],  m->data[10], m->data[11],
+				       m->data[12], m->data[14], m->data[15]));
+
+	inv[8] = minor_matrix(m->data[4], m->data[5], m->data[7],
+			      m->data[8], m->data[9], m->data[11],
+			      m->data[12], m->data[13], m->data[15]);
+
+	inv[12] = negative(minor_matrix(m->data[4],  m->data[5],  m->data[6],
+					m->data[8],  m->data[9],  m->data[10],
+					m->data[12], m->data[13], m->data[14]));
+
+	inv[1] = negative(minor_matrix(m->data[1],  m->data[2],  m->data[3],
+				       m->data[9],  m->data[10], m->data[11],
+				       m->data[13], m->data[14], m->data[15]));
+
+	inv[5] = minor_matrix(m->data[0], m->data[2], m->data[3],
+			      m->data[8], m->data[10], m->data[11],
+			      m->data[12], m->data[14], m->data[15]);
+
+	inv[9] = negative(minor_matrix(m->data[0],  m->data[1],  m->data[3],
+				       m->data[8],  m->data[9],  m->data[11],
+				       m->data[12], m->data[13], m->data[15]));
+
+	inv[13] = minor_matrix(m->data[0],  m->data[1],  m->data[2],
+			       m->data[8],  m->data[9],  m->data[10],
+			       m->data[12], m->data[13], m->data[14]);
+
+	inv[2] = minor_matrix(m->data[1],  m->data[2],  m->data[3],
+			      m->data[5],  m->data[6],  m->data[7],
+			      m->data[13], m->data[14], m->data[15]);
+
+	inv[6] = negative(minor_matrix(m->data[0],  m->data[2],  m->data[3],
+				       m->data[4],  m->data[6],  m->data[7],
+				       m->data[12], m->data[14], m->data[15]));
+
+	inv[10] = minor_matrix(m->data[0],  m->data[1],  m->data[3],
+			       m->data[4],  m->data[5],  m->data[7],
+			       m->data[12], m->data[13], m->data[15]);
+
+	inv[14] = negative(minor_matrix(m->data[0],  m->data[1],  m->data[2],
+					m->data[4],  m->data[5],  m->data[6],
+					m->data[12], m->data[13], m->data[14]));
+
+	inv[3] = negative(minor_matrix(m->data[1], m->data[2],  m->data[3],
+				       m->data[5], m->data[6],  m->data[7],
+				       m->data[9], m->data[10], m->data[11]));
+
+	inv[7] = minor_matrix(m->data[0], m->data[2],  m->data[3],
+			      m->data[4], m->data[6],  m->data[7],
+			      m->data[8], m->data[10], m->data[11]);
+
+	inv[11] = negative(minor_matrix(m->data[0], m->data[1], m->data[3],
+					m->data[4], m->data[5], m->data[7],
+					m->data[8], m->data[9], m->data[11]));
+
+	inv[15] = minor_matrix(m->data[0], m->data[1], m->data[2],
+			       m->data[4], m->data[5], m->data[6],
+			       m->data[8], m->data[9], m->data[10]);
+	/* det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12] */
+	val1 = float32_mul(m->data[0], inv[0], &extra_data);
+	val2 = float32_mul(m->data[1], inv[4], &extra_data);
+	val3 = float32_mul(m->data[2], inv[8], &extra_data);
+	val4 = float32_mul(m->data[3], inv[12], &extra_data);
+	det = float32_add(val1, val2, &extra_data);
+	det = float32_add(det, val3, &extra_data);
+	det = float32_add(det, val4, &extra_data);
+
+	if (float32_lt(float32_abs(det), FLOAT32_EPSILON, &extra_data))
+		return -1;
+	/* det = 1.0 / det */
+	det = float32_div(FLOAT32_1, det, &extra_data);
+
+	for (i = 0; i < 16; i++)
+		res->data[i] = float32_mul(inv[i], det, &extra_data);
+	return 0;
+}
+
+int normalize_matrix3(struct malidp_matrix3 *m,
+			struct round_exception *extra_data)
+{
+	float32 max_num = 0;
+	int i;
+
+	extra_data->exception = 0;
+	for (i = 0; i < 9; i++) {
+		if (float32_ge(float32_abs(m->data[i]), max_num, extra_data))
+			max_num = float32_abs(m->data[i]);
+		extra_data->exception &= ~float32_exception_inexact;
+		if (extra_data->exception)
+			return -1;
+	}
+
+	if (is_float32_zero(max_num))
+		return -1;
+
+	for (i = 0; i < 9; i++) {
+		m->data[i] = float32_div(m->data[i], max_num, extra_data);
+		extra_data->exception &= ~float32_exception_inexact;
+		if (extra_data->exception)
+			return -1;
+	}
+	return 0;
+}
+
+void identity_matrix4(struct malidp_matrix4 *mat)
+{
+	int i, j;
+
+	for (i = 0; i < 4; i++) {
+		for (j = 0; j < 4; j++)
+			mat->data[i * 4 + j] = (i == j) ? FLOAT32_1 : FLOAT32_0;
+	}
+}
+
+void identity_matrix3(struct malidp_matrix3 *mat)
+{
+	int i, j;
+
+	for (i = 0; i < 3; i++) {
+		for (j = 0; j < 3; j++)
+			mat->data[i * 3 + j] = (i == j) ? FLOAT32_1 : FLOAT32_0;
+	}
+}
+
+void quaternion_to_matrix(struct malidp_quaternion *q,
+			  struct malidp_matrix4 *res)
+{
+	struct round_exception extra_data = {.exception = 0};
+	float32 square_w, square_x, square_y, square_z;
+	float32 xy, zw, xz, yw, yz, xw;
+
+	if (!res)
+		return;
+	square_w = float32_mul(q->w, q->w, &extra_data);
+	square_x = float32_mul(q->x, q->x, &extra_data);
+	square_y = float32_mul(q->y, q->y, &extra_data);
+	square_z = float32_mul(q->z, q->z, &extra_data);
+	xy = float32_mul(q->x, q->y, &extra_data);
+	zw = float32_mul(q->z, q->w, &extra_data);
+	xz = float32_mul(q->x, q->z, &extra_data);
+	yw = float32_mul(q->y, q->w, &extra_data);
+	yz = float32_mul(q->y, q->z, &extra_data);
+	xw = float32_mul(q->x, q->w, &extra_data);
+
+	/* w2 + x2 - y2 - z2 */
+	res->data[0] = float32_add(square_w, square_x, &extra_data);
+	res->data[0] = float32_sub(res->data[0], square_y, &extra_data);
+	res->data[0] = float32_sub(res->data[0], square_z, &extra_data);
+
+	/* 2*xy - 2*zw */
+	res->data[1] = float32_sub(xy, zw, &extra_data);
+	res->data[1] = float32_mul(res->data[1], FLOAT32_2, &extra_data);
+
+	/* 2*xz + 2*yw */
+	res->data[2] = float32_add(xz, yw, &extra_data);
+	res->data[2] = float32_mul(res->data[2], FLOAT32_2, &extra_data);
+
+	res->data[3] = 0;
+
+	/* 2*xy + 2*zw */
+	res->data[4] = float32_add(xy, zw, &extra_data);
+	res->data[4] = float32_mul(res->data[4], FLOAT32_2, &extra_data);
+
+	/* w2 - x2 + y2 - z2 */
+	res->data[5] = float32_sub(square_w, square_x, &extra_data);
+	res->data[5] = float32_add(res->data[5], square_y, &extra_data);
+	res->data[5] = float32_sub(res->data[5], square_z, &extra_data);
+
+	/* 2*yz - 2*xw */
+	res->data[6] = float32_sub(yz, xw, &extra_data);
+	res->data[6] = float32_mul(res->data[6], FLOAT32_2, &extra_data);
+
+	res->data[7] = 0;
+
+	/* 2*xz - 2*yw */
+	res->data[8] = float32_sub(xz, yw, &extra_data);
+	res->data[8] = float32_mul(res->data[8], FLOAT32_2, &extra_data);
+
+	/* 2*yz + 2*xw */
+	res->data[9] = float32_add(yz, xw, &extra_data);
+	res->data[9] = float32_mul(res->data[9], FLOAT32_2, &extra_data);
+
+	/* w2 - x2 - y2 + z2 */
+	res->data[10] = float32_sub(square_w, square_x, &extra_data);
+	res->data[10] = float32_sub(res->data[10], square_y, &extra_data);
+	res->data[10] = float32_add(res->data[10], square_z, &extra_data);
+
+	res->data[11] = 0;
+	res->data[12] = 0;
+	res->data[13] = 0;
+	res->data[14] = 0;
+
+	/* w2 + x2 + y2 + z2 */
+	res->data[15] = float32_add(square_w, square_x, &extra_data);
+	res->data[15] = float32_add(res->data[15], square_y, &extra_data);
+	res->data[15] = float32_add(res->data[15], square_z, &extra_data);
+}
+
+void inverse_quaternion(struct malidp_quaternion *q,
+			struct malidp_quaternion *inv_q)
+{
+	if (!q || !inv_q)
+		return;
+
+	/* q should be unit quaternion, so inv_q = q_star */
+	inv_q->x = negative(q->x);
+	inv_q->y = negative(q->y);
+	inv_q->z = negative(q->z);
+	inv_q->w = q->w;
+}
