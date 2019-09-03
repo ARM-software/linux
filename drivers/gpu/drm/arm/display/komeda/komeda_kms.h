@@ -257,4 +257,7 @@ void komeda_crtc_handle_event(struct komeda_crtc   *kcrtc,
 struct komeda_kms_dev *komeda_kms_attach(struct komeda_dev *mdev);
 void komeda_kms_detach(struct komeda_kms_dev *kms);
 
+int komeda_plane_init_data_flow(struct drm_plane_state *st,
+				struct komeda_crtc_state *kcrtc_st,
+				struct komeda_data_flow_cfg *dflow);
 #endif /*_KOMEDA_KMS_H_*/

@@ -14,10 +14,9 @@
 #include "komeda_color_mgmt.h"
 #include "malidp_math.h"
 
-static int
-komeda_plane_init_data_flow(struct drm_plane_state *st,
-			    struct komeda_crtc_state *kcrtc_st,
-			    struct komeda_data_flow_cfg *dflow)
+int komeda_plane_init_data_flow(struct drm_plane_state *st,
+				struct komeda_crtc_state *kcrtc_st,
+				struct komeda_data_flow_cfg *dflow)
 {
 	struct komeda_plane *kplane = to_kplane(st->plane);
 	struct komeda_plane_state *kplane_st = to_kplane_st(st);

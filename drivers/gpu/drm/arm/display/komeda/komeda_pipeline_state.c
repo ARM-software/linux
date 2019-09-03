@@ -1024,6 +1024,11 @@ komeda_atu_validate(struct komeda_atu *atu,
 	st->hsize = w;
 	st->vsize = h;
 
+	/* fill new layer configuration */
+	err = komeda_plane_init_data_flow(plane_st, kcrtc_st, dflow);
+	if (err)
+		return err;
+
 	/* adjust view for containing two viewports */
 	dflow->out_x = dflow->in_x = 0;
 	dflow->out_y = dflow->in_y = 0;
