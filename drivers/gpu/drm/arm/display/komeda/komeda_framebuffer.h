@@ -7,8 +7,10 @@
 #ifndef _KOMEDA_FRAMEBUFFER_H_
 #define _KOMEDA_FRAMEBUFFER_H_
 
+#include <linux/spinlock.h>
 #include <drm/drm_framebuffer.h>
 #include "komeda_format_caps.h"
+#include "uapi/drm/malidp_xr.h"
 
 /**
  * struct komeda_fb - Entending drm_framebuffer with komeda attribute
@@ -45,4 +47,15 @@ komeda_fb_get_pixel_addr(struct komeda_fb *kfb, int x, int y, int plane);
 bool komeda_fb_is_layer_supported(struct komeda_fb *kfb, u32 layer_type,
 		u32 rot);
 
+/* sensor buffer and its functions */
+struct komeda_sensor_buff {
+	spinlock_t spinlock;
+	struct drm_property_blob *sensor_buf_info_blob;
+	struct dma_buf *dma_buf;
+	void *vaddr;
+};
+
+void komeda_sensor_buff_put(struct komeda_sensor_buff *sb_buff);
+int komeda_sensor_buff_get(struct komeda_sensor_buff *sb_buff);
+void komeda_sb_read_128bits(u64 *buff, u64 *q);
 #endif

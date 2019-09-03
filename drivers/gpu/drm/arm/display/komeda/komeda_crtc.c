@@ -375,6 +375,7 @@ komeda_crtc_atomic_disable(struct drm_crtc *crtc,
 
 	drm_crtc_vblank_off(crtc);
 	komeda_crtc_unprepare(kcrtc);
+	komeda_sensor_buff_put(&kcrtc->s_buff);
 }
 
 static void
@@ -588,16 +589,21 @@ static int komeda_crtc_atomic_get_property(struct drm_crtc *crtc,
 {
 	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(state);
+	struct drm_property_blob *b;
 
-	if (property == kcrtc->protected_mode_property)
+	if (property == kcrtc->protected_mode_property) {
 		*val = kcrtc_st->en_protected_mode;
+
 	else if (property == kcrtc->assertiveness_property)
 		*val = kcrtc_st->assertiveness;
 	else if (property == kcrtc->strength_limit_property)
 		*val = kcrtc_st->strength_limit;
 	else if (property == kcrtc->drc_property)
 		*val = kcrtc_st->drc;
-	else {
+	else if (property == kcrtc->sensor_buf_property) {
+		b = kcrtc->s_buff.sensor_buf_info_blob;
+		*val = (b) ? b->base.id : 0;
+	} else {
 		DRM_DEBUG_DRIVER("Unknown property %s\n", property->name);
 		return -EINVAL;
 	}
@@ -611,9 +617,15 @@ static int komeda_crtc_atomic_set_property(struct drm_crtc *crtc,
 {
 	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(state);
+<<<<<<< HEAD
+=======
+	bool replaced = false;
+	int ret = 0;
+>>>>>>> bdc90352a5ac... drm/komeda: sensor buffer support
 
-	if (property == kcrtc->protected_mode_property)
+	if (property == kcrtc->protected_mode_property) {
 		kcrtc_st->en_protected_mode = !!val;
+<<<<<<< HEAD
 
 	else if (property == kcrtc->assertiveness_property) {
 		if (kcrtc_st->assertiveness != val) {
@@ -630,6 +642,18 @@ static int komeda_crtc_atomic_set_property(struct drm_crtc *crtc,
 			kcrtc_st->drc = val;
 			kcrtc_st->drc_changed = true;
 		}
+=======
+	} else if (property == kcrtc->sensor_buf_property) {
+		komeda_sensor_buff_put(&kcrtc->s_buff);
+		ret = drm_property_replace_blob_from_id(crtc->dev,
+					&kcrtc->s_buff.sensor_buf_info_blob,
+					val,
+					sizeof(struct malidp_sensor_buffer_info),
+					sizeof(struct malidp_sensor_buffer_info),
+					&replaced);
+		if (!ret)
+			ret = komeda_sensor_buff_get(&kcrtc->s_buff);
+>>>>>>> bdc90352a5ac... drm/komeda: sensor buffer support
 	} else {
 		DRM_DEBUG_DRIVER("Unknown property %s\n", property->name);
 		return -EINVAL;
@@ -802,6 +826,22 @@ get_crtc_primary(struct komeda_kms_dev *kms, struct komeda_crtc *crtc)
 	return NULL;
 }
 
+static int komeda_crtc_create_sensor_buf_property(struct komeda_crtc *kcrtc)
+{
+	struct drm_crtc *crtc = &kcrtc->base;
+	struct drm_property *prop;
+
+	prop = drm_property_create(crtc->dev,
+			DRM_MODE_PROP_ATOMIC | DRM_MODE_PROP_BLOB,
+			"sensor_buf_info", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	kcrtc->sensor_buf_property = prop;
+	drm_object_attach_property(&crtc->base, prop, 0);
+	return 0;
+}
+
 static int komeda_crtc_add(struct komeda_kms_dev *kms,
 			   struct komeda_crtc *kcrtc)
 {
@@ -825,7 +865,10 @@ static int komeda_crtc_add(struct komeda_kms_dev *kms,
 	if (err)
 		return err;
 
-	return 0;
+	if (kcrtc->master->n_atus > 0)
+		err = komeda_crtc_create_sensor_buf_property(kcrtc);
+
+	return err;
 }
 
 int komeda_kms_add_crtcs(struct komeda_kms_dev *kms, struct komeda_dev *mdev)
