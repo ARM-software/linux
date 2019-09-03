@@ -14,6 +14,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_writeback.h>
 #include <drm/drm_print.h>
+#include "komeda_framebuffer.h"
 
 /**
  * struct komeda_plane - komeda instance of drm_plane
@@ -149,6 +150,9 @@ struct komeda_crtc {
 	struct drm_property *assertiveness_property;
 	struct drm_property *strength_limit_property;
 	struct drm_property *drc_property;
+	/* ATU sensor buffer properties */
+	struct drm_property *sensor_buf_property;
+	struct komeda_sensor_buff s_buff;
 };
 
 /**

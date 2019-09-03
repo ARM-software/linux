@@ -4,6 +4,8 @@
  * Author: James.Qian.Wang <james.qian.wang@arm.com>
  *
  */
+#include <linux/dma-buf.h>
+
 #include <drm/drm_device.h>
 #include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_gem.h>
@@ -281,3 +283,82 @@ bool komeda_fb_is_layer_supported(struct komeda_fb *kfb, u32 layer_type,
 
 	return supported;
 }
+
+/* sensor buffer related functions */
+void komeda_sensor_buff_put(struct komeda_sensor_buff *sb_buff)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&sb_buff->spinlock, flags);
+
+	if (!sb_buff->sensor_buf_info_blob)
+		goto un_lock;
+
+	if (sb_buff->dma_buf) {
+		if (sb_buff->vaddr) {
+			dma_buf_kunmap(sb_buff->dma_buf, 0, sb_buff->vaddr);
+			sb_buff->vaddr = NULL;
+		}
+		dma_buf_end_cpu_access(sb_buff->dma_buf, DMA_FROM_DEVICE);
+		drm_property_blob_put(sb_buff->sensor_buf_info_blob);
+		sb_buff->sensor_buf_info_blob = NULL;
+		dma_buf_put(sb_buff->dma_buf);
+		sb_buff->dma_buf = NULL;
+	}
+
+un_lock:
+	spin_unlock_irqrestore(&sb_buff->spinlock, flags);
+}
+
+int komeda_sensor_buff_get(struct komeda_sensor_buff *sb_buff)
+{
+	struct malidp_sensor_buffer_info *s_buf;
+	unsigned long flags;
+	int ret = 0;
+
+	spin_lock_irqsave(&sb_buff->spinlock, flags);
+
+	if (!sb_buff->sensor_buf_info_blob)
+		goto un_lock;
+
+	s_buf = sb_buff->sensor_buf_info_blob->data;
+	if (s_buf->dma_fd < 0) {
+		DRM_DEBUG_KMS("Sensor buffer fd invalid\n");
+		ret = -EINVAL;
+		goto un_lock;
+	}
+
+	sb_buff->dma_buf = dma_buf_get(s_buf->dma_fd);
+	if (IS_ERR_OR_NULL(sb_buff->dma_buf)) {
+		ret = PTR_ERR(sb_buff->dma_buf);
+		sb_buff->dma_buf  = NULL;
+		goto un_lock;
+	}
+
+	dma_buf_begin_cpu_access(sb_buff->dma_buf, DMA_FROM_DEVICE);
+	sb_buff->vaddr = dma_buf_kmap(sb_buff->dma_buf, 0);
+	if (IS_ERR_OR_NULL(sb_buff->vaddr)) {
+		ret = PTR_ERR(sb_buff->vaddr);
+		sb_buff->vaddr = NULL;
+		goto un_lock;
+	}
+
+un_lock:
+	spin_unlock_irqrestore(&sb_buff->spinlock, flags);
+	return ret;
+}
+
+#ifdef CONFIG_ARM64
+void komeda_sb_read_128bits(u64 *buff, u64 *q)
+{
+	__asm("ldp %0, %1, %2\n"
+	      :"=r"(q[0]), "=r"(q[1])
+	      :"rm"(*buff));
+}
+#else
+void komeda_sb_read_128bits(u64 *buff, u64 *q)
+{
+	q[0] = buff[0];
+	q[1] = buff[1];
+}
+#endif
