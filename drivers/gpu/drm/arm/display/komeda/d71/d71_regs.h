@@ -276,6 +276,8 @@
 #define DOU_IRQ_ERR		BIT(11)
 #define DOU_IRQ_PL0		BIT(13)
 #define DOU_IRQ_PL1		BIT(14)
+#define DOU_IRQ_PL2		BIT(15)
+#define DOU_IRQ_PL3		BIT(16)
 
 /* DOU_STATUS_BITS */
 #define DOU_STATUS_DRIFTTO	BIT(0)
@@ -405,6 +407,7 @@
 #define BS_HINTERVALS		0x0E4
 #define BS_VINTERVALS		0x0E8
 #define BS_SYNC			0x0EC
+#define BS_PROG_LINE1		0x0F0
 #define BS_DRIFT_TO		0x100
 #define BS_FRAME_TO		0x104
 #define BS_TE_TO		0x108
@@ -434,6 +437,7 @@
 /* BS active size/intervals */
 #define BS_H_INTVALS(hfp, hbp)	(((hfp) & 0xFFF) + (((hbp) & 0x3FF) << 16))
 #define BS_V_INTVALS(vfp, vbp)  (((vfp) & 0x3FFF) + (((vbp) & 0xFF) << 16))
+#define BS_PROGLINE(l0, l1)	(((l0) & 0x7FFF) + (((l1) & 0x3FFF) << 16))
 
 /* BS_SYNC bits */
 #define BS_SYNC_HSW(x)		((x) & 0x3FF)

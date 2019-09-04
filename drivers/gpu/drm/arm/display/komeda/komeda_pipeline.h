@@ -12,6 +12,7 @@
 #include <drm/drm_atomic_helper.h>
 #include "komeda_color_mgmt.h"
 #include "malidp_utils.h"
+#include "malidp_math.h"
 
 #define KOMEDA_MAX_PIPELINES		2
 #define KOMEDA_PIPELINE_MAX_LAYERS	4
@@ -412,6 +413,9 @@ struct komeda_atu_vp_state {
 	u32 *r_sp_table;
 	u32 *g_sp_table;
 	u32 *b_sp_table;
+
+	struct malidp_matrix4 m1, m2;
+	struct malidp_matrix3 A, B;
 };
 
 struct komeda_atu_state {
@@ -440,6 +444,8 @@ struct komeda_atu {
 
 	u32 n_vp;
 	u32 __iomem *reg[2];	/* viewport register address */
+
+	struct komeda_atu_state last_st;
 };
 
 /* Why define A separated structure but not use plane_state directly ?
@@ -482,6 +488,29 @@ struct komeda_pipeline_funcs {
 	/* dump_register: Optional, dump registers to seq_file */
 	void (*dump_register)(struct komeda_pipeline *pipe,
 			      struct seq_file *sf);
+};
+
+struct komeda_pipeline;
+/**
+ * struct komeda_pipeline_state
+ *
+ * NOTE:
+ * Unlike the pipeline, pipeline_state doesn’t gather any component_state
+ * into it. It because all component will be managed by drm_atomic_state.
+ */
+struct komeda_pipeline_state {
+	/** @obj: tracking pipeline_state by drm_atomic_state */
+	struct drm_private_state obj;
+	/** @pipe: backpointer to the pipeline */
+	struct komeda_pipeline *pipe;
+	/** @crtc: currently bound crtc */
+	struct drm_crtc *crtc;
+	/**
+	 * @active_comps:
+	 *
+	 * bitmask - BIT(component->id) of active components
+	 */
+	u32 active_comps;
 };
 
 /**
@@ -553,28 +582,9 @@ struct komeda_pipeline {
 	struct device_node *of_coproc_dev;
 	/** @dual_link: true if of_output_links[0] and [1] are both valid */
 	bool dual_link;
-};
 
-/**
- * struct komeda_pipeline_state
- *
- * NOTE:
- * Unlike the pipeline, pipeline_state doesn’t gather any component_state
- * into it. It because all component will be managed by drm_atomic_state.
- */
-struct komeda_pipeline_state {
-	/** @obj: tracking pipeline_state by drm_atomic_state */
-	struct drm_private_state obj;
-	/** @pipe: backpointer to the pipeline */
-	struct komeda_pipeline *pipe;
-	/** @crtc: currently bound crtc */
-	struct drm_crtc *crtc;
-	/**
-	 * @active_comps:
-	 *
-	 * bitmask - BIT(component->id) of active components
-	 */
-	u32 active_comps;
+	struct komeda_pipeline_state last_st;
+	u32 postponed_cval;
 };
 
 #define to_layer(c)	container_of(c, struct komeda_layer, base)
@@ -699,7 +709,7 @@ bool komeda_pipeline_disable(struct komeda_pipeline *pipe,
 void komeda_pipeline_update(struct komeda_pipeline *pipe,
 			    struct drm_atomic_state *old_state);
 
-void komeda_complete_data_flow_cfg(struct komeda_layer *layer,
+void komeda_complete_data_flow_cfg(struct komeda_pipeline *pipe,
 				   struct komeda_data_flow_cfg *dflow,
 				   struct drm_framebuffer *fb);
 
@@ -714,4 +724,8 @@ int komeda_ad_enable(struct komeda_pipeline *pipe,
 		     struct drm_display_mode *mode);
 
 void komeda_ad_disable(struct komeda_pipeline *pipe);
+
+void komeda_pipeline_state_backup(struct komeda_pipeline *pipe);
+
+bool komeda_pipeline_has_atu_enabled(struct komeda_pipeline *pipe);
 #endif /* _KOMEDA_PIPELINE_H_*/

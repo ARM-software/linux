@@ -27,7 +27,7 @@ komeda_wb_init_data_flow(struct komeda_layer *wb_layer,
 	dflow->pixel_blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 	dflow->rot = DRM_MODE_ROTATE_0;
 
-	komeda_complete_data_flow_cfg(wb_layer, dflow, fb);
+	komeda_complete_data_flow_cfg(wb_layer->base.pipeline, dflow, fb);
 
 	return 0;
 }

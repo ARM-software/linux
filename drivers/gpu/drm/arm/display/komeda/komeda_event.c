@@ -61,6 +61,9 @@ static void evt_str(struct komeda_str *str, u64 events)
 	evt_sprintf(str, events & KOMEDA_EVENT_FLIP, "FLIP|");
 	evt_sprintf(str, events & KOMEDA_EVENT_EOW, "EOW|");
 	evt_sprintf(str, events & KOMEDA_EVENT_MODE, "OP-MODE|");
+	evt_sprintf(str, events & KOMEDA_EVENT_PL3, "PL3|");
+	evt_sprintf(str, events & KOMEDA_EVENT_FRAME_END, "FRM_END|");
+	evt_sprintf(str, events & KOMEDA_EVENT_ASYNC_RP, "ASYNC RP|");
 
 	evt_sprintf(str, events & KOMEDA_EVENT_URUN, "UNDERRUN|");
 	evt_sprintf(str, events & KOMEDA_EVENT_OVR, "OVERRUN|");

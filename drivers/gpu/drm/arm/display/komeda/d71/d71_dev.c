@@ -130,6 +130,10 @@ static u64 get_dou_event(struct d71_pipeline *d71_pipeline)
 	raw_status = malidp_read32(reg, BLK_IRQ_RAW_STATUS);
 	if (raw_status & DOU_IRQ_PL0)
 		evts |= KOMEDA_EVENT_VSYNC;
+	if (raw_status & DOU_IRQ_PL3)
+		evts |= KOMEDA_EVENT_PL3;
+	if (raw_status & DOU_IRQ_PL2)
+		evts |= KOMEDA_EVENT_ASYNC_RP;
 	if (raw_status & DOU_IRQ_UND)
 		evts |= KOMEDA_EVENT_URUN;
 
@@ -217,6 +221,16 @@ static u64 get_pipeline_event(struct d71_pipeline *d71_pipeline, u32 gcu_status)
 	return evts;
 }
 
+static void disable_pl2_pl3(struct d71_dev *d71, u32 master_id)
+{
+	struct d71_pipeline *pipe = d71->pipes[master_id];
+	u32 __iomem     *dou_addr = pipe->dou_addr;
+
+	if (pipe->base.n_atus && !komeda_pipeline_has_atu_enabled(&pipe->base))
+		malidp_write32_mask(dou_addr, BLK_IRQ_MASK,
+				    DOU_IRQ_PL3 | DOU_IRQ_PL2, 0);
+}
+
 static irqreturn_t
 d71_irq_handler(struct komeda_dev *mdev, struct komeda_events *evts)
 {
@@ -227,10 +241,14 @@ d71_irq_handler(struct komeda_dev *mdev, struct komeda_events *evts)
 
 	if (gcu_status & GLB_IRQ_STATUS_GCU) {
 		raw_status = malidp_read32(d71->gcu_addr, BLK_IRQ_RAW_STATUS);
-		if (raw_status & GCU_IRQ_CVAL0)
+		if (raw_status & GCU_IRQ_CVAL0) {
 			evts->pipes[0] |= KOMEDA_EVENT_FLIP;
-		if (raw_status & GCU_IRQ_CVAL1)
+			disable_pl2_pl3(d71, 0);
+		}
+		if (raw_status & GCU_IRQ_CVAL1) {
 			evts->pipes[1] |= KOMEDA_EVENT_FLIP;
+			disable_pl2_pl3(d71, 1);
+		}
 		if (raw_status & GCU_IRQ_ERR) {
 			status = malidp_read32(d71->gcu_addr, BLK_STATUS);
 			if (status & GCU_STATUS_MERR) {
@@ -408,6 +426,46 @@ static void d77_cleanup(struct komeda_dev *mdev)
 	}
 
 	d71_cleanup(mdev);
+}
+
+static void d77_atu_vp_matrix_latch(u32 __iomem *reg,
+			struct komeda_atu_vp_state *v_st)
+{
+	int i;
+	u32 offset_a = ATU_VP_MATRIX_A_COEFF0;
+	u32 offset_b = ATU_VP_MATRIX_B_COEFF0;
+
+	if (v_st->vp_type == ATU_VP_TYPE_NONE || !v_st->matrix_changed)
+		return;
+
+	for (i = 0; i < 9; i++, offset_a += 4, offset_b += 4) {
+		malidp_write32(reg, offset_a, v_st->A.data[i]);
+		malidp_write32(reg, offset_b, v_st->B.data[i]);
+	}
+	malidp_write32(reg, ATU_VP_LATCH_A, ATU_VP_MATRIX_LATCH(0));
+	malidp_write32(reg, ATU_VP_LATCH_B, ATU_VP_MATRIX_LATCH(0));
+}
+
+static void d77_latch_matrix(struct komeda_atu *atu)
+{
+	struct komeda_atu_state *st;
+
+	st = &atu->last_st;
+
+	switch (st->mode) {
+	case ATU_MODE_VP0_VP1_SEQ:
+	case ATU_MODE_VP0_VP1_SIMULT:
+	case ATU_MODE_VP0_VP1_INT:
+		d77_atu_vp_matrix_latch(atu->reg[0], &st->left);
+	case ATU_MODE_VP1:
+		d77_atu_vp_matrix_latch(atu->reg[1], &st->right);
+		break;
+	case ATU_MODE_VP0:
+		d77_atu_vp_matrix_latch(atu->reg[0], &st->left);
+		break;
+	default:
+		DRM_ERROR("Bad ATU mode %d\n", st->mode);
+	}
 }
 
 static int d71_enum_resources(struct komeda_dev *mdev)
@@ -714,6 +772,7 @@ static const struct komeda_dev_funcs d77_chip_funcs = {
 	.disconnect_iommu	= d71_disconnect_iommu,
 	.dump_register		= d71_dump,
 	.init_hw 		= d77_init_hw,
+	.latch_matrix		= d77_latch_matrix,
 };
 
 const struct komeda_dev_funcs *

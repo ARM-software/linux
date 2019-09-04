@@ -1039,3 +1039,294 @@ void inverse_quaternion(struct malidp_quaternion *q,
 	inv_q->z = negative(q->z);
 	inv_q->w = q->w;
 }
+
+static int zero_matrix(struct malidp_matrix4 *mat)
+{
+	int i;
+
+	if (!mat)
+		return -1;
+
+	for (i = 0; i < 16; i++)
+		mat->data[i] = FLOAT32_0;
+
+	return 0;
+
+}
+
+static int lower_half_identity_matrix(struct malidp_matrix4 *mat)
+{
+	int i, j;
+
+	if (!mat)
+		return -1;
+
+	for(i = 2; i < 4; i++) {
+		for (j = 0; j < 4; j++) {
+			if (i == j)
+				mat->data[i * 4 + j] = FLOAT32_1;
+			else
+				mat->data[i * 4 + j] = FLOAT32_0;
+		}
+	}
+	return 0;
+}
+
+static float32 vec3_dot(struct malidp_position *v1, struct malidp_position *v2,
+			struct round_exception *extra_data)
+{
+	float32 tmp_x, tmp_y, tmp_z;
+
+	tmp_x = float32_mul(v1->x, v2->x, extra_data);
+	tmp_y = float32_mul(v1->y, v2->y, extra_data);
+	tmp_z = float32_mul(v1->z, v2->z, extra_data);
+	tmp_x = float32_add(tmp_x, tmp_y, extra_data);
+	tmp_x = float32_add(tmp_x, tmp_z, extra_data);
+
+	return tmp_x;
+}
+
+/* Here we calculate M * H * inv(H'). */
+int update_projection_layer_transform_matrix(struct malidp_matrix4 *render_mat,
+					     struct malidp_matrix4 *helmet_mat,
+					     struct malidp_matrix4 *ref_mat,
+					     struct malidp_matrix4 *inv_cur_mat,
+					     struct malidp_matrix4 *output_mat)
+{
+	struct malidp_matrix4 inv_helmet_mat, pose_delta_mat;
+	struct malidp_matrix4 m_delta;
+	int ret;
+
+	ret = inverse_matrix_4X4(helmet_mat, &inv_helmet_mat);
+	if (ret)
+		return ret;
+
+	/* calculate pose delta of orientation here by reference_ori_matrix * inv(current_ori_matrix). */
+	matrix_mul_4X4(ref_mat, inv_cur_mat, &pose_delta_mat);
+	/* projection matrix contains the matrix M. here we calculate M * pose_delata. */
+	matrix_mul_4X4(render_mat, &pose_delta_mat, &m_delta);
+	/* projection matrix contains the matrix M. here we calculate M * pose_delata * inv(M'). */
+	matrix_mul_4X4(&m_delta, &inv_helmet_mat, output_mat);
+
+	return 0;
+}
+
+static int get_quad_layer_view_matrix(struct malidp_position *cur_pos,
+				      struct malidp_matrix4  *inv_cur_mat,
+				      struct malidp_position *ref_pos,
+				      struct malidp_matrix4  *ref_mat,
+				      struct malidp_matrix4  *view_mat,
+				      struct round_exception *extra_data)
+{
+	struct malidp_matrix4 C, R, T, tmp_mat;
+	struct malidp_position position_delta;
+
+	identity_matrix4(&C);
+	identity_matrix4(&R);
+	identity_matrix4(&T);
+	C.data[5] = FLOAT32_NEG_1;
+
+	matrix_mul_4X4(ref_mat, inv_cur_mat, &R);
+
+	position_delta.x = float32_sub(cur_pos->x, ref_pos->x, extra_data);
+	position_delta.y = float32_sub(cur_pos->y, ref_pos->y, extra_data);
+	position_delta.z = float32_sub(cur_pos->z, ref_pos->z, extra_data);
+
+	T.data[3]  = float32_sub(T.data[3],  position_delta.x, extra_data);
+	T.data[7]  = float32_sub(T.data[7],  position_delta.y, extra_data);
+	T.data[11] = float32_sub(T.data[11], position_delta.z, extra_data);
+
+	matrix_mul_4X4(&R, &T, &tmp_mat);
+	matrix_mul_4X4(&C, &tmp_mat, view_mat);
+	return 0;
+}
+
+static void
+make_display_to_plane_projection(struct malidp_matrix4 *view_from_ndc,
+				 struct malidp_matrix4 *projection_mat)
+{
+	struct malidp_quaternion u, v, n, q, z;
+	float32 xx, yy, zz, xy, xz, yx, yz, zx, zy, tmp[5];
+	struct round_exception extra_data;
+
+	u.x = view_from_ndc->data[0];
+	u.y = view_from_ndc->data[4];
+	u.z = view_from_ndc->data[8];
+	u.w = view_from_ndc->data[12];
+
+	v.x = view_from_ndc->data[1];
+	v.y = view_from_ndc->data[5];
+	v.z = view_from_ndc->data[9];
+	v.w = view_from_ndc->data[13];
+
+	n.x = view_from_ndc->data[2];
+	n.y = view_from_ndc->data[6];
+	n.z = view_from_ndc->data[10];
+	n.w = view_from_ndc->data[14];
+
+	q.x = view_from_ndc->data[3];
+	q.y = view_from_ndc->data[7];
+	q.z = view_from_ndc->data[11];
+	q.w = view_from_ndc->data[15];
+
+	zero_matrix(projection_mat);
+
+	xx = float32_mul(n.x, q.x, &extra_data);
+	yy = float32_mul(n.y, q.y, &extra_data);
+	zz = float32_mul(n.z, q.z, &extra_data);
+
+	xy = float32_mul(n.x, q.y, &extra_data);
+	xz = float32_mul(n.x, q.z, &extra_data);
+
+	yx = float32_mul(n.y, q.x, &extra_data);
+	yz = float32_mul(n.y, q.z, &extra_data);
+
+	zx = float32_mul(n.z, q.x, &extra_data);
+	zy = float32_mul(n.z, q.y, &extra_data);
+
+	/************* row 0 ********************/
+	/* -n.x*q.z*u.z - n.x*q.y*u.y + n.z*q.z*u.x + n.y*q.y*u.x; */
+	tmp[0] = float32_mul(xz, u.z, &extra_data);
+	tmp[1] = float32_mul(xy, u.y, &extra_data);
+	tmp[2] = float32_mul(zz, u.x, &extra_data);
+	tmp[3] = float32_mul(yy, u.x, &extra_data);
+	tmp[4] = float32_add(tmp[3], tmp[2], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[1], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[0], &extra_data);
+	projection_mat->data[0] = tmp[4];
+
+	/* -n.y*q.z*u.z + n.z*q.z*u.y + n.x*q.x*u.y - n.y*q.x*u.x; */
+	tmp[0] = float32_mul(yz, u.z, &extra_data);
+	tmp[1] = float32_mul(zz, u.y, &extra_data);
+	tmp[2] = float32_mul(xx, u.y, &extra_data);
+	tmp[3] = float32_mul(yx, u.x, &extra_data);
+	tmp[4] = float32_add(tmp[1], tmp[2], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[0], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[3], &extra_data);
+	projection_mat->data[1] = tmp[4];
+
+	/* n.y*q.y*u.z + n.x*q.x*u.z - n.z*q.y*u.y - n.z*q.x*u.x; */
+	tmp[0] = float32_mul(yy, u.z, &extra_data);
+	tmp[1] = float32_mul(xx, u.z, &extra_data);
+	tmp[2] = float32_mul(zy, u.y, &extra_data);
+	tmp[3] = float32_mul(zx, u.x, &extra_data);
+	tmp[4] = float32_add(tmp[0], tmp[1], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[2], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[3], &extra_data);
+	projection_mat->data[2] = tmp[4];
+
+	/************* row 1 ********************/
+	/* -n.x*q.z*v.z - n.x*q.y*v.y + n.z*q.z*v.x + n.y*q.y*v.x; */
+	tmp[0] = float32_mul(xz, v.z, &extra_data);
+	tmp[1] = float32_mul(xy, v.y, &extra_data);
+	tmp[2] = float32_mul(zz, v.x, &extra_data);
+	tmp[3] = float32_mul(yy, v.x, &extra_data);
+	tmp[4] = float32_add(tmp[3], tmp[2], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[1], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[0], &extra_data);
+	projection_mat->data[4] = tmp[4];
+
+	/* -n.y*q.z*v.z + n.z*q.z*v.y + n.x*q.x*v.y - n.y*q.x*v.x; */
+	tmp[0] = float32_mul(yz, v.z, &extra_data);
+	tmp[1] = float32_mul(zz, v.y, &extra_data);
+	tmp[2] = float32_mul(xx, v.y, &extra_data);
+	tmp[3] = float32_mul(yx, v.x, &extra_data);
+	tmp[4] = float32_add(tmp[1], tmp[2], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[0], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[3], &extra_data);
+	projection_mat->data[5] = tmp[4];
+
+	/* n.y*q.y*v.z + n.x*q.x*v.z - n.z*q.y*v.y - n.z*q.x*v.x; */
+	tmp[0] = float32_mul(yy, v.z, &extra_data);
+	tmp[1] = float32_mul(xx, v.z, &extra_data);
+	tmp[2] = float32_mul(zy, v.y, &extra_data);
+	tmp[3] = float32_mul(zx, v.x, &extra_data);
+	tmp[4] = float32_add(tmp[0], tmp[1], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[2], &extra_data);
+	tmp[4] = float32_sub(tmp[4], tmp[3], &extra_data);
+	projection_mat->data[6] = tmp[4];
+
+	projection_mat->data[12] = n.x;
+	projection_mat->data[13] = n.y;
+	projection_mat->data[14] = n.z;
+
+	z.x = float32_sub(FLOAT32_0, projection_mat->data[2], &extra_data);
+	z.y = float32_sub(FLOAT32_0, projection_mat->data[6], &extra_data);
+	z.z = float32_sub(FLOAT32_0, projection_mat->data[10], &extra_data);
+	z.w = float32_sub(FLOAT32_0, projection_mat->data[14], &extra_data);
+
+	projection_mat->data[2]  = projection_mat->data[3];
+	projection_mat->data[6]  = projection_mat->data[7];
+	projection_mat->data[10] = projection_mat->data[11];
+	projection_mat->data[14] = projection_mat->data[15];
+
+	projection_mat->data[3]  = z.x;
+	projection_mat->data[7]  = z.y;
+	projection_mat->data[11] = z.z;
+	projection_mat->data[15] = z.w;
+}
+
+/* Using Sam Martin's function PrepareQuadLayerMatrices to update projection matrix for quad layer */
+int update_quad_layer_transform_matrix(struct malidp_position *cur_pos,
+			struct malidp_matrix4  *inv_cur_mat,
+			struct malidp_position *ref_pos,
+			struct malidp_matrix4  *ref_mat,
+			struct malidp_matrix4  *render_mat,
+			struct malidp_matrix4  *helmet_mat,
+			struct malidp_matrix4  *output_mat)
+{
+	struct malidp_matrix4 quad_view_world_scale;
+	struct malidp_matrix4 display_to_plane_projection;
+	struct malidp_matrix4 inv_helmet_projection;
+	struct malidp_matrix4 quad_view;
+	struct malidp_position quad_normal, quad_pos;
+	struct round_exception extra_data;
+	float32 result;
+	int facing_camera = 1;
+
+	get_quad_layer_view_matrix(cur_pos, inv_cur_mat, ref_pos, ref_mat, &quad_view, &extra_data);
+
+	matrix_mul_4X4(&quad_view, render_mat, &quad_view_world_scale);
+	/* quad surface normal in view space. */
+	quad_normal.x = quad_view_world_scale.data[2];
+	quad_normal.y = quad_view_world_scale.data[6];
+	quad_normal.z = quad_view_world_scale.data[10];
+
+	/* quad origin position in view space. */
+	quad_pos.x = quad_view_world_scale.data[3];
+	quad_pos.y = quad_view_world_scale.data[7];
+	quad_pos.z = quad_view_world_scale.data[11];
+
+	/* detect if the quad layer facing away from the camera, if it is,
+	 *  we can clip the entire quad layer. */
+	result = vec3_dot(&quad_normal, &quad_pos, &extra_data);
+	facing_camera = float32_ge(result, FLOAT32_0, &extra_data);
+
+	if (facing_camera) {
+		/* A short explanation from reprojection_model project:
+		 * We first construct a matrix that describes the quad plane in view space (so camera at the origin looking down
+ 		 * negative z). The quad can be scaled and positioned arbitrarily. The APIs allow you to specify this per-eye
+ 		 * (although that doesn't make much sense tbh). Once we have the quad in view space, we construct a homography
+ 		 * that maps from display NDC (x,y = -1..1, w=1) to the layer image, with -1..1 containing the image data. This
+		 * mapping produces the same effect as tracing a view ray from each pixel on the display and intersecting it
+		 * with the quad plane. This mapping is all done in MakeDisplayToPlaneProjection and you will need to consult
+		 * other documentation (slides or maxima description) for how it works. Once we have this, we do not need the
+		 * matrix sandwich. The calling code will insert the identity matrix for the rotational delta. The only thing we
+		 * still need to correct for is the display fov and aspect ratio, which is handled by
+		 * inv_helmet_projection. */
+
+		make_display_to_plane_projection(&quad_view_world_scale, &display_to_plane_projection);
+
+		if (inverse_matrix_4X4(helmet_mat, &inv_helmet_projection))
+		{
+			return -1;
+		}
+
+		lower_half_identity_matrix(&inv_helmet_projection);
+
+		matrix_mul_4X4(&display_to_plane_projection, &inv_helmet_projection, output_mat);
+	} else {
+		zero_matrix(output_mat);
+	}
+	return 0;
+}

@@ -442,3 +442,40 @@ void komeda_pipeline_dump_register(struct komeda_pipeline *pipe,
 			c->funcs->dump_register(c, sf);
 	}
 }
+
+static void komeda_atu_backup_state(struct komeda_atu *atu)
+{
+	struct komeda_atu_state *atu_st;
+
+	if (!atu)
+		return;
+
+	atu_st = to_atu_st(priv_to_comp_st(atu->base.obj.state));
+	memcpy(&atu->last_st, atu_st, sizeof(*atu_st));
+}
+
+void komeda_pipeline_state_backup(struct komeda_pipeline *pipe)
+{
+	struct komeda_pipeline_state *pipe_st;
+	u32 active_atus, i;
+
+	if (!pipe)
+		return;
+
+	pipe_st = priv_to_pipe_st(pipe->obj.state);
+	memcpy(&pipe->last_st, pipe_st, sizeof(*pipe_st));
+	active_atus = pipe_st->active_comps & KOMEDA_PIPELINE_ATUS;
+	dp_for_each_set_bit(i, active_atus) {
+		struct komeda_atu *atu;
+
+		atu = to_atu(komeda_pipeline_get_component(pipe, i));
+		komeda_atu_backup_state(atu);
+	}
+}
+
+bool komeda_pipeline_has_atu_enabled(struct komeda_pipeline *pipe)
+{
+	struct komeda_pipeline_state *pipe_st = priv_to_pipe_st(pipe->obj.state);
+
+	return !!(pipe_st->active_comps & KOMEDA_PIPELINE_ATUS);
+}
