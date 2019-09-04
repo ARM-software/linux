@@ -565,6 +565,8 @@ d77_atu_vp_update(struct komeda_atu_vp_state *v_st, u32 payload,
 
 	i = ((1 << 16) / (v_st->out_vsize - 1)) << 16; /* INTERP */
 	i |= ATU_VP_EN;
+	if (v_st->vp_type != ATU_VP_TYPE_NONE)
+		i |= ATU_VP_RP;
 	malidp_write32(reg, BLK_CONTROL, i);
 }
 
@@ -1589,6 +1591,8 @@ static void d71_timing_ctrlr_disable(struct komeda_component *c)
 	malidp_write32_mask(c->reg, BLK_CONTROL, BS_CTRL_EN, 0);
 }
 
+#define BS_FRAME_END_LINE(x)	((x) - 10)
+
 static void d71_timing_ctrlr_update(struct komeda_component *c,
 				    struct komeda_component_state *state)
 {
@@ -1600,6 +1604,7 @@ static void d71_timing_ctrlr_update(struct komeda_component *c,
 	u32 hactive, hfront_porch, hback_porch, hsync_len;
 	u32 vactive, vfront_porch, vback_porch, vsync_len;
 	u32 value;
+	u32 prog_line = 0;
 
 	hactive = mode->crtc_hdisplay;
 	hfront_porch = mode->crtc_hsync_start - mode->crtc_hdisplay;
@@ -1622,7 +1627,13 @@ static void d71_timing_ctrlr_update(struct komeda_component *c,
 	value |= mode->flags & DRM_MODE_FLAG_PHSYNC ? BS_SYNC_HSP : 0;
 	malidp_write32(reg, BS_SYNC, value);
 
-	malidp_write32(reg, BS_PROG_LINE, D71_DEFAULT_PREPRETCH_LINE - 1);
+	prog_line = BS_PROGLINE(D71_DEFAULT_PREPRETCH_LINE - 1, 0);
+	malidp_write32(reg, BS_PROG_LINE, prog_line);
+	if (c->pipeline->n_atus) {
+		prog_line = BS_PROGLINE(BS_FRAME_END_LINE(mode->crtc_vtotal),
+				D71_DEFAULT_PREPRETCH_LINE - 1 + kcrtc_st->pl3);
+		malidp_write32(reg, BS_PROG_LINE1, prog_line);
+	}
 	malidp_write32(reg, BS_PREFETCH_LINE, D71_DEFAULT_PREPRETCH_LINE);
 
 	/* configure bs control register */
@@ -1887,18 +1898,34 @@ static void d77_pipeline_enable_perf(struct d71_pipeline *pipe)
 	malidp_write32(pipe->lpu_perf, BLK_CONTROL, BLK_CTRL_EN);
 }
 
+
 static void d71_pipeline_flush(struct komeda_pipeline *pipe,
 			       u32 active_pipes)
 {
 	struct d71_dev *d71 = pipe->mdev->chip_data;
 	u32 reg_offset = (pipe->id == 0) ?
 			 GCU_CONFIG_VALID0 : GCU_CONFIG_VALID1;
+	bool pending_cval = false;
 
-	if (has_bit(0, active_pipes))
+	if (has_bit(0, active_pipes)) {
 		d77_pipeline_enable_perf(d71->pipes[0]);
+		pending_cval = komeda_pipeline_has_atu_enabled(&d71->pipes[0]->base);
+	}
 
-	if (has_bit(1, active_pipes))
+	if (has_bit(1, active_pipes)) {
 		d77_pipeline_enable_perf(d71->pipes[1]);
+		if (!pending_cval)
+			pending_cval = komeda_pipeline_has_atu_enabled(&d71->pipes[1]->base);
+	}
+
+	if (pending_cval) {
+		u32 __iomem *dou_addr = d71->pipes[pipe->id]->dou_addr;
+
+		pipe->postponed_cval = 1;
+		malidp_write32_mask(dou_addr, BLK_IRQ_MASK,
+					DOU_IRQ_PL3 | DOU_IRQ_PL2,
+					DOU_IRQ_PL3 | DOU_IRQ_PL2);
+	}
 
 	malidp_write32(d71->gcu_addr, reg_offset, GCU_CONFIG_CVAL);
 }

@@ -6,7 +6,7 @@
  */
 #include <linux/clk.h>
 #include <linux/spinlock.h>
-
+#include <linux/dma-buf.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc_helper.h>
@@ -59,6 +59,206 @@ static void komeda_crtc_update_clock_ratio(struct komeda_crtc_state *kcrtc_st)
 	kcrtc_st->clock_ratio = div64_u64(aclk << 32, pxlclk);
 }
 
+/* if en_inv is true, save inv_cur_mat into cur_mat */
+static bool
+get_current_pose(struct komeda_sensor_buff *sb_buff,
+		 struct malidp_position *cur_pos,
+		 struct malidp_matrix4 *cur_mat,
+		 bool en_inv)
+{
+	struct malidp_sensor_buffer_info *s_buf_info;
+	struct malidp_sensor_data data;
+	struct malidp_quaternion quat;
+	u64 idx[2], offset;
+	unsigned long flags;
+	u8 *vaddr;
+
+	spin_lock_irqsave(&sb_buff->spinlock, flags);
+	if (!sb_buff->vaddr) {
+		spin_unlock_irqrestore(&sb_buff->spinlock, flags);
+		return false;
+	}
+
+	s_buf_info = sb_buff->sensor_buf_info_blob->data;
+	vaddr = sb_buff->vaddr;
+	komeda_sb_read_128bits((u64*)vaddr, idx);
+	offset = s_buf_info->offset + sizeof(data) * (idx[0] & 0xffffffff);
+	komeda_sb_read_128bits((u64*)(vaddr+offset), (u64*)&data);
+	komeda_sb_read_128bits((u64*)(vaddr+offset+16), ((u64*)&data)+2);
+	spin_unlock_irqrestore(&sb_buff->spinlock, flags);
+
+	cur_pos->x = data.pos.x;
+	cur_pos->y = data.pos.y;
+	cur_pos->z = data.pos.z;
+	quat.x = data.quat.x;
+	quat.y = data.quat.y;
+	quat.z = data.quat.z;
+	quat.w = data.quat.w;
+	/* convert quat to matrix */
+	if (en_inv)
+		inverse_quaternion(&quat, &quat);
+	quaternion_to_matrix(&quat, cur_mat);
+
+	return true;
+}
+
+static void matrix_to_q_format(struct malidp_matrix3 *m)
+{
+	int i;
+	struct round_exception extra;
+
+	for (i = 0; i < 9; i++) {
+		extra.exception = 0;
+		m->data[i] = to_q1_30(m->data[i], &extra);
+		extra.exception &= ~float32_exception_inexact;
+		WARN_ON(extra.exception != 0);
+	}
+}
+
+static void
+update_atu_vp_matrix(struct komeda_atu_vp_state *vp_st, enum komeda_atu_vp_type type,
+		     struct malidp_position *cur_pos, struct malidp_matrix4 *inv_cur_mat,
+		     struct malidp_position *ref_pos, struct malidp_matrix4 *ref_mat)
+{
+	struct round_exception extra_data;
+	struct malidp_matrix4 tmp1, tmp2;
+
+	if (!ref_mat)
+		goto skip_trans_matrix;
+
+	switch (type) {
+	case ATU_VP_TYPE_PROJ:
+		update_projection_layer_transform_matrix(&vp_st->m1,
+					     &vp_st->m2,
+					     ref_mat,
+					     inv_cur_mat,
+					     &tmp1);
+		break;
+	case ATU_VP_TYPE_QUAD:
+		update_quad_layer_transform_matrix(cur_pos, inv_cur_mat, ref_pos, ref_mat,
+			&vp_st->m1, &vp_st->m2, &tmp1);
+		break;
+	default:
+		DRM_DEBUG_ATOMIC("ATU viewport enabled with bad mode!(should be proj or quad)\n");
+		return;
+	}
+
+	matrix_mul_4X4(&tmp1, &vp_st->m1, &tmp2);
+	matrix_4X4_to_3X3(&tmp2, &vp_st->A);
+	matrix_4X4_to_3X3(&tmp2, &vp_st->B);
+	normalize_matrix3(&vp_st->A, &extra_data);
+	if (extra_data.exception & float32_exception_invalid) {
+		DRM_DEBUG_ATOMIC("Normalize Matrix A error!\n");
+		return;
+	}
+	normalize_matrix3(&vp_st->B, &extra_data);
+	if (extra_data.exception & float32_exception_invalid) {
+		DRM_DEBUG_ATOMIC("Normalize Matrix B error!\n");
+		return;
+	}
+
+	matrix_to_q_format(&vp_st->A);
+	matrix_to_q_format(&vp_st->B);
+	return;
+
+skip_trans_matrix:
+	identity_matrix3(&vp_st->A);
+	identity_matrix3(&vp_st->B);
+}
+
+static void
+update_pipeline_atu_matrix(struct komeda_dev *mdev, struct komeda_pipeline *pipe, u64 evt,
+			   struct malidp_position *cur_pos, struct malidp_matrix4 *inv_cur_mat,
+			   struct malidp_position *ref_pos, struct malidp_matrix4 *ref_mat)
+{
+	struct komeda_pipeline_state *pipe_st;
+	u32 active_atus, i;
+
+	pipe_st = &pipe->last_st;
+	active_atus = pipe_st->active_comps & KOMEDA_PIPELINE_ATUS;
+	dp_for_each_set_bit(i, active_atus) {
+		struct komeda_atu *atu;
+		struct komeda_atu_state *st;
+
+		atu = to_atu(komeda_pipeline_get_component(pipe, i));
+		st = &atu->last_st;
+
+		if (evt == KOMEDA_EVENT_ASYNC_RP) {
+			/* PL2 */
+			if (st->left.vp_type != ATU_VP_TYPE_NONE)
+				update_atu_vp_matrix(&st->left, st->left.vp_type,
+					     cur_pos, inv_cur_mat, ref_pos, ref_mat);
+			if ((st->right.vp_type != ATU_VP_TYPE_NONE &&
+			    st->mode != ATU_MODE_VP0_VP1_SEQ) ||
+			    (st->right.vp_type != ATU_VP_TYPE_NONE &&
+			    st->mode == ATU_MODE_VP0_VP1_SEQ && !ref_mat))
+				update_atu_vp_matrix(&st->right, st->right.vp_type,
+					     cur_pos, inv_cur_mat, ref_pos, ref_mat);
+		} else 	if (st->mode == ATU_MODE_VP0_VP1_SEQ) {
+			/* PL1 only flush right vp under SEQ mode */
+			if (st->right.vp_type != ATU_VP_TYPE_NONE)
+				update_atu_vp_matrix(&st->right, st->right.vp_type,
+					     cur_pos, inv_cur_mat, ref_pos, ref_mat);
+		}
+
+		mdev->funcs->latch_matrix(atu);
+	}
+}
+
+static void
+update_crtc_atu_matrix(struct komeda_dev *mdev, struct komeda_crtc *kcrtc,
+		       u64 evt)
+{
+	struct komeda_pipeline *pipe;
+	struct malidp_position cur_pos;
+	struct malidp_matrix4 inv_cur_mat;
+	struct malidp_position *ref_pos = NULL;
+	struct malidp_matrix4 *ref_mat = NULL;
+
+	if (get_current_pose(&kcrtc->s_buff, &cur_pos, &inv_cur_mat, true)) {
+		ref_pos = &kcrtc->reference_pos;
+		ref_mat = &kcrtc->reference_mat;
+	}
+
+	pipe = kcrtc->master;
+	update_pipeline_atu_matrix(mdev, pipe, evt, &cur_pos, &inv_cur_mat, ref_pos, ref_mat);
+	if (kcrtc->slave) {
+		pipe = kcrtc->slave;
+		update_pipeline_atu_matrix(mdev, pipe, evt, &cur_pos, &inv_cur_mat, ref_pos, ref_mat);
+	}
+}
+
+void komeda_crtc_handle_atu_event(struct komeda_dev *mdev,
+				  struct komeda_crtc *kcrtc,
+				  struct komeda_events *evts)
+{
+	u64 events = evts->pipes[kcrtc->master->id];
+
+	if (events & KOMEDA_EVENT_ASYNC_RP) {
+		struct komeda_pipeline *pipe = kcrtc->master;
+
+		if (pipe->postponed_cval) {
+			kcrtc->reference_pos = kcrtc->new_pos;
+			kcrtc->reference_mat = kcrtc->new_mat;
+			komeda_pipeline_state_backup(kcrtc->master);
+
+			if (kcrtc->slave &&
+			    has_bit(kcrtc->slave->id,
+			    to_kcrtc_st(kcrtc->base.state)->active_pipes))
+				komeda_pipeline_state_backup(kcrtc->slave);
+		}
+		update_crtc_atu_matrix(mdev, kcrtc, KOMEDA_EVENT_ASYNC_RP);
+		if (pipe->postponed_cval) {
+			pipe->postponed_cval = 0;
+			pipe->funcs->flush(pipe, 0);
+		}
+	}
+
+	if (events & KOMEDA_EVENT_PL3)
+		update_crtc_atu_matrix(mdev, kcrtc, KOMEDA_EVENT_PL3);
+
+}
+
 /**
  * komeda_crtc_atomic_check - build display output data flow
  * @crtc: DRM crtc
@@ -86,6 +286,8 @@ komeda_crtc_atomic_check(struct drm_crtc *crtc,
 		err = komeda_build_display_data_flow(kcrtc, kcrtc_st);
 		if (err)
 			return err;
+		/* update reference position and quat matrix */
+		get_current_pose(&kcrtc->s_buff, &kcrtc->new_pos, &kcrtc->new_mat, false);
 	}
 
 	/* release unclaimed pipeline resources */
@@ -561,6 +763,7 @@ komeda_crtc_atomic_duplicate_state(struct drm_crtc *crtc)
 	new->assertiveness = old->assertiveness;
 	new->strength_limit = old->strength_limit;
 	new->drc = old->drc;
+	new->pl3 = old->pl3;
 
 	return &new->base;
 }

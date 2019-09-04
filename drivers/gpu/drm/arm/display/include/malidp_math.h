@@ -77,4 +77,18 @@ void inverse_quaternion(struct malidp_quaternion *q,
 			struct malidp_quaternion *inv_q);
 void quaternion_to_matrix(struct malidp_quaternion *q,
 			  struct malidp_matrix4 *res);
+
+int update_projection_layer_transform_matrix(struct malidp_matrix4 *render_mat,
+					     struct malidp_matrix4 *helmet_mat,
+					     struct malidp_matrix4 *ref_mat,
+					     struct malidp_matrix4 *inv_cur_mat,
+					     struct malidp_matrix4 *output_mat);
+int update_quad_layer_transform_matrix(struct malidp_position *cur_pos,
+			struct malidp_matrix4  *inv_cur_mat,
+			struct malidp_position *ref_pos,
+			struct malidp_matrix4  *ref_mat,
+			struct malidp_matrix4  *render_mat,
+			struct malidp_matrix4  *helmet_mat,
+			struct malidp_matrix4  *output_mat);
+
 #endif /* _MALIDP_MATH_ */

@@ -22,12 +22,13 @@ int komeda_plane_init_data_flow(struct drm_plane_state *st,
 	struct komeda_plane_state *kplane_st = to_kplane_st(st);
 	struct drm_framebuffer *fb = st->fb;
 	const struct komeda_format_caps *caps = to_kfb(fb)->format_caps;
-	struct komeda_pipeline *pipe = kplane->layer->base.pipeline;
+	struct komeda_pipeline *pipe = kplane->layer ?
+		kplane->layer->base.pipeline : kplane->atu->base.pipeline;
 
 	memset(dflow, 0, sizeof(*dflow));
 
 	dflow->blending_zorder = st->normalized_zpos;
-	if (pipe == to_kcrtc(st->crtc)->master)
+	if (pipe == to_kcrtc(st->crtc)->master || kplane_st->vp_outrect)
 		dflow->blending_zorder -= kcrtc_st->max_slave_zorder;
 	if (dflow->blending_zorder < 0) {
 		DRM_DEBUG_ATOMIC("%s zorder:%d < max_slave_zorder: %d.\n",
@@ -60,7 +61,7 @@ int komeda_plane_init_data_flow(struct drm_plane_state *st,
 
 	dflow->en_atu = !!kplane_st->vp_outrect;
 	dflow->pixel_blend_mode = st->pixel_blend_mode;
-	komeda_complete_data_flow_cfg(kplane->layer, dflow, fb);
+	komeda_complete_data_flow_cfg(pipe, dflow, fb);
 	dflow->channel_scaling = kplane_st->channel_scaling;
 
 	return 0;

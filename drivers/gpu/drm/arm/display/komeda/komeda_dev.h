@@ -21,6 +21,9 @@
 #define KOMEDA_EVENT_OVR		BIT_ULL(4)
 #define KOMEDA_EVENT_EOW		BIT_ULL(5)
 #define KOMEDA_EVENT_MODE		BIT_ULL(6)
+#define KOMEDA_EVENT_PL3		BIT_ULL(9)
+#define KOMEDA_EVENT_FRAME_END		BIT_ULL(10)
+#define KOMEDA_EVENT_ASYNC_RP		BIT_ULL(11)
 
 #define KOMEDA_ERR_TETO			BIT_ULL(14)
 #define KOMEDA_ERR_TEMR			BIT_ULL(15)
@@ -120,6 +123,8 @@ struct komeda_dev_funcs {
 	int (*enable_irq)(struct komeda_dev *mdev);
 	/** @disable_irq: disable irq */
 	int (*disable_irq)(struct komeda_dev *mdev);
+	/* @latch_matrix: latch ATU projection/quad matrix */
+	void (*latch_matrix)(struct komeda_atu *atu);
 	/** @on_off_vblank: notify HW to on/off vblank */
 	void (*on_off_vblank)(struct komeda_dev *mdev,
 			      int master_pipe, bool on);

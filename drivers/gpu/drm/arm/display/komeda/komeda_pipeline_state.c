@@ -11,6 +11,7 @@
 #include "komeda_kms.h"
 #include "komeda_pipeline.h"
 #include "komeda_framebuffer.h"
+#include "malidp_math.h"
 
 static inline bool is_switching_user(void *old, void *new)
 {
@@ -353,6 +354,23 @@ komeda_atu_vp_validate(struct komeda_atu *atu,
 	v_st->top_crop  = dflow->in_y;
 	v_st->bottom_crop = kfb->aligned_h - dflow->in_y - dflow->in_h;
 	v_st->right_crop  = kfb->aligned_w - dflow->in_x - dflow->in_w;
+
+	if (kplane_st->mat_coeff_changed && kplane_st->viewport_trans) {
+		float32 *m1 = NULL, *m2 = NULL;
+		m2 = kplane_st->viewport_trans->data;
+		memcpy(v_st->m2.data, m2, sizeof(v_st->m2.data));
+		if (kplane_st->layer_project)
+			m1 = kplane_st->layer_project->data;
+		else if (kplane_st->layer_quad)
+			m1 = kplane_st->layer_quad->data;
+		else
+			m1 = NULL;
+
+		if (m1) {
+			memcpy(v_st->m1.data, m1, sizeof(v_st->m1.data));
+			v_st->matrix_changed = true;
+		}
+	}
 
 	return 0;
 }
@@ -1035,6 +1053,12 @@ komeda_atu_validate(struct komeda_atu *atu,
 	} else
 		return -EINVAL;
 
+	if (st->mode == ATU_MODE_VP0_VP1_SEQ) {
+		kcrtc_st->pl3 = st->right.out_voffset;
+	} else {
+		kcrtc_st->pl3 = 0;
+	}
+
 	if (plane_st2) {
 		struct komeda_fb *kfb = to_kfb(plane_st->fb);
 		struct komeda_fb *kfb2 = to_kfb(plane_st2->fb);
@@ -1224,11 +1248,11 @@ komeda_timing_ctrlr_validate(struct komeda_timing_ctrlr *ctrlr,
 	return 0;
 }
 
-void komeda_complete_data_flow_cfg(struct komeda_layer *layer,
+void komeda_complete_data_flow_cfg(struct komeda_pipeline *pipe,
 				   struct komeda_data_flow_cfg *dflow,
 				   struct drm_framebuffer *fb)
 {
-	struct komeda_scaler *scaler = layer->base.pipeline->scalers[0];
+	struct komeda_scaler *scaler = pipe->scalers[0];
 	u32 w = dflow->in_w;
 	u32 h = dflow->in_h;
 

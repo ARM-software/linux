@@ -51,8 +51,10 @@ static irqreturn_t komeda_kms_irq_handler(int irq, void *data)
 	komeda_print_events(&evts);
 
 	/* Notify the crtc to handle the events */
-	for (i = 0; i < kms->n_crtcs; i++)
+	for (i = 0; i < kms->n_crtcs; i++) {
 		komeda_crtc_handle_event(&kms->crtcs[i], &evts);
+		komeda_crtc_handle_atu_event(mdev, &kms->crtcs[i], &evts);
+	}
 
 	return status;
 }
