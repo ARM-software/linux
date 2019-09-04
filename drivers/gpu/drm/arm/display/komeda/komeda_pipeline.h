@@ -475,6 +475,9 @@ struct komeda_pipeline_funcs {
 				     struct drm_display_mode *mode,
 				     unsigned long aclk_rate,
 				     struct komeda_data_flow_cfg *dflow);
+	/* flush: Notify the HW to flush or kickoff the update */
+	void (*flush)(struct komeda_pipeline *pipe,
+		      u32 active_pipes);
 	/* dump_register: Optional, dump registers to seq_file */
 	void (*dump_register)(struct komeda_pipeline *pipe,
 			      struct seq_file *sf);

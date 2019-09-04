@@ -1838,6 +1838,36 @@ static void d71_gcu_dump(struct d71_dev *d71, struct seq_file *sf)
 	seq_printf(sf, "GCU_CONFIG_VALID1:\t0x%X\n", v[2]);
 }
 
+static void d77_pipeline_enable_perf(struct d71_pipeline *pipe)
+{
+	if (!pipe->perf || !pipe->perf->perf_mask)
+		return;
+
+	pipe->perf->perf_mask &= pipe->perf->perf_valid_mask;
+
+	malidp_write32(pipe->lpu_perf, PERF_MASK0,
+		       lower_32_bits(pipe->perf->perf_mask));
+	malidp_write32(pipe->lpu_perf, PERF_MASK1,
+		       upper_32_bits(pipe->perf->perf_mask));
+	malidp_write32(pipe->lpu_perf, BLK_CONTROL, BLK_CTRL_EN);
+}
+
+static void d71_pipeline_flush(struct komeda_pipeline *pipe,
+			       u32 active_pipes)
+{
+	struct d71_dev *d71 = pipe->mdev->chip_data;
+	u32 reg_offset = (pipe->id == 0) ?
+			 GCU_CONFIG_VALID0 : GCU_CONFIG_VALID1;
+
+	if (has_bit(0, active_pipes))
+		d77_pipeline_enable_perf(d71->pipes[0]);
+
+	if (has_bit(1, active_pipes))
+		d77_pipeline_enable_perf(d71->pipes[1]);
+
+	malidp_write32(d71->gcu_addr, reg_offset, GCU_CONFIG_CVAL);
+}
+
 static void d71_lpu_dump(struct d71_pipeline *pipe, struct seq_file *sf)
 {
 	u32 v[6];
@@ -1894,6 +1924,7 @@ static void d71_pipeline_dump(struct komeda_pipeline *pipe, struct seq_file *sf)
 
 const struct komeda_pipeline_funcs d71_pipeline_funcs = {
 	.downscaling_clk_check	= d71_downscaling_clk_check,
+	.flush			= d71_pipeline_flush,
 	.dump_register		= d71_pipeline_dump,
 };
 

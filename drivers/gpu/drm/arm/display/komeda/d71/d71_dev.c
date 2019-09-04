@@ -346,16 +346,6 @@ static int d71_change_opmode(struct komeda_dev *mdev, int new_mode)
 	return ret;
 }
 
-static void d71_flush(struct komeda_dev *mdev,
-		      int master_pipe, u32 active_pipes)
-{
-	struct d71_dev *d71 = mdev->chip_data;
-	u32 reg_offset = (master_pipe == 0) ?
-			 GCU_CONFIG_VALID0 : GCU_CONFIG_VALID1;
-
-	malidp_write32(d71->gcu_addr, reg_offset, GCU_CONFIG_CVAL);
-}
-
 static int d71_reset(struct d71_dev *d71)
 {
 	u32 __iomem *gcu = d71->gcu_addr;
@@ -626,33 +616,6 @@ static void d71_init_fmt_tbl(struct komeda_dev *mdev)
 	table->n_formats = ARRAY_SIZE(d71_format_caps_table);
 }
 
-static void d77_pipeline_enable_perf(struct d71_pipeline *pipe)
-{
-	if (!pipe->perf || !pipe->perf->perf_mask)
-		return;
-
-	pipe->perf->perf_mask &= pipe->perf->perf_valid_mask;
-
-	malidp_write32(pipe->lpu_perf, PERF_MASK0,
-			lower_32_bits(pipe->perf->perf_mask));
-	malidp_write32(pipe->lpu_perf, PERF_MASK1,
-			upper_32_bits(pipe->perf->perf_mask));
-	malidp_write32(pipe->lpu_perf, BLK_CONTROL, BLK_CTRL_EN);
-}
-
-static void d77_flush(struct komeda_dev *mdev, int master_id, u32 active_pipes)
-{
-	struct d71_dev *d77 = mdev->chip_data;
-
-	if (has_bit(0, active_pipes))
-		d77_pipeline_enable_perf(d77->pipes[0]);
-
-	if (has_bit(1, active_pipes))
-		d77_pipeline_enable_perf(d77->pipes[1]);
-
-	d71_flush(mdev, master_id, active_pipes);
-}
-
 static int d71_connect_iommu(struct komeda_dev *mdev)
 {
 	struct d71_dev *d71 = mdev->chip_data;
@@ -723,7 +686,6 @@ static const struct komeda_dev_funcs d71_chip_funcs = {
 	.disable_irq		= d71_disable_irq,
 	.on_off_vblank		= d71_on_off_vblank,
 	.change_opmode		= d71_change_opmode,
-	.flush			= d71_flush,
 	.connect_iommu		= d71_connect_iommu,
 	.disconnect_iommu	= d71_disconnect_iommu,
 	.dump_register		= d71_dump,
@@ -738,7 +700,6 @@ static const struct komeda_dev_funcs d77_chip_funcs = {
 	.disable_irq		= d71_disable_irq,
 	.on_off_vblank		= d71_on_off_vblank,
 	.change_opmode		= d71_change_opmode,
-	.flush			= d77_flush,
 	.connect_iommu		= d71_connect_iommu,
 	.disconnect_iommu	= d71_disconnect_iommu,
 	.dump_register		= d71_dump,
