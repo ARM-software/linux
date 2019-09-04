@@ -131,9 +131,6 @@ struct komeda_dev_funcs {
 	 * Notify HW to switch to a new display operation mode.
 	 */
 	int (*change_opmode)(struct komeda_dev *mdev, int new_mode);
-	/** @flush: Notify the HW to flush or kickoff the update */
-	void (*flush)(struct komeda_dev *mdev,
-		      int master_pipe, u32 active_pipes);
 };
 
 /*

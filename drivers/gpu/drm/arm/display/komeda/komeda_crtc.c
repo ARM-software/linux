@@ -246,7 +246,6 @@ komeda_crtc_do_flush(struct drm_crtc *crtc,
 {
 	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(crtc->state);
-	struct komeda_dev *mdev = kcrtc->base.dev->dev_private;
 	struct komeda_pipeline *master = kcrtc->master;
 	struct komeda_pipeline *slave = kcrtc->slave;
 	struct komeda_wb_connector *wb_conn = kcrtc->wb_conn;
@@ -268,7 +267,7 @@ komeda_crtc_do_flush(struct drm_crtc *crtc,
 		drm_writeback_queue_job(&wb_conn->base, conn_st);
 
 	/* step 2: notify the HW to kickoff the update */
-	mdev->funcs->flush(mdev, master->id, kcrtc_st->active_pipes);
+	master->funcs->flush(master, kcrtc_st->active_pipes);
 }
 
 static void
@@ -285,7 +284,7 @@ komeda_crtc_flush_and_wait_for_flip_done(struct komeda_crtc *kcrtc,
 					 struct completion *input_flip_done)
 {
 	struct drm_device *drm = kcrtc->base.dev;
-	struct komeda_dev *mdev = kcrtc->master->mdev;
+	struct komeda_pipeline *master = kcrtc->master;
 	struct completion *flip_done;
 	struct completion temp;
 	int timeout;
@@ -299,7 +298,7 @@ komeda_crtc_flush_and_wait_for_flip_done(struct komeda_crtc *kcrtc,
 		flip_done = &temp;
 	}
 
-	mdev->funcs->flush(mdev, kcrtc->master->id, 0);
+	master->funcs->flush(master, 0);
 
 	/* wait the flip take affect.*/
 	timeout = wait_for_completion_timeout(flip_done, HZ);
