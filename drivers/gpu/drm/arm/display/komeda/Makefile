@@ -18,7 +18,8 @@ komeda-y := \
 	komeda_plane.o \
 	komeda_wb_connector.o \
 	komeda_private_obj.o \
-	komeda_math.o
+	komeda_math.o \
+	komeda_debugfs.o
 
 komeda-y += \
 	d71/d71_dev.o \

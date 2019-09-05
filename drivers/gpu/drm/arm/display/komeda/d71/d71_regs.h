@@ -579,6 +579,7 @@ enum d71_blk_type {
 
 #define D71_MAX_GLB_IT_COEFF		3
 #define D71_MAX_GLB_SCL_COEFF		4
+#define D77_MAX_GLB_SC_COEFF		2
 
 #define D71_MAX_LAYERS_PER_LPU		4
 #define D71_BLOCK_MAX_INPUT		9

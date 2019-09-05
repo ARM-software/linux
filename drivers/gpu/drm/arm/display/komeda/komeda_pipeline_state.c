@@ -307,6 +307,8 @@ komeda_rotate_data_flow(struct komeda_data_flow_cfg *dflow, u32 rot)
 	}
 }
 
+#define CEIL(x, y)	((x) + (y) - 1) / (y)
+
 static int
 komeda_atu_vp_validate(struct komeda_atu *atu,
 		       struct komeda_atu_vp_state *v_st,
@@ -354,6 +356,52 @@ komeda_atu_vp_validate(struct komeda_atu *atu,
 	v_st->top_crop  = dflow->in_y;
 	v_st->bottom_crop = kfb->aligned_h - dflow->in_y - dflow->in_h;
 	v_st->right_crop  = kfb->aligned_w - dflow->in_x - dflow->in_w;
+
+	v_st->hdnorm = v_st->out_hsize;
+	v_st->vdnorm = v_st->out_vsize;
+
+	v_st->hnodes = 32;
+	v_st->vnodes = 32;
+	/* HSTEP = ceil( (VP_OUT_HSIZE/8) / (HNODES-2)) */
+	v_st->hstep = CEIL(v_st->out_hsize >> 3, v_st->hnodes - 2);
+	/* VSTEP = ceil( VP_OUT_VISZE / (VNODES -2)) */
+	v_st->vstep = CEIL(v_st->out_vsize, v_st->vnodes - 2);
+
+	v_st->hrshift = __fls(v_st->hstep * v_st->hstep);
+	v_st->vrshift = __fls(v_st->vstep * v_st->vstep);
+
+	v_st->hscale = (v_st->hdnorm << 12) / v_st->out_hsize;
+	if (!in_range(&atu->vp_hscale, v_st->hscale))
+		return -EINVAL;
+
+	if (kplane_st->spline_coeff_r_changed)
+		v_st->r_sp_table = kplane_st->spline_coeff_r
+			? kplane_st->spline_coeff_r->data
+			: NULL;
+
+	if (kplane_st->spline_coeff_g_changed)
+		v_st->g_sp_table = kplane_st->spline_coeff_g
+			? kplane_st->spline_coeff_g->data
+			: NULL;
+
+	if (kplane_st->spline_coeff_b_changed)
+		v_st->b_sp_table = kplane_st->spline_coeff_b
+			? kplane_st->spline_coeff_b->data
+			: NULL;
+
+	if (kplane_st->spline_coeff_r_changed ||
+	    kplane_st->spline_coeff_g_changed ||
+	    kplane_st->spline_coeff_b_changed) {
+		/* Enable LDC if we have a green channel*/
+		v_st->lc_enabled = v_st->g_sp_table != NULL;
+		if (v_st->lc_enabled)
+			/* CAC needs all r/g/b channels to have data. */
+			v_st->cac_enabled = v_st->r_sp_table != NULL
+				&& v_st->b_sp_table != NULL;
+	}
+
+	if (v_st->vp_type != ATU_VP_TYPE_NONE || v_st->lc_enabled)
+		v_st->clamp_enabled = kplane_st->viewport_clamp;
 
 	if (kplane_st->mat_coeff_changed && kplane_st->viewport_trans) {
 		float32 *m1 = NULL, *m2 = NULL;
