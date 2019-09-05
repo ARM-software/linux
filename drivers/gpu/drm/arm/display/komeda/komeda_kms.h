@@ -114,6 +114,26 @@ struct komeda_wb_connector {
 	u32 expected_pipes;
 	/** @complete_pipes: pipelines which have finished writeback */
 	u32 complete_pipes;
+	/**
+	 * @color_encoding_property: enum property for specifying color encoding
+	 * for non RGB formats for writeback layer.
+	 */
+	struct drm_property *color_encoding_property;
+	/**
+	 * @color_range_property: enum property for specifying color range for
+	 * non RGB formats for writeback layer.
+	 */
+	struct drm_property *color_range_property;
+};
+
+/**
+ * struct komeda_wb_connector_state
+ */
+struct komeda_wb_connector_state {
+	struct drm_connector_state base;
+
+	enum drm_color_encoding color_encoding;
+	enum drm_color_range color_range;
 };
 
 /**
@@ -219,6 +239,9 @@ struct komeda_kms_dev {
 #define to_kcrtc_st(p)	container_of(p, struct komeda_crtc_state, base)
 #define to_kdev(p)	container_of(p, struct komeda_kms_dev, base)
 #define to_wb_conn(x)	container_of(x, struct drm_writeback_connector, base)
+#define to_kconn_st(p)	container_of(p, struct komeda_wb_connector_state, base)
+
+#define _drm_conn_to_kconn(c)   to_kconn(to_wb_conn((c)))
 
 static inline bool is_writeback_only(struct drm_crtc_state *st)
 {

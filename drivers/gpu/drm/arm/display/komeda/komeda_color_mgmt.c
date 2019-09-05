@@ -45,6 +45,34 @@ static const s32 yuv2rgb_bt2020[KOMEDA_N_YUV2RGB_COEFFS] = {
 	   0,  512,  512
 };
 
+static const s32 rgb2yuv_bt601_narrow[KOMEDA_N_RGB2YUV_COEFFS] = {
+	1052,  2065,  401,
+	-607, -1192, 1799,
+	1799, -1506, -293,
+	 256,  2048, 2048
+};
+
+static const s32 rgb2yuv_bt601_wide[KOMEDA_N_RGB2YUV_COEFFS] = {
+	1225,  2404,  467,
+	-691, -1357, 2048,
+	2048, -1715, -333,
+	   0,  2048, 2048
+};
+
+static const s32 rgb2yuv_bt709_narrow[KOMEDA_N_RGB2YUV_COEFFS] = {
+	 748,  2516,  254,
+	-412, -1387, 1799,
+	1799, -1634, -165,
+	 256,  2048, 2048
+};
+
+static const s32 rgb2yuv_bt709_wide[KOMEDA_N_RGB2YUV_COEFFS] = {
+	 871,  2929,  296,
+	-469, -1579, 2048,
+	2048, -1860, -188,
+	   0,  2048, 2048
+};
+
 const s32 *komeda_select_yuv2rgb_coeffs(u32 color_encoding, u32 color_range)
 {
 	bool narrow = color_range == DRM_COLOR_YCBCR_LIMITED_RANGE;
@@ -65,6 +93,26 @@ const s32 *komeda_select_yuv2rgb_coeffs(u32 color_encoding, u32 color_range)
 		break;
 	}
 
+	return coeffs;
+}
+
+const s32 *komeda_select_rgb2yuv_coeffs(u32 color_encoding, u32 color_range)
+{
+	const s32 *coeffs = NULL;
+	bool narrow = color_range == DRM_COLOR_YCBCR_LIMITED_RANGE;
+
+	switch (color_encoding) {
+	case DRM_COLOR_YCBCR_BT709:
+		coeffs = narrow ? rgb2yuv_bt709_narrow : rgb2yuv_bt709_wide;
+		break;
+	case DRM_COLOR_YCBCR_BT601:
+		coeffs = narrow ? rgb2yuv_bt601_narrow : rgb2yuv_bt601_wide;
+		break;
+	default:
+		coeffs = NULL;
+		break;
+
+	}
 	return coeffs;
 }
 

@@ -797,6 +797,17 @@ static void d71_wb_layer_update(struct komeda_component *c,
 
 	d71_layer_update_fb(c, kfb, st->addr);
 
+	if (kfb->base.format->is_yuv) {
+		struct komeda_wb_connector_state *kc_state =
+			to_kconn_st(conn_st);
+
+		malidp_write_group(reg, LAYER_WR_RGB_YUV_COEFF0,
+				   KOMEDA_N_RGB2YUV_COEFFS,
+				   komeda_select_rgb2yuv_coeffs(
+					   kc_state->color_encoding,
+					   kc_state->color_range));
+	}
+
 	if (kfb->is_va)
 		ctrl |= LW_TBU_EN;
 
