@@ -130,14 +130,170 @@ static void komeda_wb_connector_destroy(struct drm_connector *connector)
 	kfree(to_kconn(to_wb_conn(connector)));
 }
 
+static int
+komeda_wb_connector_get_property(struct drm_connector *connector,
+				 const struct drm_connector_state *state,
+				 struct drm_property *property,
+				 uint64_t *val)
+{
+	struct komeda_wb_connector *wb_conn = _drm_conn_to_kconn(connector);
+	struct komeda_wb_connector_state *conn_st = to_kconn_st(state);
+
+	if (property == wb_conn->color_encoding_property) {
+		*val = conn_st->color_encoding;
+	} else if (property == wb_conn->color_range_property) {
+		*val = conn_st->color_range;
+	} else {
+		DRM_DEBUG_ATOMIC("Unknown property %s\n", property->name);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int
+komeda_wb_connector_set_property(struct drm_connector *connector,
+				 struct drm_connector_state *state,
+				 struct drm_property *property,
+				 uint64_t val)
+{
+	struct komeda_wb_connector *wb_conn = _drm_conn_to_kconn(connector);
+	struct komeda_wb_connector_state *conn_st = to_kconn_st(state);
+
+	if (property == wb_conn->color_encoding_property) {
+		conn_st->color_encoding = val;
+	} else if (property == wb_conn->color_range_property) {
+		conn_st->color_range = val;
+	} else {
+		DRM_DEBUG_ATOMIC("Unknown property %s\n", property->name);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static void komeda_wb_connector_reset(struct drm_connector *connector)
+{
+	struct komeda_wb_connector_state *kc_state =
+		kzalloc(sizeof(*kc_state), GFP_KERNEL);
+
+	if (connector->state) {
+		__drm_atomic_helper_connector_destroy_state(connector->state);
+		kfree(to_kconn_st(connector->state));
+	}
+
+	kc_state->color_encoding = DRM_COLOR_YCBCR_BT601;
+	kc_state->color_range = DRM_COLOR_YCBCR_LIMITED_RANGE;
+	__drm_atomic_helper_connector_reset(connector, &kc_state->base);
+}
+
+static struct drm_connector_state *
+komeda_wb_connector_duplicate_state(struct drm_connector *connector)
+{
+	struct komeda_wb_connector_state *state;
+
+	if (WARN_ON(!connector->state))
+		return NULL;
+
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	if (state) {
+		struct komeda_wb_connector_state *old_state =
+				to_kconn_st(connector->state);
+
+		__drm_atomic_helper_connector_duplicate_state(connector,
+							      &state->base);
+		state->color_encoding = old_state->color_encoding;
+		state->color_range = old_state->color_range;
+	}
+
+	return &state->base;
+}
+
+static void
+komeda_wb_connector_destroy_state(struct drm_connector *connector,
+				  struct drm_connector_state *state)
+{
+	__drm_atomic_helper_connector_destroy_state(state);
+	kfree(to_kconn_st(state));
+}
+
 static const struct drm_connector_funcs komeda_wb_connector_funcs = {
-	.reset			= drm_atomic_helper_connector_reset,
+	.reset			= komeda_wb_connector_reset,
 	.detect			= komeda_wb_connector_detect,
 	.fill_modes		= komeda_wb_connector_fill_modes,
 	.destroy		= komeda_wb_connector_destroy,
-	.atomic_duplicate_state	= drm_atomic_helper_connector_duplicate_state,
-	.atomic_destroy_state	= drm_atomic_helper_connector_destroy_state,
+	.atomic_duplicate_state	= komeda_wb_connector_duplicate_state,
+	.atomic_destroy_state	= komeda_wb_connector_destroy_state,
+	.atomic_set_property	= komeda_wb_connector_set_property,
+	.atomic_get_property	= komeda_wb_connector_get_property,
 };
+
+static const char * const color_encoding_name[] = {
+	[DRM_COLOR_YCBCR_BT601] = "ITU-R BT.601 YCbCr",
+	[DRM_COLOR_YCBCR_BT709] = "ITU-R BT.709 YCbCr",
+	[DRM_COLOR_YCBCR_BT2020] = "ITU-R BT.2020 YCbCr",
+};
+
+static const char * const color_range_name[] = {
+	[DRM_COLOR_YCBCR_FULL_RANGE] = "YCbCr full range",
+	[DRM_COLOR_YCBCR_LIMITED_RANGE] = "YCbCr limited range",
+};
+
+static void
+komeda_wb_connector_attch_property(struct komeda_wb_connector *wb_conn,
+				   struct drm_property *property,
+				   uint64_t init_val)
+{
+	struct drm_mode_object *obj = &wb_conn->base.base.base;
+
+	drm_object_attach_property(obj, property, init_val);
+}
+
+static int
+komeda_wb_connector_create_color_prop(struct komeda_wb_connector *wb_conn)
+{
+	struct drm_device *dev= wb_conn->base.base.dev;
+	struct drm_property *prop;
+	struct drm_prop_enum_list enum_list[max_t(int, DRM_COLOR_ENCODING_MAX,
+						       DRM_COLOR_RANGE_MAX)];
+	u32 supported_encoding = BIT(DRM_COLOR_YCBCR_BT601) |
+				 BIT(DRM_COLOR_YCBCR_BT709);
+	u32 supported_range = BIT(DRM_COLOR_YCBCR_LIMITED_RANGE) |
+			      BIT(DRM_COLOR_YCBCR_FULL_RANGE);
+	int i, len;
+
+	len = 0;
+	for (i = 0; i < DRM_COLOR_ENCODING_MAX; i++) {
+		if ((supported_encoding & BIT(i)) == 0)
+			continue;
+		enum_list[len].type = i;
+		enum_list[len].name = color_encoding_name[i];
+		len++;
+	}
+	prop = drm_property_create_enum(dev, 0, "COLOR_ENCODING",
+					enum_list, len);
+	if (!prop)
+		return -ENOMEM;
+	wb_conn->color_encoding_property = prop;
+	komeda_wb_connector_attch_property(wb_conn, prop,
+					   DRM_COLOR_YCBCR_BT601);
+
+	len = 0;
+	for (i = 0; i < DRM_COLOR_RANGE_MAX; i++) {
+		if ((supported_range & BIT(i)) == 0)
+			continue;
+		enum_list[len].type = i;
+		enum_list[len].name = color_range_name[i];
+		len++;
+	}
+	prop = drm_property_create_enum(dev, 0, "COLOR_RANGE",
+					enum_list, len);
+	if (!prop)
+		return -ENOMEM;
+	wb_conn->color_range_property = prop;
+	komeda_wb_connector_attch_property(wb_conn, prop,
+					   DRM_COLOR_YCBCR_LIMITED_RANGE);
+
+	return 0;
+}
 
 static int komeda_wb_connector_add(struct komeda_kms_dev *kms,
 				   struct komeda_crtc *kcrtc)
@@ -183,6 +339,10 @@ static int komeda_wb_connector_add(struct komeda_kms_dev *kms,
 	info->color_formats = kcrtc->master->improc->supported_color_formats;
 
 	kcrtc->wb_conn = kwb_conn;
+
+	err = komeda_wb_connector_create_color_prop(kwb_conn);
+	if (err)
+		return err;
 
 	return 0;
 }

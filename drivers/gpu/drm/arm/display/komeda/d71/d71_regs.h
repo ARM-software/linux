@@ -328,6 +328,8 @@
 #define LAYER_WR_PROG_LINE	0x0D4
 #define LAYER_WR_FORMAT		0x0D8
 
+#define LAYER_WR_RGB_YUV_COEFF0	0x130
+
 /* Layer_WR control bits */
 #define LW_OFM			BIT(4)
 #define LW_LALPHA(x)		(((x) & 0xFF) << 8)
