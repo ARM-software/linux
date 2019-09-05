@@ -126,6 +126,7 @@ struct d71_dev {
 	u32 __iomem	*gcu_addr;
 	/* scaling coeffs table */
 	u32 __iomem	*glb_scl_coeff_addr[D71_MAX_GLB_SCL_COEFF];
+	u32 __iomem	*glb_sc_coeff_addr[D77_MAX_GLB_SC_COEFF];
 	u32 __iomem	*periph_addr;
 
 	struct d71_pipeline *pipes[D71_MAX_PIPELINE];

@@ -536,12 +536,28 @@ static u32 get_blk_max_line_size(struct d71_dev *d71, u32 __iomem *reg)
 	return get_blk_max_line_size2(d71, reg, d71->max_line_size);
 }
 
+static void flush_sp_table(u32 __iomem *reg, u32 tbl, u32 *data)
+{
+	u32 i;
+
+	if (data == NULL)
+		return;
+
+	malidp_write32(reg, GLB_SC_COEFF_ADDR, tbl);
+	for (i = 0; i < GLB_SC_COEFF_MAX_NUM; i++)
+		malidp_write32(reg, GLB_SC_COEFF_DATA, data[i]);
+}
+
 static void
 d77_atu_vp_update(struct komeda_atu_vp_state *v_st, u32 payload,
-		u32 __iomem *reg)
+		  u32 __iomem *reg, u32 __iomem *sc_reg)
 {
 	u32 i;
 	dma_addr_t addr = v_st->addr;
+
+	flush_sp_table(sc_reg, SC_COEFF_R_ADDR, v_st->r_sp_table);
+	flush_sp_table(sc_reg, SC_COEFF_G_ADDR, v_st->g_sp_table);
+	flush_sp_table(sc_reg, SC_COEFF_B_ADDR, v_st->b_sp_table);
 
 	malidp_write32(reg, BLK_P0_PTR_LOW, lower_32_bits(addr));
 	malidp_write32(reg, BLK_P0_PTR_HIGH, upper_32_bits(addr));
@@ -558,6 +574,16 @@ d77_atu_vp_update(struct komeda_atu_vp_state *v_st, u32 payload,
 	malidp_write32(reg, ATU_VP_OUT_OFFSET,
 			HV_SIZE(v_st->out_hoffset, v_st->out_voffset));
 
+	malidp_write32(reg, ATU_VP_DNORM,
+			HV_SIZE(v_st->hdnorm, v_st->vdnorm));
+	malidp_write32(reg, ATU_VP_HSCALE, v_st->hscale);
+	malidp_write32(reg, ATU_VP_SC_NODES,
+			HV_SIZE(v_st->hnodes, v_st->vnodes));
+	malidp_write32(reg, ATU_VP_SC_KNOTS,
+			HV_SIZE(v_st->hstep, v_st->vstep));
+	malidp_write32(reg, ATU_VP_SC_RSHIFT,
+			HV_SIZE(v_st->hrshift, v_st->vrshift));
+
 	malidp_write32(reg, ATU_VP_H_CROP,
 			HV_SIZE(v_st->left_crop, v_st->right_crop));
 	malidp_write32(reg, ATU_VP_V_CROP,
@@ -567,7 +593,17 @@ d77_atu_vp_update(struct komeda_atu_vp_state *v_st, u32 payload,
 	i |= ATU_VP_EN;
 	if (v_st->vp_type != ATU_VP_TYPE_NONE)
 		i |= ATU_VP_RP;
+	WARN_ON(v_st->cac_enabled && !v_st->lc_enabled);
+	i |= (v_st->lc_enabled) ? ATU_VP_LC : 0;
+	i |= (v_st->cac_enabled) ? ATU_VP_CAC : 0;
+	i |= (v_st->clamp_enabled) ? ATU_VP_CLAMP : 0;
 	malidp_write32(reg, BLK_CONTROL, i);
+}
+
+static struct d71_dev *
+c_to_d71_dev(struct komeda_component *c)
+{
+	return c->pipeline->mdev->chip_data;
 }
 
 static void d77_atu_update(struct komeda_component *c,
@@ -577,6 +613,7 @@ static void d77_atu_update(struct komeda_component *c,
 	struct komeda_atu *atu = to_atu(c);
 	struct drm_plane_state *plane_st = NULL;
 	struct komeda_fb *kfb = NULL;
+	struct d71_dev *d71 = c_to_d71_dev(c);
 	u32 v, mask = L_TBU_EN | ATU_EN | ATU_SB | ATU_MODE(0x7);
 	u32 __iomem *atu_reg = c->reg;
 	u32 __iomem *vp0_reg = atu->reg[0];
@@ -588,7 +625,7 @@ static void d77_atu_update(struct komeda_component *c,
 		plane_st = st->left.plane->state;
 		kfb = to_kfb(plane_st->fb);
 		d77_atu_vp_update(&st->left, kfb->offset_payload,
-				  vp0_reg);
+				  vp0_reg, d71->glb_sc_coeff_addr[0]);
 	} else {
 		malidp_write32_mask(vp0_reg, BLK_CONTROL, ATU_VP_EN, 0);
 	}
@@ -597,7 +634,7 @@ static void d77_atu_update(struct komeda_component *c,
 		plane_st = st->right.plane->state;
 		kfb = to_kfb(plane_st->fb);
 		d77_atu_vp_update(&st->right, kfb->offset_payload,
-				  vp1_reg);
+				  vp1_reg, d71->glb_sc_coeff_addr[1]);
 	} else {
 		malidp_write32_mask(vp1_reg, BLK_CONTROL, ATU_VP_EN, 0);
 	}
@@ -1822,6 +1859,7 @@ int d71_probe_block(struct d71_dev *d71,
 		break;
 
 	case D71_BLK_TYPE_GLB_SC_COEFF:
+		d71->glb_sc_coeff_addr[blk_id] = reg;
 		break;
 
 	case D77_BLK_TYPE_CBU:

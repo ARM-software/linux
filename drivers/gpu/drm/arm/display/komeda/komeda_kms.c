@@ -17,6 +17,7 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
+#include "komeda_debugfs.h"
 #include "komeda_dev.h"
 #include "komeda_framebuffer.h"
 #include "komeda_kms.h"
@@ -72,6 +73,9 @@ static struct drm_driver komeda_kms_driver = {
 	.gem_prime_vmap			= drm_gem_cma_prime_vmap,
 	.gem_prime_vunmap		= drm_gem_cma_prime_vunmap,
 	.gem_prime_mmap			= drm_gem_cma_prime_mmap,
+#ifdef CONFIG_DEBUG_FS
+	.debugfs_init			= komeda_kms_debugfs_register,
+#endif
 	.fops = &komeda_cma_fops,
 	.name = "komeda",
 	.desc = "Arm Komeda Display Processor driver",
