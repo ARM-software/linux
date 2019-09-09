@@ -480,15 +480,17 @@ static int d71_layer_init(struct d71_dev *d71,
 	layer = to_layer(c);
 	layer_info = malidp_read32(reg, LAYER_INFO);
 
-	if (layer_info & L_INFO_RF)
+	if (layer_info & L_INFO_RF) {
 		layer->layer_type = KOMEDA_FMT_RICH_LAYER;
-	else
+		layer->color_mgr.igamma_mgr = d71->it_mgr;
+	} else {
 		layer->layer_type = KOMEDA_FMT_SIMPLE_LAYER;
+		layer->color_mgr.igamma_mgr = d71->it_s_mgr;
+	}
 
-	layer->color_mgr.igamma_mgr = d71->glb_lt_mgr;
 	if (layer_info & L_INFO_CM) {
 		layer->color_mgr.has_ctm = true;
-		layer->color_mgr.fgamma_mgr = d71->glb_lt_mgr;
+		layer->color_mgr.fgamma_mgr = d71->ft_mgr;
 	}
 
 	if (!d71->periph_addr) {
@@ -603,6 +605,7 @@ static void d77_atu_update(struct komeda_component *c,
 	malidp_write32(atu_reg, ATU_FMT, kfb->format_caps->hw_id);
 	malidp_write32(atu_reg, AD_CONTROL, to_ad_ctrl(kfb->base.modifier));
 
+	v = d71_layer_update_color(plane_st, atu_reg, &st->color_st, &mask);
 	v |= ATU_MODE(st->mode) | ATU_EN;
 	if (st->single_buffer_enabled)
 		v |= ATU_SB;
@@ -749,6 +752,9 @@ static int d77_atu_init(struct d71_dev *d71, struct block_header *blk,
 	get_resources_id(malidp_read32(reg, ATU_SLAVE_INFO) << 4,
 			 NULL, &atu->slave_resource);
 	atu->layer_type = KOMEDA_FMT_VR_LAYER;
+	atu->color_mgr.igamma_mgr = d71->it_mgr;
+	atu->color_mgr.fgamma_mgr = d71->ft_mgr;
+	atu->color_mgr.has_ctm = true;
 	return 0;
 }
 
@@ -1715,13 +1721,24 @@ static void d71_gamma_update(struct komeda_coeffs_table *table)
 			   GLB_LT_COEFF_NUM, table->coeffs);
 }
 
-static int d71_lt_coeff_init(struct d71_dev *d71,
-			     struct block_header *blk, u32 __iomem *reg)
+static void
+d71_gamma_table_init(struct d71_dev *d71, struct block_header *blk, u32 __iomem *reg)
 {
-	struct komeda_coeffs_manager *mgr = d71->glb_lt_mgr;
+	struct komeda_coeffs_manager *mgr = NULL;
 	int hw_id = BLOCK_INFO_TYPE_ID(blk->block_info);
 
-	return komeda_coeffs_add(mgr, hw_id, reg, d71_gamma_update);
+	switch (hw_id) {
+	case 0x50:
+		mgr = d71->it_s_mgr;
+		break;
+	case 0x52:
+		mgr = d71->ft_mgr;
+		break;
+	default:
+		mgr = d71->it_mgr;
+	}
+
+	komeda_coeffs_add(mgr, hw_id, reg, d71_gamma_update);
 }
 
 int d71_probe_block(struct d71_dev *d71,
@@ -1786,7 +1803,7 @@ int d71_probe_block(struct d71_dev *d71,
 		break;
 
 	case D71_BLK_TYPE_GLB_LT_COEFF:
-		err = d71_lt_coeff_init(d71, blk, reg);
+		d71_gamma_table_init(d71, blk, reg);
 		break;
 
 	case D71_BLK_TYPE_GLB_SCL_COEFF:
