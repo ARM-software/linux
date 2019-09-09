@@ -151,9 +151,13 @@ komeda_crtc_prepare(struct komeda_crtc *kcrtc)
 	if (err)
 		DRM_ERROR("failed to enable pxl clk for pipe%d.\n", master->id);
 
-	err = komeda_ad_enable(master, &kcrtc_st->base.adjusted_mode);
-	if (err)
-		DRM_ERROR("failed to enable AD for pipe%d.\n", master->id);
+	if (kcrtc_st->en_coproc) {
+		err = komeda_ad_enable(master, &kcrtc_st->base.adjusted_mode);
+		if (err) {
+			DRM_ERROR("failed to enable AD for pipe%d.\n", master->id);
+			kcrtc_st->en_coproc = false;
+		}
+	}
 
 unlock:
 	mutex_unlock(&mdev->lock);
@@ -528,6 +532,7 @@ static void komeda_crtc_reset(struct drm_crtc *crtc)
 
 	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (state) {
+		state->en_coproc = false;
 		state->strength_limit = 1;
 		state->drc = AD_MAX_DRC;
 		crtc->state = &state->base;
@@ -552,6 +557,7 @@ komeda_crtc_atomic_duplicate_state(struct drm_crtc *crtc)
 	new->clock_ratio = old->clock_ratio;
 	new->max_slave_zorder = old->max_slave_zorder;
 	new->en_protected_mode = old->en_protected_mode;
+	new->en_coproc = old->en_coproc;
 	new->assertiveness = old->assertiveness;
 	new->strength_limit = old->strength_limit;
 	new->drc = old->drc;
@@ -591,9 +597,10 @@ static int komeda_crtc_atomic_get_property(struct drm_crtc *crtc,
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(state);
 	struct drm_property_blob *b;
 
-	if (property == kcrtc->protected_mode_property) {
+	if (property == kcrtc->protected_mode_property)
 		*val = kcrtc_st->en_protected_mode;
-
+	else if (property == kcrtc->coproc_property)
+		*val = kcrtc_st->en_coproc;
 	else if (property == kcrtc->assertiveness_property)
 		*val = kcrtc_st->assertiveness;
 	else if (property == kcrtc->strength_limit_property)
@@ -617,16 +624,13 @@ static int komeda_crtc_atomic_set_property(struct drm_crtc *crtc,
 {
 	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(state);
-<<<<<<< HEAD
-=======
 	bool replaced = false;
 	int ret = 0;
->>>>>>> bdc90352a5ac... drm/komeda: sensor buffer support
 
-	if (property == kcrtc->protected_mode_property) {
+	if (property == kcrtc->protected_mode_property)
 		kcrtc_st->en_protected_mode = !!val;
-<<<<<<< HEAD
-
+	else if (property == kcrtc->coproc_property)
+		kcrtc_st->en_coproc = !!val;
 	else if (property == kcrtc->assertiveness_property) {
 		if (kcrtc_st->assertiveness != val) {
 			kcrtc_st->assertiveness = val;
@@ -642,7 +646,6 @@ static int komeda_crtc_atomic_set_property(struct drm_crtc *crtc,
 			kcrtc_st->drc = val;
 			kcrtc_st->drc_changed = true;
 		}
-=======
 	} else if (property == kcrtc->sensor_buf_property) {
 		komeda_sensor_buff_put(&kcrtc->s_buff);
 		ret = drm_property_replace_blob_from_id(crtc->dev,
@@ -653,11 +656,26 @@ static int komeda_crtc_atomic_set_property(struct drm_crtc *crtc,
 					&replaced);
 		if (!ret)
 			ret = komeda_sensor_buff_get(&kcrtc->s_buff);
->>>>>>> bdc90352a5ac... drm/komeda: sensor buffer support
 	} else {
 		DRM_DEBUG_DRIVER("Unknown property %s\n", property->name);
 		return -EINVAL;
 	}
+
+	return 0;
+}
+
+static int create_coprocessor_property(struct komeda_crtc *kcrtc)
+{
+	struct drm_crtc *crtc = &kcrtc->base;
+	struct drm_property *prop;
+
+	prop = drm_property_create_bool(crtc->dev, DRM_MODE_PROP_ATOMIC,
+					"coprocessor");
+	if (!prop)
+		return -ENOMEM;
+
+	drm_object_attach_property(&crtc->base, prop, 0);
+	kcrtc->coproc_property = prop;
 
 	return 0;
 }
@@ -767,7 +785,11 @@ komeda_crtc_create_ad_properties(struct komeda_crtc *kcrtc)
 	if (ret)
 		return ret;
 
-	return create_ad_drc_property(kcrtc);
+	ret = create_ad_drc_property(kcrtc);
+	if (ret)
+		return ret;
+
+	return create_coprocessor_property(kcrtc);
 }
 
 

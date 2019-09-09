@@ -146,6 +146,8 @@ struct komeda_crtc {
 
 	/* protected mode property */
 	struct drm_property *protected_mode_property;
+	/* coprocessor property */
+	struct drm_property *coproc_property;
 	/* assertive display properties */
 	struct drm_property *assertiveness_property;
 	struct drm_property *strength_limit_property;
@@ -182,6 +184,7 @@ struct komeda_crtc_state {
 	/** @max_slave_zorder: the maximum of slave zorder */
 	u32 max_slave_zorder;
 
+	bool en_coproc;
 	bool en_protected_mode;
 	u32 assertiveness;
 	u32 strength_limit;
