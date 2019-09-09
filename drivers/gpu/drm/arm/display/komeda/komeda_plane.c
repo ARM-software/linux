@@ -592,13 +592,13 @@ int komeda_kms_create_plane_properties(struct komeda_kms_dev *kms,
 }
 
 static struct komeda_atu *
-get_atu_by_layer(struct komeda_pipeline *ppl, struct komeda_layer *layer)
+get_atu_by_layer(struct komeda_pipeline *pipe, struct komeda_layer *layer)
 {
 	int i;
 
-	for (i = 0; i < ppl->n_atus; i++)
-		if (ppl->atu[i]->slave_resource == layer->base.id)
-			return ppl->atu[i];
+	for (i = 0; i < pipe->n_atus; i++)
+		if (pipe->atu[i]->slave_resource == layer->base.id)
+			return pipe->atu[i];
 
 	return NULL;
 }

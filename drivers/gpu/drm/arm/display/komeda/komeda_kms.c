@@ -303,6 +303,11 @@ struct komeda_kms_dev *komeda_kms_attach(struct komeda_dev *mdev)
 	if (err)
 		goto cleanup_mode_config;
 
+	komeda_dev_init_ad(mdev);
+	err = komeda_kms_crtcs_add_ad_properties(kms, mdev);
+	if (err)
+		goto cleanup_mode_config;
+
 	drm_mode_config_reset(drm);
 
 	err = devm_request_irq(drm->dev, mdev->irq,

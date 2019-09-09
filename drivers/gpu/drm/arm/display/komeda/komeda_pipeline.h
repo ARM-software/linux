@@ -537,6 +537,8 @@ struct komeda_pipeline {
 	struct komeda_improc *improc;
 	/** @ctrlr: timing controller */
 	struct komeda_timing_ctrlr *ctrlr;
+	/** @ad: assertive display */
+	struct ad_coprocessor *ad;
 	/** @funcs: chip private pipeline functions */
 	const struct komeda_pipeline_funcs *funcs;
 
@@ -546,6 +548,8 @@ struct komeda_pipeline {
 	struct device_node *of_output_port;
 	/** @of_output_links: output connector device nodes */
 	struct device_node *of_output_links[2];
+	/** @of_coproc_dev: coprocessor device node */
+	struct device_node *of_coproc_dev;
 	/** @dual_link: true if of_output_links[0] and [1] are both valid */
 	bool dual_link;
 };
@@ -704,4 +708,9 @@ int komeda_pipeline_setup_atu(struct komeda_pipeline *pipe,
 int komeda_atu_set_vp(struct komeda_atu *atu,
 		      struct komeda_plane_state *kplane_st,
 		      struct komeda_data_flow_cfg *dflow);
+
+int komeda_ad_enable(struct komeda_pipeline *pipe,
+		     struct drm_display_mode *mode);
+
+void komeda_ad_disable(struct komeda_pipeline *pipe);
 #endif /* _KOMEDA_PIPELINE_H_*/

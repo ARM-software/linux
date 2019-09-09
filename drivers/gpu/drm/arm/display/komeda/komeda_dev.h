@@ -12,6 +12,7 @@
 #include "komeda_pipeline.h"
 #include "malidp_product.h"
 #include "komeda_format_caps.h"
+#include "ad_coprocessor_defs.h"
 
 #define KOMEDA_EVENT_VSYNC		BIT_ULL(0)
 #define KOMEDA_EVENT_FLIP		BIT_ULL(1)
@@ -158,6 +159,8 @@ enum {
  * control-abilites of device.
  */
 struct komeda_dev {
+	/** @ad_list: list of assertive display devices*/
+	struct ad_list ad_list;
 	/** @dev: the base device structure */
 	struct device *dev;
 	/** @reg_base: the base address of komeda io space */
@@ -234,5 +237,6 @@ int komeda_dev_suspend(struct komeda_dev *mdev);
 #ifdef CONFIG_DRM_KOMEDA_ERROR_PRINT
 void komeda_print_events(struct komeda_events *evts);
 #endif
+void komeda_dev_init_ad(struct komeda_dev *mdev);
 
 #endif /*_KOMEDA_DEV_H_*/

@@ -57,6 +57,7 @@ void komeda_pipeline_destroy(struct komeda_dev *mdev,
 	of_node_put(pipe->of_output_links[0]);
 	of_node_put(pipe->of_output_links[1]);
 	of_node_put(pipe->of_output_port);
+	of_node_put(pipe->of_coproc_dev);
 	of_node_put(pipe->of_node);
 
 	devm_kfree(mdev->dev, pipe);

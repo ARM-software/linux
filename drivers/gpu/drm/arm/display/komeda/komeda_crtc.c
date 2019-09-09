@@ -151,6 +151,10 @@ komeda_crtc_prepare(struct komeda_crtc *kcrtc)
 	if (err)
 		DRM_ERROR("failed to enable pxl clk for pipe%d.\n", master->id);
 
+	err = komeda_ad_enable(master, &kcrtc_st->base.adjusted_mode);
+	if (err)
+		DRM_ERROR("failed to enable AD for pipe%d.\n", master->id);
+
 unlock:
 	mutex_unlock(&mdev->lock);
 
@@ -182,6 +186,7 @@ komeda_crtc_unprepare(struct komeda_crtc *kcrtc)
 	}
 
 	mdev->dpmode = new_mode;
+	komeda_ad_disable(master);
 
 	clk_disable_unprepare(master->pxlclk);
 	if (new_mode == KOMEDA_MODE_INACTIVE)
@@ -522,6 +527,8 @@ static void komeda_crtc_reset(struct drm_crtc *crtc)
 
 	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (state) {
+		state->strength_limit = 1;
+		state->drc = AD_MAX_DRC;
 		crtc->state = &state->base;
 		crtc->state->crtc = crtc;
 		state->en_protected_mode = false;
@@ -544,6 +551,9 @@ komeda_crtc_atomic_duplicate_state(struct drm_crtc *crtc)
 	new->clock_ratio = old->clock_ratio;
 	new->max_slave_zorder = old->max_slave_zorder;
 	new->en_protected_mode = old->en_protected_mode;
+	new->assertiveness = old->assertiveness;
+	new->strength_limit = old->strength_limit;
+	new->drc = old->drc;
 
 	return &new->base;
 }
@@ -581,6 +591,12 @@ static int komeda_crtc_atomic_get_property(struct drm_crtc *crtc,
 
 	if (property == kcrtc->protected_mode_property)
 		*val = kcrtc_st->en_protected_mode;
+	else if (property == kcrtc->assertiveness_property)
+		*val = kcrtc_st->assertiveness;
+	else if (property == kcrtc->strength_limit_property)
+		*val = kcrtc_st->strength_limit;
+	else if (property == kcrtc->drc_property)
+		*val = kcrtc_st->drc;
 	else {
 		DRM_DEBUG_DRIVER("Unknown property %s\n", property->name);
 		return -EINVAL;
@@ -595,16 +611,31 @@ static int komeda_crtc_atomic_set_property(struct drm_crtc *crtc,
 {
 	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(state);
-	int ret = 0;
 
 	if (property == kcrtc->protected_mode_property)
 		kcrtc_st->en_protected_mode = !!val;
-	else {
+
+	else if (property == kcrtc->assertiveness_property) {
+		if (kcrtc_st->assertiveness != val) {
+			kcrtc_st->assertiveness = val;
+			kcrtc_st->assertive_changed = true;
+		}
+	} else if (property == kcrtc->strength_limit_property) {
+		if (kcrtc_st->strength_limit != val) {
+			kcrtc_st->strength_limit = val;
+			kcrtc_st->strength_changed = true;
+		}
+	} else if (property == kcrtc->drc_property) {
+		if (kcrtc_st->drc != val) {
+			kcrtc_st->drc = val;
+			kcrtc_st->drc_changed = true;
+		}
+	} else {
 		DRM_DEBUG_DRIVER("Unknown property %s\n", property->name);
 		return -EINVAL;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int komeda_crtc_create_protected_mode_property(struct komeda_crtc *kcrtc)
@@ -636,6 +667,85 @@ static const struct drm_crtc_funcs komeda_crtc_funcs = {
 	.atomic_get_property	= komeda_crtc_atomic_get_property,
 	.atomic_set_property	= komeda_crtc_atomic_set_property,
 };
+
+static int create_ad_assertiveness_property(struct komeda_crtc *kcrtc)
+{
+	struct drm_crtc *crtc = &kcrtc->base;
+	struct drm_property *prop;
+
+	if (!kcrtc->master->ad->funcs->assertiveness_set)
+		return 0;
+
+	prop = drm_property_create_range(crtc->dev, DRM_MODE_PROP_ATOMIC,
+				         "assertiveness", 0,
+					 AD_MAX_ASSERTIVENESS);
+	if (!prop)
+		return -ENOMEM;
+
+	drm_object_attach_property(&crtc->base, prop, 0);
+	kcrtc->assertiveness_property = prop;
+
+	return 0;
+}
+
+static int create_ad_stength_property(struct komeda_crtc *kcrtc)
+{
+	struct drm_crtc *crtc = &kcrtc->base;
+	struct drm_property *prop;
+
+	if (!kcrtc->master->ad->funcs->strength_set)
+		return 0;
+
+	prop = drm_property_create_range(crtc->dev, DRM_MODE_PROP_ATOMIC,
+				         "strength_limit", 1,
+					 AD_MAX_STRENGTH_LIMIT);
+	if (!prop)
+		return -ENOMEM;
+
+	drm_object_attach_property(&crtc->base, prop, 1);
+	kcrtc->strength_limit_property = prop;
+
+	return 0;
+}
+
+static int create_ad_drc_property(struct komeda_crtc *kcrtc)
+{
+	struct drm_crtc *crtc = &kcrtc->base;
+	struct drm_property *prop;
+
+	if (!kcrtc->master->ad->funcs->drc_set)
+		return 0;
+
+	prop = drm_property_create_range(crtc->dev, DRM_MODE_PROP_ATOMIC,
+				         "drc", 0, AD_MAX_DRC);
+	if (!prop)
+		return -ENOMEM;
+
+	drm_object_attach_property(&crtc->base, prop, AD_MAX_DRC);
+	kcrtc->drc_property = prop;
+
+	return 0;
+}
+
+static int
+komeda_crtc_create_ad_properties(struct komeda_crtc *kcrtc)
+{
+	int ret;
+
+	if (!kcrtc->master->ad)
+		return 0;
+
+	ret = create_ad_assertiveness_property(kcrtc);
+	if (ret)
+		return ret;
+
+	ret = create_ad_stength_property(kcrtc);
+	if (ret)
+		return ret;
+
+	return create_ad_drc_property(kcrtc);
+}
+
 
 int komeda_kms_setup_crtcs(struct komeda_kms_dev *kms,
 			   struct komeda_dev *mdev)
@@ -730,3 +840,18 @@ int komeda_kms_add_crtcs(struct komeda_kms_dev *kms, struct komeda_dev *mdev)
 
 	return 0;
 }
+
+int komeda_kms_crtcs_add_ad_properties(struct komeda_kms_dev *kms,
+				       struct komeda_dev *mdev)
+{
+	int i, err;
+
+	for (i = 0; i < kms->n_crtcs; i++) {
+		err = komeda_crtc_create_ad_properties(&kms->crtcs[i]);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+

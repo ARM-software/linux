@@ -145,6 +145,10 @@ struct komeda_crtc {
 
 	/* protected mode property */
 	struct drm_property *protected_mode_property;
+	/* assertive display properties */
+	struct drm_property *assertiveness_property;
+	struct drm_property *strength_limit_property;
+	struct drm_property *drc_property;
 };
 
 /**
@@ -175,6 +179,12 @@ struct komeda_crtc_state {
 	u32 max_slave_zorder;
 
 	bool en_protected_mode;
+	u32 assertiveness;
+	u32 strength_limit;
+	u16 drc;
+	u32 assertive_changed : 1,
+	     strength_changed : 1,
+	          drc_changed : 1;
 };
 
 /** struct komeda_kms_dev - for gather KMS related things */
@@ -256,8 +266,9 @@ void komeda_crtc_handle_event(struct komeda_crtc   *kcrtc,
 
 struct komeda_kms_dev *komeda_kms_attach(struct komeda_dev *mdev);
 void komeda_kms_detach(struct komeda_kms_dev *kms);
-
 int komeda_plane_init_data_flow(struct drm_plane_state *st,
 				struct komeda_crtc_state *kcrtc_st,
 				struct komeda_data_flow_cfg *dflow);
+int komeda_kms_crtcs_add_ad_properties(struct komeda_kms_dev *kms,
+				       struct komeda_dev *mdev);
 #endif /*_KOMEDA_KMS_H_*/
