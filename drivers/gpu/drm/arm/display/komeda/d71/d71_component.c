@@ -929,9 +929,10 @@ static void d71_compiz_update(struct komeda_component *c,
 			      struct komeda_component_state *state)
 {
 	struct komeda_compiz_state *st = to_compiz_st(state);
+	struct komeda_pipeline_state *pipe_st;
 	u32 __iomem *reg = c->reg;
 	u32 __iomem *id_reg, *cfg_reg;
-	u32 index;
+	u32 index, value;
 
 	for_each_changed_input(state, index) {
 		id_reg = reg + index;
@@ -947,6 +948,12 @@ static void d71_compiz_update(struct komeda_component *c,
 	}
 
 	malidp_write32(reg, BLK_SIZE, HV_SIZE(st->hsize, st->vsize));
+
+	pipe_st = priv_to_pipe_st(c->pipeline->obj.state);
+
+	value = has_bit(KOMEDA_COMPONENT_COPROC, pipe_st->active_comps) ?
+		CU_CTRL_COPROC : 0;
+	malidp_write32(reg, BLK_CONTROL, value);
 }
 
 static void d71_compiz_dump(struct komeda_component *c, struct seq_file *sf)

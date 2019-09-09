@@ -784,6 +784,26 @@ komeda_merger_validate(struct komeda_merger *merger,
 	return err;
 }
 
+static int komeda_coproc_validate(struct komeda_pipeline *pipe,
+				  struct komeda_crtc_state *kcrtc_st)
+{
+	struct komeda_crtc *kcrtc = to_kcrtc(kcrtc_st->base.crtc);
+	struct komeda_pipeline_state *pipe_st;
+
+	if (!pipe->ad)
+		return 0;
+
+	pipe_st = komeda_pipeline_get_state_and_set_crtc(pipe,
+			kcrtc_st->base.state, &kcrtc->base);
+	if (IS_ERR(pipe_st))
+		return PTR_ERR(pipe_st);
+
+	if (kcrtc_st->en_coproc)
+		pipe_st->active_comps |= BIT(KOMEDA_COMPONENT_COPROC);
+
+	return 0;
+}
+
 void pipeline_composition_size(struct komeda_crtc_state *kcrtc_st,
 			       bool side_by_side,
 			       u16 *hsize, u16 *vsize)
@@ -885,6 +905,7 @@ komeda_compiz_validate(struct komeda_compiz *compiz,
 	struct drm_crtc *crtc = state->base.crtc;
 	struct komeda_component_state *c_st;
 	struct komeda_compiz_state *st;
+	int err;
 
 	c_st = komeda_component_get_state_and_set_user(&compiz->base,
 			state->base.state, crtc, crtc);
@@ -897,6 +918,10 @@ komeda_compiz_validate(struct komeda_compiz *compiz,
 				  &st->hsize, &st->vsize);
 
 	komeda_component_set_output(&dflow->input, &compiz->base, 0);
+
+	err = komeda_coproc_validate(compiz->base.pipeline, state);
+	if (err)
+		return err;
 
 	/* compiz output dflow will be fed to the next pipeline stage, prepare
 	 * the data flow configuration for the next stage
@@ -1867,6 +1892,11 @@ komeda_pipeline_unbound_components(struct komeda_pipeline *pipe,
 
 	disabling_comps = (~new->active_comps) & old->active_comps;
 
+	/* coproc is an external device but not a komeda component,
+	 * remove it before komeda component update.
+	 */
+	disabling_comps &= ~BIT(KOMEDA_COMPONENT_COPROC);
+
 	/* unbound all disabling component */
 	dp_for_each_set_bit(id, disabling_comps) {
 		c = komeda_pipeline_get_component(pipe, id);
@@ -1933,6 +1963,11 @@ bool komeda_pipeline_disable(struct komeda_pipeline *pipe,
 	DRM_DEBUG_ATOMIC("PIPE%d: active_comps: 0x%x, disabling_comps: 0x%x.\n",
 			 pipe->id, old->active_comps, disabling_comps);
 
+	/* coproc is an external device but not a komeda component,
+	 * remove it before the komeda component update.
+	 */
+	disabling_comps &= ~BIT(KOMEDA_COMPONENT_COPROC);
+
 	dp_for_each_set_bit(id, disabling_comps) {
 		c = komeda_pipeline_get_component(pipe, id);
 		c_st = priv_to_comp_st(c->obj.state);
@@ -1953,7 +1988,7 @@ bool komeda_pipeline_disable(struct komeda_pipeline *pipe,
 	/* Update the pipeline state, if there are components that are still
 	 * active, return true for calling the phase 2 disable.
 	 */
-	old->active_comps &= ~disabling_comps;
+	old->active_comps &= ~(disabling_comps | BIT(KOMEDA_COMPONENT_COPROC));
 
 	return old->active_comps ? true : false;
 }
@@ -1991,7 +2026,14 @@ void komeda_pipeline_update(struct komeda_pipeline *pipe,
 	DRM_DEBUG_ATOMIC("PIPE%d: active_comps: 0x%x, changed: 0x%x.\n",
 			 pipe->id, new->active_comps, changed_comps);
 
-	komeda_ad_update_state(ad, new);
+	if (has_bit(KOMEDA_COMPONENT_COPROC, changed_comps)) {
+		komeda_ad_update_state(ad, new);
+
+		/* coproc is an external device but not a komeda component,
+		 * remove it before komeda component update.
+		 */
+		changed_comps &= ~BIT(KOMEDA_COMPONENT_COPROC);
+	}
 
 	dp_for_each_set_bit(id, changed_comps) {
 		c = komeda_pipeline_get_component(pipe, id);
