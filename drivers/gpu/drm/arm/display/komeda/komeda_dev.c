@@ -154,6 +154,8 @@ static int komeda_parse_pipe_dt(struct komeda_pipeline *pipe)
 	pipe->improc->preferred_color_formats = (color_format << 1) - 1;
 
 	/* enum ports */
+	pipe->of_coproc_dev =
+		of_graph_get_remote_node(np, KOMEDA_OF_PORT_COPROC, 0);
 	pipe->of_output_links[0] =
 		of_graph_get_remote_node(np, KOMEDA_OF_PORT_OUTPUT, 0);
 	pipe->of_output_links[1] =
@@ -245,6 +247,8 @@ struct komeda_dev *komeda_dev_create(struct device *dev)
 	}
 #endif
 	mutex_init(&mdev->lock);
+
+	init_ad_list(&mdev->ad_list);
 
 	mdev->dev = dev;
 	mdev->reg_base = devm_ioremap_resource(dev, io_res);
@@ -431,3 +435,19 @@ disable_clk:
 
 	return ret;
 }
+
+void komeda_dev_init_ad(struct komeda_dev *mdev)
+{
+	struct komeda_pipeline *pipe;
+	int i;
+
+	for (i = 0; i < mdev->n_pipelines; i++) {
+		pipe = mdev->pipelines[i];
+		if (!pipe->of_coproc_dev)
+			continue;
+
+		pipe->ad = of_find_ad_coprocessor_by_node(
+				&mdev->ad_list, pipe->of_coproc_dev);
+	}
+}
+

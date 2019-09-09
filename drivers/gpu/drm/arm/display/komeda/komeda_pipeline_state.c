@@ -1958,12 +1958,30 @@ bool komeda_pipeline_disable(struct komeda_pipeline *pipe,
 	return old->active_comps ? true : false;
 }
 
+static void
+komeda_ad_update_state(struct ad_coprocessor *ad,
+		       struct komeda_pipeline_state *st)
+{
+	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(st->crtc->state);
+
+	if (kcrtc_st->assertive_changed)
+		ad->funcs->assertiveness_set(ad, kcrtc_st->assertiveness);
+
+	if (kcrtc_st->strength_changed)
+		ad->funcs->strength_set(ad, kcrtc_st->strength_limit);
+
+	if (kcrtc_st->drc_changed)
+		ad->funcs->drc_set(ad, kcrtc_st->drc);
+
+}
+
 void komeda_pipeline_update(struct komeda_pipeline *pipe,
 			    struct drm_atomic_state *old_state)
 {
 	struct komeda_pipeline_state *new = priv_to_pipe_st(pipe->obj.state);
 	struct komeda_pipeline_state *old;
 	struct komeda_component *c;
+	struct ad_coprocessor *ad = pipe->ad;
 	u32 id, changed_comps = 0;
 
 	old = komeda_pipeline_get_old_state(pipe, old_state);
@@ -1973,6 +1991,8 @@ void komeda_pipeline_update(struct komeda_pipeline *pipe,
 	DRM_DEBUG_ATOMIC("PIPE%d: active_comps: 0x%x, changed: 0x%x.\n",
 			 pipe->id, new->active_comps, changed_comps);
 
+	komeda_ad_update_state(ad, new);
+
 	dp_for_each_set_bit(id, changed_comps) {
 		c = komeda_pipeline_get_component(pipe, id);
 
@@ -1981,4 +2001,26 @@ void komeda_pipeline_update(struct komeda_pipeline *pipe,
 		else
 			c->funcs->disable(c);
 	}
+}
+
+int komeda_ad_enable(struct komeda_pipeline *pipe,
+		     struct drm_display_mode *mode)
+{
+	struct ad_coprocessor *ad = pipe->ad;
+	int ret;
+
+	if (!ad)
+		return 0;
+
+	ret = ad->funcs->enable(ad);
+	if (ret)
+		return ret;
+
+	return ad->funcs->mode_set(ad, mode);
+}
+
+void komeda_ad_disable(struct komeda_pipeline *pipe)
+{
+	if (pipe->ad)
+		pipe->ad->funcs->disable(pipe->ad);
 }

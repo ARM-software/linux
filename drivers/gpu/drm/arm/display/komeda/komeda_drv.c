@@ -112,6 +112,9 @@ static int komeda_platform_probe(struct platform_device *pdev)
 		/* add connector */
 		komeda_add_slave(dev, &match, child, KOMEDA_OF_PORT_OUTPUT, 0);
 		komeda_add_slave(dev, &match, child, KOMEDA_OF_PORT_OUTPUT, 1);
+
+		/* add component-based coprocessor */
+		komeda_add_slave(dev, &match, child, KOMEDA_OF_PORT_COPROC, 0);
 	}
 
 	return component_master_add_with_match(dev, &komeda_master_ops, match);
