@@ -384,6 +384,7 @@ static void d71_cleanup(struct komeda_dev *mdev)
 	if (!d71)
 		return;
 
+	komeda_coeffs_destroy_manager(d71->it_mgr);
 	devm_kfree(mdev->dev, d71);
 	mdev->chip_data = NULL;
 }
@@ -396,6 +397,8 @@ static void d77_cleanup(struct komeda_dev *mdev)
 	if (!d77)
 		return;
 
+	komeda_coeffs_destroy_manager(d77->ft_mgr);
+	komeda_coeffs_destroy_manager(d77->it_s_mgr);
 	for (i = 0; i < d77->num_pipelines; i++) {
 		struct d71_pipeline *pipe = d77->pipes[i];
 
@@ -497,7 +500,14 @@ static int d71_enum_resources(struct komeda_dev *mdev)
 	}
 
 	coeffs_size = GLB_LT_COEFF_NUM * sizeof(u32);
-	d71->glb_lt_mgr = komeda_coeffs_create_manager(coeffs_size);
+	d71->it_mgr = komeda_coeffs_create_manager(coeffs_size);
+	if (komeda_product_match(mdev, MALIDP_D77_PRODUCT_ID)) {
+		d71->ft_mgr = komeda_coeffs_create_manager(coeffs_size);
+		d71->it_s_mgr = komeda_coeffs_create_manager(coeffs_size);
+	} else {
+		d71->ft_mgr = d71->it_mgr;
+		d71->it_s_mgr = d71->it_mgr;
+	}
 
 	/* loop the register blks and probe */
 	i = 1; /* exclude GCU */
@@ -522,7 +532,7 @@ static int d71_enum_resources(struct komeda_dev *mdev)
 	return 0;
 
 err_cleanup:
-	d71_cleanup(mdev);
+	mdev->funcs->cleanup(mdev);
 	return err;
 }
 
