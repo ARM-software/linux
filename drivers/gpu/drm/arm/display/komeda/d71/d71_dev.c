@@ -441,6 +441,7 @@ static void d77_latch_matrix(struct komeda_atu *atu)
 	case ATU_MODE_VP0_VP1_SIMULT:
 	case ATU_MODE_VP0_VP1_INT:
 		d77_atu_vp_matrix_latch(atu->reg[0], &st->left);
+		/* fallthrough */
 	case ATU_MODE_VP1:
 		d77_atu_vp_matrix_latch(atu->reg[1], &st->right);
 		break;
