@@ -312,6 +312,7 @@
 #define L_ROT(x)		(((x) & 3) << 8)
 #define L_HFLIP			BIT(10)
 #define L_VFLIP			BIT(11)
+#define L_UPSCALE		BIT(12)
 #define L_TBU_EN		BIT(16)
 #define L_A_RCACHE(x)		(((x) & 0xF) << 28)
 #define L_ROT_R0		0

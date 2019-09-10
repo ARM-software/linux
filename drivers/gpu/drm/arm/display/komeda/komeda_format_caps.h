@@ -98,6 +98,9 @@ const struct komeda_format_caps *
 komeda_get_format_caps(struct komeda_format_caps_table *table,
 		       u32 fourcc, u64 modifier);
 
+const struct drm_format_info *
+komeda_get_format_info(const struct drm_mode_fb_cmd2 *mode_cmd);
+
 u32 komeda_get_afbc_format_bpp(const struct drm_format_info *info,
 			       u64 modifier);
 

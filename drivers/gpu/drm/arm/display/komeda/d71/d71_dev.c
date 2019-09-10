@@ -632,7 +632,6 @@ static struct komeda_format_caps d71_format_caps_table[] = {
 	{__HW_ID(4, 2),	DRM_FORMAT_RGB565,	RICH_SIMPLE,	Flip_H_V,		0, 0},
 	{__HW_ID(4, 3),	DRM_FORMAT_BGR565,	RICH_SIMPLE,	Flip_H_V,		0, 0},
 	{__HW_ID(4, 3),	DRM_FORMAT_BGR565,	RICH_SIMPLE_VR,	Rot_ALL_H_V,	LYT_NM_WB, AFB_TH_SC_YTR}, /* afbc */
-	{__HW_ID(4, 4), DRM_FORMAT_R8,		SIMPLE,		Rot_0,			0, 0},
 	/* YUV 444/422/420 8bit  */
 	{__HW_ID(5, 1),	DRM_FORMAT_YUYV,	RICH,		Rot_ALL_H_V,	LYT_NM, AFB_TH}, /* afbc */
 	{__HW_ID(5, 2),	DRM_FORMAT_YUYV,	RICH,		Flip_H_V,		0, 0},
@@ -644,6 +643,7 @@ static struct komeda_format_caps d71_format_caps_table[] = {
 	{__HW_ID(6, 6),	DRM_FORMAT_X0L2,	RICH,		Flip_H_V,		0, 0},
 	{__HW_ID(6, 7),	DRM_FORMAT_P010,	RICH,		Flip_H_V,		0, 0},
 	{__HW_ID(6, 7),	DRM_FORMAT_YUV420_10BIT, RICH_VR,	Rot_ALL_H_V,	LYT_NM, AFB_TH},
+	{__HW_ID(4, 4), DRM_FORMAT_R8,		RICH_SIMPLE,	Rot_0,			0, 0},	/* mira only */
 };
 
 static bool d71_format_mod_supported(const struct komeda_format_caps *caps,
@@ -666,7 +666,12 @@ static void d71_init_fmt_tbl(struct komeda_dev *mdev)
 
 	table->format_caps = d71_format_caps_table;
 	table->format_mod_supported = d71_format_mod_supported;
-	table->n_formats = ARRAY_SIZE(d71_format_caps_table);
+
+	if (komeda_product_match(mdev, MALIDP_D77_PRODUCT_ID))
+		table->n_formats = ARRAY_SIZE(d71_format_caps_table);
+	else
+		/* only mira support last R8 format */
+		table->n_formats = ARRAY_SIZE(d71_format_caps_table) - 1;
 }
 
 static int d71_connect_iommu(struct komeda_dev *mdev)

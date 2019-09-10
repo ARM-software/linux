@@ -479,6 +479,11 @@ komeda_layer_check_cfg(struct komeda_layer *layer,
 	u32 src_x, src_y, src_w, src_h;
 	u32 line_sz, max_line_sz;
 
+	if (dflow->en_r8_upscaling && !layer->supports_r8_upscaling) {
+		DRM_DEBUG_ATOMIC("%s doesn't support R8 upscaling.\n", layer->base.name);
+		return -EINVAL;
+	}
+
 	if (!komeda_fb_is_layer_supported(kfb, layer->layer_type, dflow->rot))
 		return -EINVAL;
 
@@ -550,6 +555,7 @@ komeda_layer_validate(struct komeda_layer *layer,
 	st = to_layer_st(c_st);
 
 	st->rot = dflow->rot;
+	st->en_r8_upscaling = dflow->en_r8_upscaling;
 
 	if (fb->modifier) {
 		st->hsize = kfb->aligned_w;
@@ -1319,12 +1325,17 @@ void komeda_complete_data_flow_cfg(struct komeda_pipeline *pipe,
 	if (drm_rotation_90_or_270(dflow->rot))
 		swap(w, h);
 
-	dflow->en_scaling = (w != dflow->out_w) || (h != dflow->out_h);
+	if (fb->format->format == DRM_FORMAT_R8 &&
+	    w * 2 == dflow->out_w && h * 2 == dflow->out_h)
+		dflow->en_r8_upscaling = true;
+	else
+		dflow->en_scaling = (w != dflow->out_w) || (h != dflow->out_h);
+
 	dflow->is_yuv = fb->format->is_yuv;
 
 	/* try to enable image enhancer if data flow is a 2x+ upscaling */
-	dflow->en_img_enhancement = dflow->out_w >= 2 * w ||
-				    dflow->out_h >= 2 * h;
+	dflow->en_img_enhancement = dflow->out_w > 2 * w ||
+				    dflow->out_h > 2 * h;
 
 	/* try to enable split if scaling exceed the scaler's acceptable
 	 * input/output range.

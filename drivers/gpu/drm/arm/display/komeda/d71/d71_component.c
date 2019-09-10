@@ -258,7 +258,12 @@ static u32 d71_layer_update_color(struct drm_plane_state *st,
 
 static void d71_layer_disable(struct komeda_component *c)
 {
-	malidp_write32_mask(c->reg, BLK_CONTROL, L_EN, 0);
+	u32 m = L_EN;
+
+	if (to_layer(c)->supports_r8_upscaling)
+		m |= L_UPSCALE;
+
+	malidp_write32_mask(c->reg, BLK_CONTROL, m, 0);
 }
 
 static void d71_layer_update(struct komeda_component *c,
@@ -332,6 +337,10 @@ static void d71_layer_update(struct komeda_component *c,
 
 	if (kfb->is_va)
 		ctrl |= L_TBU_EN;
+
+	if (st->en_r8_upscaling)
+		ctrl |= L_UPSCALE;
+
 	malidp_write32_mask(reg, BLK_CONTROL, ctrl_mask, ctrl);
 }
 
@@ -519,6 +528,9 @@ static int d71_layer_init(struct d71_dev *d71,
 	malidp_write32(reg, LAYER_PALPHA, D71_PALPHA_DEF_MAP);
 
 	layer->supported_rots = DRM_MODE_ROTATE_MASK | DRM_MODE_REFLECT_MASK;
+
+	if (komeda_product_match(d71->mdev, MALIDP_D77_PRODUCT_ID))
+		layer->supports_r8_upscaling = true;
 
 	return 0;
 }

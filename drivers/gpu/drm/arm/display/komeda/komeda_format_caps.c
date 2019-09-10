@@ -35,6 +35,22 @@ komeda_get_format_caps(struct komeda_format_caps_table *table,
 	return NULL;
 }
 
+static const struct drm_format_info komeda_specific_formats[] = {
+	{ .format = DRM_FORMAT_R8, .depth = 8,  .num_planes = 1, .cpp = { 1, 0, 0 }, .hsub = 1, .vsub = 1, .has_alpha = true },
+};
+
+const struct drm_format_info *
+komeda_get_format_info(const struct drm_mode_fb_cmd2 *mode_cmd)
+{
+	u32 i;
+
+	for (i = 0; i < ARRAY_SIZE(komeda_specific_formats); ++i) {
+		if (komeda_specific_formats[i].format == mode_cmd->pixel_format)
+			return &komeda_specific_formats[i];
+	}
+	return NULL;
+}
+
 u32 komeda_get_afbc_format_bpp(const struct drm_format_info *info, u64 modifier)
 {
 	u32 bpp;
