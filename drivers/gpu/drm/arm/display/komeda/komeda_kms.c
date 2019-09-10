@@ -241,6 +241,7 @@ static const struct drm_mode_config_funcs komeda_mode_config_funcs = {
 	.fb_create		= komeda_fb_create,
 	.atomic_check		= komeda_kms_check,
 	.atomic_commit		= drm_atomic_helper_commit,
+	.get_format_info        = komeda_get_format_info,
 };
 
 static void komeda_kms_mode_config_init(struct komeda_kms_dev *kms,

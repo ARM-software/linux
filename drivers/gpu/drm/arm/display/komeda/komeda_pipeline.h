@@ -251,6 +251,7 @@ struct komeda_layer {
 	u32 line_sz;
 	u32 yuv_line_sz; /* maximum line size for YUV422 and YUV420 */
 	u32 supported_rots;
+	bool supports_r8_upscaling;
 	/* komeda supports layer split which splits a whole image to two parts
 	 * left and right and handle them by two individual layer processors
 	 * Note: left/right are always according to the final display rect,
@@ -270,6 +271,7 @@ struct komeda_layer_state {
 	u16 afbc_crop_t;
 	u16 afbc_crop_b;
 	dma_addr_t addr[3];
+	u32 en_r8_upscaling : 1;
 };
 
 struct komeda_scaler {
@@ -471,6 +473,7 @@ struct komeda_data_flow_cfg {
 	   en_split : 1,
 	   is_yuv : 1,
 	   en_atu : 1,
+	   en_r8_upscaling : 1,
 	   right_part : 1; /* right part of display image if split enabled */
 };
 
