@@ -52,7 +52,7 @@ struct ad_dev_funcs {
 struct ad_dev_data {
 	u32 ad_version;
 	struct ad_dev_funcs *(*identify)(struct device *dev,
-				         void __iomem *reg);
+					 u32 __iomem *reg);
 	struct ad_coprocessor_funcs *interface_funcs;
 };
 
@@ -82,6 +82,10 @@ struct ad_dev {
 };
 
 extern const struct ad_dev_data ad_products[];
+extern struct ad_coprocessor_funcs ad3_intf_funcs;
+
+struct ad_dev_funcs *ad3_identify(struct device *dev,
+				  u32 __iomem *reg);
 
 int ad_device_get_resources(struct ad_dev *ad_dev);
 #endif /* __AD_DEVICE_H__ */

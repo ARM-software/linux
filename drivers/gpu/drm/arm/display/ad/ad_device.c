@@ -13,10 +13,6 @@
 #include <linux/device.h>
 #include "ad_device.h"
 
-extern struct ad_dev_funcs *ad3_identify(struct device *dev,
-					 void __iomem *reg);
-extern struct ad_coprocessor_funcs ad3_intf_funcs;
-
 const struct ad_dev_data ad_products[] = {
 	[AD3] = {
 		.ad_version = AD3_VERSION,

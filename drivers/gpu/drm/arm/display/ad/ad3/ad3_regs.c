@@ -33,7 +33,7 @@
 	number,	\
 }
 
-const struct ad_reg ad3_regs[AD3_REG_TOTAL_NUM] = {
+static const struct ad_reg ad3_regs[AD3_REG_TOTAL_NUM] = {
 	/*Global Control Registers. */
 	AD3_NORMAL_REG("ad_arch_id", AD_ARCH_ID_REG, false),
 	AD3_NORMAL_REG("ad_core_id", AD_CORE_ID_REG, false),
