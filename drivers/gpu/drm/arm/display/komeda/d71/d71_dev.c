@@ -25,66 +25,42 @@ static u64 get_lpu_event(struct d71_pipeline *d71_pipeline)
 		evts |= KOMEDA_EVENT_OVR;
 
 	if (raw_status & (LPU_IRQ_ERR | LPU_IRQ_IBSY | LPU_IRQ_OVR)) {
-		u32 restore = 0, tbu_status;
+		u32 tbu_status;
+
 		/* Check error of LPU status */
 		status = malidp_read32(reg, BLK_STATUS);
-		if (status & LPU_STATUS_AXIE) {
-			restore |= LPU_STATUS_AXIE;
+		if (status & LPU_STATUS_AXIE)
 			evts |= KOMEDA_ERR_AXIE;
-		}
-		if (status & LPU_STATUS_ACE0) {
-			restore |= LPU_STATUS_ACE0;
+		if (status & LPU_STATUS_ACE0)
 			evts |= KOMEDA_ERR_ACE0;
-		}
-		if (status & LPU_STATUS_ACE1) {
-			restore |= LPU_STATUS_ACE1;
+		if (status & LPU_STATUS_ACE1)
 			evts |= KOMEDA_ERR_ACE1;
-		}
-		if (status & LPU_STATUS_ACE2) {
-			restore |= LPU_STATUS_ACE2;
+		if (status & LPU_STATUS_ACE2)
 			evts |= KOMEDA_ERR_ACE2;
-		}
-		if (status & LPU_STATUS_ACE3) {
-			restore |= LPU_STATUS_ACE3;
+		if (status & LPU_STATUS_ACE3)
 			evts |= KOMEDA_ERR_ACE3;
-		}
-		if (status & LPU_STATUS_FEMPTY) {
-			restore |= LPU_STATUS_FEMPTY;
+		if (status & LPU_STATUS_FEMPTY)
 			evts |= KOMEDA_EVENT_EMPTY;
-		}
-		if (status & LPU_STATUS_FFULL) {
-			restore |= LPU_STATUS_FFULL;
+		if (status & LPU_STATUS_FFULL)
 			evts |= KOMEDA_EVENT_FULL;
-		}
 
-		if (restore != 0)
-			malidp_write32_mask(reg, BLK_STATUS, restore, 0);
+		/* clear errors */
+		malidp_write32(reg, BLK_STATUS, status);
 
-		restore = 0;
 		/* Check errors of TBU status */
 		tbu_status = malidp_read32(reg, LPU_TBU_STATUS);
-		if (tbu_status & LPU_TBU_STATUS_TCF) {
-			restore |= LPU_TBU_STATUS_TCF;
+		if (tbu_status & LPU_TBU_STATUS_TCF)
 			evts |= KOMEDA_ERR_TCF;
-		}
-		if (tbu_status & LPU_TBU_STATUS_TTNG) {
-			restore |= LPU_TBU_STATUS_TTNG;
+		if (tbu_status & LPU_TBU_STATUS_TTNG)
 			evts |= KOMEDA_ERR_TTNG;
-		}
-		if (tbu_status & LPU_TBU_STATUS_TITR) {
-			restore |= LPU_TBU_STATUS_TITR;
+		if (tbu_status & LPU_TBU_STATUS_TITR)
 			evts |= KOMEDA_ERR_TITR;
-		}
-		if (tbu_status & LPU_TBU_STATUS_TEMR) {
-			restore |= LPU_TBU_STATUS_TEMR;
+		if (tbu_status & LPU_TBU_STATUS_TEMR)
 			evts |= KOMEDA_ERR_TEMR;
-		}
-		if (tbu_status & LPU_TBU_STATUS_TTF) {
-			restore |= LPU_TBU_STATUS_TTF;
+		if (tbu_status & LPU_TBU_STATUS_TTF)
 			evts |= KOMEDA_ERR_TTF;
-		}
-		if (restore != 0)
-			malidp_write32_mask(reg, LPU_TBU_STATUS, restore, 0);
+
+		malidp_write32(reg, LPU_TBU_STATUS, tbu_status);
 	}
 
 	if (raw_status & LPU_IRQ_PCCPY) {
@@ -123,8 +99,8 @@ static u64 get_cu_event(struct d71_pipeline *d71_pipeline)
 			evts |= KOMEDA_ERR_ZME;
 		if (status & CU_STATUS_CFGE)
 			evts |= KOMEDA_ERR_CFGE;
-		if (status)
-			malidp_write32_mask(reg, BLK_STATUS, status, 0);
+
+		malidp_write32(reg, BLK_STATUS, status);
 	}
 
 	malidp_write32(reg, BLK_IRQ_CLEAR, raw_status);
@@ -149,28 +125,20 @@ static u64 get_dou_event(struct d71_pipeline *d71_pipeline)
 		evts |= KOMEDA_EVENT_URUN;
 
 	if (raw_status & (DOU_IRQ_ERR | DOU_IRQ_UND)) {
-		u32 restore  = 0;
-
 		status = malidp_read32(reg, BLK_STATUS);
-		if (status & DOU_STATUS_DRIFTTO) {
-			restore |= DOU_STATUS_DRIFTTO;
+		if (status & DOU_STATUS_DRIFTTO)
 			evts |= KOMEDA_ERR_DRIFTTO;
-		}
-		if (status & DOU_STATUS_FRAMETO) {
-			restore |= DOU_STATUS_FRAMETO;
-			evts |= KOMEDA_ERR_FRAMETO;
-		}
-		if (status & DOU_STATUS_TETO) {
-			restore |= DOU_STATUS_TETO;
-			evts |= KOMEDA_ERR_TETO;
-		}
-		if (status & DOU_STATUS_CSCE) {
-			restore |= DOU_STATUS_CSCE;
-			evts |= KOMEDA_ERR_CSCE;
-		}
 
-		if (restore != 0)
-			malidp_write32_mask(reg, BLK_STATUS, restore, 0);
+		if (status & DOU_STATUS_FRAMETO)
+			evts |= KOMEDA_ERR_FRAMETO;
+
+		if (status & DOU_STATUS_TETO)
+			evts |= KOMEDA_ERR_TETO;
+
+		if (status & DOU_STATUS_CSCE)
+			evts |= KOMEDA_ERR_CSCE;
+
+		malidp_write32(reg, BLK_STATUS, status);
 	}
 
 	malidp_write32(reg, BLK_IRQ_CLEAR, raw_status);
