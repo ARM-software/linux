@@ -5,6 +5,7 @@
  *
  */
 #include <linux/clk.h>
+#include <linux/pm_runtime.h>
 #include <linux/spinlock.h>
 #include <linux/dma-buf.h>
 #include <drm/drm_atomic.h>
@@ -485,6 +486,7 @@ static void
 komeda_crtc_atomic_enable(struct drm_crtc *crtc,
 			  struct drm_crtc_state *old)
 {
+	pm_runtime_get_sync(crtc->dev->dev);
 	komeda_crtc_prepare(to_kcrtc(crtc));
 	drm_crtc_vblank_on(crtc);
 	komeda_crtc_do_flush(crtc, old);
@@ -581,6 +583,7 @@ komeda_crtc_atomic_disable(struct drm_crtc *crtc,
 
 	drm_crtc_vblank_off(crtc);
 	komeda_crtc_unprepare(kcrtc);
+	pm_runtime_put(crtc->dev->dev);
 	komeda_sensor_buff_put(&kcrtc->s_buff);
 }
 
@@ -1122,4 +1125,3 @@ int komeda_kms_crtcs_add_ad_properties(struct komeda_kms_dev *kms,
 
 	return 0;
 }
-
