@@ -64,7 +64,6 @@ static void evt_str(struct komeda_str *str, u64 events)
 	evt_sprintf(str, events & KOMEDA_EVENT_PL3, "PL3|");
 	evt_sprintf(str, events & KOMEDA_EVENT_FRAME_END, "FRM_END|");
 	evt_sprintf(str, events & KOMEDA_EVENT_ASYNC_RP, "ASYNC RP|");
-
 	evt_sprintf(str, events & KOMEDA_EVENT_URUN, "UNDERRUN|");
 	evt_sprintf(str, events & KOMEDA_EVENT_OVR, "OVERRUN|");
 
@@ -87,6 +86,8 @@ static void evt_str(struct komeda_str *str, u64 events)
 	evt_sprintf(str, events & KOMEDA_ERR_ACE1, "ACE1|");
 	evt_sprintf(str, events & KOMEDA_ERR_ACE2, "ACE2|");
 	evt_sprintf(str, events & KOMEDA_ERR_ACE3, "ACE3|");
+	evt_sprintf(str, events & KOMEDA_ERR_MDTO, "MDTO|");
+	evt_sprintf(str, events & KOMEDA_ERR_MDOP, "MDOP|");
 
 	/* LPU TBU errors*/
 	evt_sprintf(str, events & KOMEDA_ERR_TCF, "TCF|");
@@ -100,6 +101,14 @@ static void evt_str(struct komeda_str *str, u64 events)
 	evt_sprintf(str, events & KOMEDA_ERR_ZME, "ZME|");
 	evt_sprintf(str, events & KOMEDA_ERR_CFGE, "CFGE|");
 	evt_sprintf(str, events & KOMEDA_ERR_TEMR, "TEMR|");
+
+	/* ATU errors*/
+	evt_sprintf(str, events & KOMEDA_ERR_CIE_0,     "CIE0|");
+	evt_sprintf(str, events & KOMEDA_ERR_CRE_0,     "CRE0|");
+	evt_sprintf(str, events & KOMEDA_ERR_CACDIST_0, "CAC0|");
+	evt_sprintf(str, events & KOMEDA_ERR_CIE_1,     "CIE1|");
+	evt_sprintf(str, events & KOMEDA_ERR_CRE_1,     "CRE1|");
+	evt_sprintf(str, events & KOMEDA_ERR_CACDIST_1, "CAC1|");
 
 	if (str->len > 0 && (str->str[str->len - 1] == '|')) {
 		str->str[str->len - 1] = 0;

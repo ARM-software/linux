@@ -43,6 +43,10 @@ static u64 get_lpu_event(struct d71_pipeline *d71_pipeline)
 			evts |= KOMEDA_EVENT_EMPTY;
 		if (status & LPU_STATUS_FFULL)
 			evts |= KOMEDA_EVENT_FULL;
+		if (status & LPU_STATUS_MDTO)
+			evts |= KOMEDA_ERR_MDTO;
+		if (status & LPU_STATUS_MDOP)
+			evts |= KOMEDA_ERR_MDOP;
 
 		/* clear errors */
 		malidp_write32(reg, BLK_STATUS, status);
@@ -159,8 +163,9 @@ static u64 get_atu_event(struct d71_pipeline *d71_pipeline)
 			evts |= KOMEDA_ERR_CRE_0;
 		if (status & ATU_STATUS_CACDIST)
 			evts |= KOMEDA_ERR_CACDIST_0;
+
 		if (status)
-			malidp_write32_mask(reg, BLK_STATUS, status, 0);
+			malidp_write32(reg, BLK_STATUS, status);
 		malidp_write32(reg, BLK_IRQ_CLEAR, raw_status);
 	}
 
@@ -173,9 +178,9 @@ static u64 get_atu_event(struct d71_pipeline *d71_pipeline)
 			evts |= KOMEDA_ERR_CRE_1;
 		if (status & ATU_STATUS_CACDIST)
 			evts |= KOMEDA_ERR_CACDIST_1;
-		if (status)
-			malidp_write32_mask(reg, BLK_STATUS, status, 0);
 
+		if (status)
+			malidp_write32(reg, BLK_STATUS, status);
 		malidp_write32(reg, BLK_IRQ_CLEAR, raw_status);
 	}
 	return evts;
