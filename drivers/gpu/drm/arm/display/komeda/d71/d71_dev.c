@@ -80,7 +80,6 @@ static u64 get_lpu_event(struct d71_pipeline *d71_pipeline)
 		}
 	}
 
-
 	malidp_write32(reg, BLK_IRQ_CLEAR, raw_status);
 	return evts;
 }
@@ -237,8 +236,8 @@ d71_irq_handler(struct komeda_dev *mdev, struct komeda_events *evts)
 			status = malidp_read32(d71->gcu_addr, BLK_STATUS);
 			if (status & GCU_STATUS_MERR) {
 				evts->global |= KOMEDA_ERR_MERR;
-				malidp_write32_mask(d71->gcu_addr, BLK_STATUS,
-						    GCU_STATUS_MERR, 0);
+				malidp_write32(d71->gcu_addr, BLK_STATUS,
+					       GCU_STATUS_MERR);
 			}
 		}
 
@@ -267,16 +266,30 @@ static int d71_enable_irq(struct komeda_dev *mdev)
 	struct d71_pipeline *pipe;
 	u32 i, j;
 
+	malidp_write32(d71->gcu_addr, BLK_STATUS, UINT_MAX);
+	malidp_write32(d71->gcu_addr, BLK_IRQ_CLEAR, UINT_MAX);
 	malidp_write32_mask(d71->gcu_addr, BLK_IRQ_MASK,
 			    ENABLED_GCU_IRQS, ENABLED_GCU_IRQS);
+
 	for (i = 0; i < d71->num_pipelines; i++) {
 		pipe = d71->pipes[i];
+
+		malidp_write32(pipe->cu_addr, BLK_STATUS, UINT_MAX);
+		malidp_write32(pipe->cu_addr, BLK_IRQ_CLEAR, UINT_MAX);
 		malidp_write32_mask(pipe->cu_addr,  BLK_IRQ_MASK,
 				    ENABLED_CU_IRQS, ENABLED_CU_IRQS);
+
+		malidp_write32(pipe->lpu_addr, BLK_STATUS, UINT_MAX);
+		malidp_write32(pipe->lpu_addr, LPU_TBU_STATUS, UINT_MAX);
+		malidp_write32(pipe->lpu_addr, BLK_IRQ_CLEAR, UINT_MAX);
 		malidp_write32_mask(pipe->lpu_addr, BLK_IRQ_MASK,
 				    ENABLED_LPU_IRQS, ENABLED_LPU_IRQS);
+
+		malidp_write32(pipe->dou_addr, BLK_STATUS, UINT_MAX);
+		malidp_write32(pipe->dou_addr, BLK_IRQ_CLEAR, UINT_MAX);
 		malidp_write32_mask(pipe->dou_addr, BLK_IRQ_MASK,
 				    ENABLED_DOU_IRQS, ENABLED_DOU_IRQS);
+
 		for (j = 0; j < D77_PIPELINE_MAX_ATU; j++)
 			if (pipe->atu_addr[j])
 				malidp_write32(pipe->atu_addr[j],
