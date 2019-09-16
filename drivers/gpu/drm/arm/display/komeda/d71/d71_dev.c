@@ -721,12 +721,29 @@ static int d71_disconnect_iommu(struct komeda_dev *mdev)
 	return ret;
 }
 
+static int d71_init_hw(struct komeda_dev *mdev)
+{
+	struct d71_dev *d71 = mdev->chip_data;
+	int i, err = 0;
+
+	for (i = 0; i < d71->num_pipelines; i++) {
+		err = d71_pipeline_config_axi(d71->pipes[i]);
+		if (err)
+			break;
+	}
+	return err;
+}
+
 static int d77_init_hw(struct komeda_dev *mdev)
 {
 	struct d71_dev *d77 = mdev->chip_data;
 	int i, err = 0;
 
 	for (i = 0; i < d77->num_pipelines; i++) {
+		err = d71_pipeline_config_axi(d77->pipes[i]);
+		if (err)
+			return err;
+
 		err = d77_setup_perf_counters(d77->pipes[i]);
 		if (err) {
 			DRM_ERROR("create performance counter debugfs node fail!\n");
@@ -746,6 +763,7 @@ static const struct komeda_dev_funcs d71_chip_funcs = {
 	.change_opmode		= d71_change_opmode,
 	.connect_iommu		= d71_connect_iommu,
 	.disconnect_iommu	= d71_disconnect_iommu,
+	.init_hw		= d71_init_hw,
 	.dump_register		= d71_dump,
 };
 

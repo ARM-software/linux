@@ -314,7 +314,6 @@
 #define L_VFLIP			BIT(11)
 #define L_UPSCALE		BIT(12)
 #define L_TBU_EN		BIT(16)
-#define L_A_RCACHE(x)		(((x) & 0xF) << 28)
 #define L_ROT_R0		0
 #define L_ROT_R90		1
 #define L_ROT_R180		2
@@ -340,9 +339,9 @@
 /* Layer_WR control bits */
 #define LW_OFM			BIT(4)
 #define LW_LALPHA(x)		(((x) & 0xFF) << 8)
-#define LW_A_WCACHE(x)		(((x) & 0xF) << 28)
 #define LW_TBU_EN		BIT(16)
 
+#define Lx_AxCACHE(x)		(((x) & 0xF) << 28)
 #define AxCACHE_MASK		0xF0000000
 
 /* Layer AXI R/W cache setting */
