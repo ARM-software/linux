@@ -545,6 +545,7 @@ komeda_layer_validate(struct komeda_layer *layer,
 	struct komeda_fb *kfb = to_kfb(fb);
 	struct komeda_component_state *c_st;
 	struct komeda_layer_state *st;
+	struct komeda_pipeline_state *pipe_st;
 	int i, err;
 
 	err = komeda_layer_check_cfg(layer, kfb, dflow);
@@ -562,6 +563,12 @@ komeda_layer_validate(struct komeda_layer *layer,
 	st->en_r8_upscaling = dflow->en_r8_upscaling;
 
 	if (fb->modifier) {
+		pipe_st = komeda_pipeline_get_new_state(layer->base.pipeline,
+							plane_st->state);
+		if (IS_ERR_OR_NULL(pipe_st))
+			return PTR_ERR(pipe_st);
+		pipe_st->afbc_layers |= BIT(layer->base.id);
+
 		st->hsize = kfb->aligned_w;
 		st->vsize = kfb->aligned_h;
 		st->afbc_crop_l = dflow->in_x;
@@ -1070,6 +1077,11 @@ komeda_atu_validate(struct komeda_atu *atu,
 	pipe_st = komeda_pipeline_get_new_state(atu->base.pipeline, crtc_st->state);
 	if (IS_ERR(pipe_st))
 		return PTR_ERR(pipe_st);
+
+	if (pipe_st && pipe_st->afbc_layers) {
+		DRM_DEBUG_ATOMIC("Can't enable AFBC for ATU and Layer at same pipeline simultaneously\n");
+		return -EINVAL;
+	}
 
 	st = to_atu_st(c_st);
 	st->single_buffer_enabled = 0;
