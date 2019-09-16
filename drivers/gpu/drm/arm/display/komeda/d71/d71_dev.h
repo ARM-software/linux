@@ -146,4 +146,6 @@ void d71_read_block_header(u32 __iomem *reg, struct block_header *blk);
 
 void d71_dump(struct komeda_dev *mdev, struct seq_file *sf);
 
+int d71_pipeline_config_axi(struct d71_pipeline *d71_pipe);
+
 #endif /* !_D71_DEV_H_ */
