@@ -218,7 +218,7 @@ static int komeda_crtc_normalize_zpos(struct drm_crtc *crtc,
 		 * - zorder: for left_layer for left display part.
 		 * - zorder + 1: will be reserved for right layer.
 		 */
-		if (to_kplane_st(plane_st)->layer_split)
+		if (to_kplane_st(plane_st)->dflow.en_split)
 			order++;
 
 		DRM_DEBUG_ATOMIC("[PLANE:%d:%s] zpos:%d, normalized zpos: %d\n",
@@ -233,6 +233,26 @@ static int komeda_crtc_normalize_zpos(struct drm_crtc *crtc,
 	}
 
 	crtc_st->zpos_changed = true;
+
+	return 0;
+}
+
+static int komeda_crtc_prepare_planes(struct drm_crtc *crtc,
+				      struct drm_crtc_state *crtc_st)
+{
+	struct drm_plane_state *plane_st;
+	struct drm_plane *plane;
+	int err;
+
+	drm_for_each_plane_mask(plane, crtc->dev, crtc_st->plane_mask) {
+		plane_st = drm_atomic_get_plane_state(crtc_st->state, plane);
+		if (IS_ERR(plane_st))
+			return PTR_ERR(plane_st);
+
+		err = komeda_plane_prepare(plane, plane_st);
+		if (err)
+			return err;
+	}
 
 	return 0;
 }
@@ -254,6 +274,10 @@ static int komeda_kms_check(struct drm_device *dev,
 	 */
 	for_each_new_crtc_in_state(state, crtc, new_crtc_st, i) {
 		err = drm_atomic_add_affected_planes(state, crtc);
+		if (err)
+			return err;
+
+		err = komeda_crtc_prepare_planes(crtc, new_crtc_st);
 		if (err)
 			return err;
 

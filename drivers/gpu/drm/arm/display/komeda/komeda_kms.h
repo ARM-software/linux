@@ -14,6 +14,8 @@
 #include <drm/drm_device.h>
 #include <drm/drm_writeback.h>
 #include <drm/drm_print.h>
+
+#include "komeda_pipeline.h"
 #include "komeda_framebuffer.h"
 
 /**
@@ -72,6 +74,9 @@ struct komeda_plane_state {
 	struct drm_plane_state base;
 	/** @zlist_node: zorder list node */
 	struct list_head zlist_node;
+
+	/** @dflow: the input data flow configuration computed by state */
+	struct komeda_data_flow_cfg dflow;
 
 	bool viewport_clamp;
 
@@ -317,4 +322,7 @@ int komeda_plane_init_data_flow(struct drm_plane_state *st,
 				struct komeda_data_flow_cfg *dflow);
 int komeda_kms_crtcs_add_ad_properties(struct komeda_kms_dev *kms,
 				       struct komeda_dev *mdev);
+
+int komeda_plane_prepare(struct drm_plane *plane,
+			 struct drm_plane_state *state);
 #endif /*_KOMEDA_KMS_H_*/
