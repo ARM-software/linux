@@ -519,6 +519,8 @@ struct komeda_pipeline_state {
 	 * bitmask - BIT(component->id) of active components
 	 */
 	u32 active_comps;
+
+	u32 afbc_layers;
 };
 
 /**

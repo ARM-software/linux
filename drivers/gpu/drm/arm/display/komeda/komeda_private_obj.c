@@ -426,6 +426,7 @@ komeda_pipeline_atomic_duplicate_state(struct drm_private_obj *obj)
 		return NULL;
 
 	st->active_comps = 0;
+	st->afbc_layers = 0;
 
 	__drm_atomic_helper_private_obj_duplicate_state(obj, &st->obj);
 
