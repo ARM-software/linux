@@ -67,26 +67,17 @@ int komeda_plane_init_data_flow(struct drm_plane_state *st,
 	return 0;
 }
 
-/**
- * komeda_plane_atomic_check - build input data flow
- * @plane: DRM plane
- * @state: the plane state object
- *
- * RETURNS:
- * Zero for success or -errno
+/*
+ * komeda_plane_prepare is the first check step, which does some sanity check,
+ * compute the input data flow configuration according to the plane/crtc state
+ * for the next check() operations.
  */
-static int
-komeda_plane_atomic_check(struct drm_plane *plane,
-			  struct drm_plane_state *state)
+int komeda_plane_prepare(struct drm_plane *plane,
+			 struct drm_plane_state *state)
 {
-	struct komeda_plane *kplane = to_kplane(plane);
 	struct komeda_plane_state *kplane_st = to_kplane_st(state);
-	struct komeda_layer *layer = kplane->layer;
-	struct komeda_atu *atu = kplane->atu;
+	struct komeda_data_flow_cfg *dflow = &kplane_st->dflow;
 	struct drm_crtc_state *crtc_st;
-	struct komeda_crtc *kcrtc;
-	struct komeda_crtc_state *kcrtc_st;
-	struct komeda_data_flow_cfg dflow;
 	int err;
 
 	if (!state->crtc || !state->fb)
@@ -102,29 +93,63 @@ komeda_plane_atomic_check(struct drm_plane *plane,
 	if (!crtc_st->active)
 		return 0;
 
-	kcrtc = to_kcrtc(crtc_st->crtc);
-	kcrtc_st = to_kcrtc_st(crtc_st);
-
-	err = komeda_plane_init_data_flow(state, kcrtc_st, &dflow);
+	err = komeda_plane_init_data_flow(state, to_kcrtc_st(crtc_st), dflow);
 	if (err)
 		return err;
 
-	if (dflow.en_atu && (kcrtc->side_by_side || dflow.en_split)) {
+	if (dflow->en_atu &&
+	   (to_kcrtc(state->crtc)->side_by_side || dflow->en_split)) {
 		DRM_DEBUG_ATOMIC("atu doesn't support layer split or SBS.\n");
 		return -EINVAL;
 	}
 
+	/* Assign the komeda input pipeline to the data flow */
+	dflow->layer = to_kplane(plane)->layer;
+
+	return 0;
+}
+
+/**
+ * komeda_plane_atomic_check - build input data flow
+ * @plane: DRM plane
+ * @state: the plane state object
+ *
+ * RETURNS:
+ * Zero for success or -errno
+ */
+static int
+komeda_plane_atomic_check(struct drm_plane *plane,
+			  struct drm_plane_state *state)
+{
+	struct komeda_plane *kplane = to_kplane(plane);
+	struct komeda_plane_state *kplane_st = to_kplane_st(state);
+	struct komeda_data_flow_cfg *dflow = &kplane_st->dflow;
+	struct komeda_layer *layer = dflow->layer;
+	struct drm_crtc_state *crtc_st;
+	struct komeda_crtc *kcrtc;
+	struct komeda_crtc_state *kcrtc_st;
+	int err;
+
+	/* No layer assigned means the plane is disabled, skip it */
+	if (!layer && !dflow->en_atu)
+		return 0;
+
+	crtc_st = drm_atomic_get_crtc_state(state->state, state->crtc);
+
+	kcrtc = to_kcrtc(crtc_st->crtc);
+	kcrtc_st = to_kcrtc_st(crtc_st);
+
 	if (kcrtc->side_by_side)
 		err = komeda_build_layer_sbs_data_flow(layer,
-				kplane_st, kcrtc_st, &dflow);
-	else if (dflow.en_split)
+				kplane_st, kcrtc_st, dflow);
+	else if (dflow->en_split)
 		err = komeda_build_layer_split_data_flow(layer,
-				kplane_st, kcrtc_st, &dflow);
-	else if (dflow.en_atu)
-		err = komeda_atu_set_vp(atu, kplane_st, &dflow);
+				kplane_st, kcrtc_st, dflow);
+	else if (dflow->en_atu)
+		err = komeda_atu_set_vp(kplane->atu, kplane_st, dflow);
 	else
 		err = komeda_build_layer_data_flow(layer,
-				kplane_st, kcrtc_st, &dflow);
+				kplane_st, kcrtc_st, dflow);
 
 	return err;
 }

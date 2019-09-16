@@ -480,6 +480,7 @@ struct komeda_data_flow_cfg {
 	   en_atu : 1,
 	   en_r8_upscaling : 1,
 	   right_part : 1; /* right part of display image if split enabled */
+	struct komeda_layer *layer;
 };
 
 struct komeda_pipeline_funcs {
