@@ -1190,6 +1190,9 @@ int komeda_pipeline_setup_atu(struct komeda_pipeline *pipe,
 			      struct komeda_crtc_state *kcrtc_st)
 {
 	struct komeda_pipeline_state *pipe_st;
+	struct komeda_crtc *kcrtc = to_kcrtc(kcrtc_st->base.crtc);
+	struct malidp_matrix4 new_mat;
+	struct malidp_position new_pos;
 	u32 active_atus;
 	int i, err = 0;
 
@@ -1200,6 +1203,8 @@ int komeda_pipeline_setup_atu(struct komeda_pipeline *pipe,
 	if (!pipe_st)
 		return 0;
 
+	komeda_crtc_get_current_pose(kcrtc, &new_pos, &new_mat, false);
+
 	active_atus = pipe_st->active_comps & KOMEDA_PIPELINE_ATUS;
 	dp_for_each_set_bit(i, active_atus) {
 		struct komeda_atu *atu;
@@ -1207,6 +1212,9 @@ int komeda_pipeline_setup_atu(struct komeda_pipeline *pipe,
 		err = komeda_build_atu_data_flow(pipe, atu, kcrtc_st);
 		if (err)
 			break;
+
+		atu->new_mat = new_mat;
+		atu->new_pos = new_pos;
 	}
 
 	return err;

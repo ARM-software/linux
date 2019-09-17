@@ -186,8 +186,6 @@ struct komeda_crtc {
 	/* ATU sensor buffer properties */
 	struct drm_property *sensor_buf_property;
 	struct komeda_sensor_buff s_buff;
-	struct malidp_matrix4 new_mat, reference_mat;
-	struct malidp_position new_pos, reference_pos;
 };
 
 /**
@@ -314,9 +312,6 @@ int komeda_kms_create_plane_properties(struct komeda_kms_dev *kms,
 				       struct komeda_dev *mdev);
 void komeda_crtc_handle_event(struct komeda_crtc   *kcrtc,
 			      struct komeda_events *evts);
-void komeda_crtc_handle_atu_event(struct komeda_dev *mdev,
-				  struct komeda_crtc *kcrtc,
-				  struct komeda_events *evts);
 
 int komeda_kms_init(struct komeda_kms_dev *kms, struct komeda_dev *mdev);
 void komeda_kms_fini(struct komeda_kms_dev *kms);

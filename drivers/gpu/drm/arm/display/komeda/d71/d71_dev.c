@@ -426,43 +426,41 @@ static void d77_cleanup(struct komeda_dev *mdev)
 }
 
 static void d77_atu_vp_matrix_latch(u32 __iomem *reg,
-			struct komeda_atu_vp_state *v_st)
+			struct komeda_atu_vp_calc *calc)
 {
 	int i;
 	u32 offset_a = ATU_VP_MATRIX_A_COEFF0;
 	u32 offset_b = ATU_VP_MATRIX_B_COEFF0;
 
-	if (v_st->vp_type == ATU_VP_TYPE_NONE)
+	if (calc->vp_type == ATU_VP_TYPE_NONE)
 		return;
 
 	for (i = 0; i < 9; i++, offset_a += 4, offset_b += 4) {
-		malidp_write32(reg, offset_a, v_st->A.data[i]);
-		malidp_write32(reg, offset_b, v_st->B.data[i]);
+		malidp_write32(reg, offset_a, calc->A.data[i]);
+		malidp_write32(reg, offset_b, calc->B.data[i]);
 	}
 	malidp_write32(reg, ATU_VP_LATCH_A, ATU_VP_MATRIX_LATCH(0));
 	malidp_write32(reg, ATU_VP_LATCH_B, ATU_VP_MATRIX_LATCH(0));
 }
 
-static void d77_latch_matrix(struct komeda_atu *atu)
+static void d77_latch_matrix(struct komeda_atu_async_rp_job *job)
 {
-	struct komeda_atu_state *st;
+	struct komeda_atu *atu = job->atu;
 
-	st = &atu->last_st;
-
-	switch (st->mode) {
+	switch (job->mode) {
 	case ATU_MODE_VP0_VP1_SEQ:
 	case ATU_MODE_VP0_VP1_SIMULT:
 	case ATU_MODE_VP0_VP1_INT:
-		d77_atu_vp_matrix_latch(atu->reg[0], &st->left);
+		d77_atu_vp_matrix_latch(atu->reg[0], &job->left);
 		/* fallthrough */
 	case ATU_MODE_VP1:
-		d77_atu_vp_matrix_latch(atu->reg[1], &st->right);
+		d77_atu_vp_matrix_latch(atu->reg[1], &job->right);
 		break;
 	case ATU_MODE_VP0:
-		d77_atu_vp_matrix_latch(atu->reg[0], &st->left);
+		d77_atu_vp_matrix_latch(atu->reg[0], &job->left);
 		break;
 	default:
-		DRM_ERROR("Bad ATU mode %d\n", st->mode);
+		DRM_ERROR("Bad ATU mode %d\n", job->mode);
 	}
 }
 

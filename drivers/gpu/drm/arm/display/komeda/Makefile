@@ -12,6 +12,7 @@ komeda-y := \
 	komeda_color_mgmt.o \
 	komeda_pipeline.o \
 	komeda_pipeline_state.o \
+	komeda_xr.o \
 	komeda_framebuffer.o \
 	komeda_kms.o \
 	komeda_crtc.o \
