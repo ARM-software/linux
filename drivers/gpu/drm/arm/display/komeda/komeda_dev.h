@@ -247,6 +247,8 @@ int komeda_dev_suspend(struct komeda_dev *mdev);
 
 #ifdef CONFIG_DRM_KOMEDA_ERROR_PRINT
 void komeda_print_events(struct komeda_events *evts);
+#else
+static inline void komeda_print_events(struct komeda_events *evts) {}
 #endif
 void komeda_dev_init_ad(struct komeda_dev *mdev);
 
