@@ -13,6 +13,7 @@
 #include "komeda_color_mgmt.h"
 #include "malidp_utils.h"
 #include "malidp_math.h"
+#include "komeda_xr.h"
 
 #define KOMEDA_MAX_PIPELINES		2
 #define KOMEDA_PIPELINE_MAX_LAYERS	4
@@ -376,22 +377,6 @@ struct komeda_timing_ctrlr_state {
 	bool command_mode;
 };
 
-enum komeda_atu_mode {
-	ATU_MODE_INVAL_OVERLAP	= -2,
-	ATU_MODE_INVAL_ORDER	= -1,
-	ATU_MODE_VP0_VP1_SEQ	= 0,
-	ATU_MODE_VP0		= 1,
-	ATU_MODE_VP1		= 2,
-	ATU_MODE_VP0_VP1_SIMULT	= 3,
-	ATU_MODE_VP0_VP1_INT	= 4
-};
-
-enum komeda_atu_vp_type {
-	ATU_VP_TYPE_NONE = 0,
-	ATU_VP_TYPE_PROJ = 1,
-	ATU_VP_TYPE_QUAD =2
-};
-
 struct komeda_atu_vp_state {
 	u16 out_hsize, out_vsize;
 	u16 out_hoffset, out_voffset;
@@ -422,7 +407,6 @@ struct komeda_atu_vp_state {
 	u32 *b_sp_table;
 
 	struct malidp_matrix4 m1, m2;
-	struct malidp_matrix3 A, B;
 };
 
 struct komeda_atu_state {
@@ -452,7 +436,14 @@ struct komeda_atu {
 	u32 n_vp;
 	u32 __iomem *reg[2];	/* viewport register address */
 
-	struct komeda_atu_state last_st;
+	struct malidp_matrix4 new_mat;
+	struct malidp_position new_pos;
+
+	/** @job_lock: Protects atu_job_queue */
+	spinlock_t job_lock;
+	struct list_head atu_job_queue;
+
+	struct komeda_atu_async_rp_job *curr_job;
 };
 
 /* Why define A separated structure but not use plane_state directly ?
@@ -594,7 +585,6 @@ struct komeda_pipeline {
 	/** @dual_link: true if of_output_links[0] and [1] are both valid */
 	bool dual_link;
 
-	struct komeda_pipeline_state last_st;
 	u32 postponed_cval;
 };
 
@@ -618,6 +608,7 @@ struct komeda_pipeline {
 
 #define priv_to_comp_st(o) container_of(o, struct komeda_component_state, obj)
 #define priv_to_pipe_st(o) container_of(o, struct komeda_pipeline_state, obj)
+#define priv_to_atu_st(o) to_atu_st(priv_to_comp_st((o)->base.obj.state))
 
 /* pipeline APIs */
 struct komeda_pipeline *
@@ -735,8 +726,4 @@ int komeda_ad_enable(struct komeda_pipeline *pipe,
 		     struct drm_display_mode *mode);
 
 void komeda_ad_disable(struct komeda_pipeline *pipe);
-
-void komeda_pipeline_state_backup(struct komeda_pipeline *pipe);
-
-bool komeda_pipeline_has_atu_enabled(struct komeda_pipeline *pipe);
 #endif /* _KOMEDA_PIPELINE_H_*/

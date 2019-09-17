@@ -816,6 +816,9 @@ static int d77_atu_init(struct d71_dev *d71, struct block_header *blk,
 	atu->color_mgr.igamma_mgr = d71->it_mgr;
 	atu->color_mgr.fgamma_mgr = d71->ft_mgr;
 	atu->color_mgr.has_ctm = true;
+
+	spin_lock_init(&atu->job_lock);
+	INIT_LIST_HEAD(&atu->atu_job_queue);
 	return 0;
 }
 
@@ -1969,13 +1972,14 @@ static void d71_pipeline_flush(struct komeda_pipeline *pipe,
 
 	if (has_bit(0, active_pipes)) {
 		d77_pipeline_enable_perf(d71->pipes[0]);
-		pending_cval = komeda_pipeline_has_atu_enabled(&d71->pipes[0]->base);
+		pending_cval = komeda_pipeline_prepare_atu_job(&d71->pipes[0]->base);
 	}
 
 	if (has_bit(1, active_pipes)) {
 		d77_pipeline_enable_perf(d71->pipes[1]);
 		if (!pending_cval)
-			pending_cval = komeda_pipeline_has_atu_enabled(&d71->pipes[1]->base);
+			pending_cval = komeda_pipeline_prepare_atu_job(
+							&d71->pipes[1]->base);
 	}
 
 	if (pending_cval) {

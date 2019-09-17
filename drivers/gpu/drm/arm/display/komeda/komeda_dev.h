@@ -130,7 +130,7 @@ struct komeda_dev_funcs {
 	/** @disable_irq: disable irq */
 	int (*disable_irq)(struct komeda_dev *mdev);
 	/* @latch_matrix: latch ATU projection/quad matrix */
-	void (*latch_matrix)(struct komeda_atu *atu);
+	void (*latch_matrix)(struct komeda_atu_async_rp_job *job);
 	/** @on_off_vblank: notify HW to on/off vblank */
 	void (*on_off_vblank)(struct komeda_dev *mdev,
 			      int master_pipe, bool on);

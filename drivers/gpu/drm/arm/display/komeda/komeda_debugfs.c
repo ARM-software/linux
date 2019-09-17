@@ -28,23 +28,6 @@ bool_to_onoff(bool b)
 	return (b) ? "ON" : "OFF";
 }
 
-static void dump_matrix(struct seq_file *m, const char *name,
-			u32 *mat, int r, int c)
-{
-	int i, j;
-	if (!mat)
-		return;
-	if (name)
-		seq_printf(m, "\t\t%s\n", name);
-
-	for (i = 0; i < r; i++) {
-		seq_printf(m, "\t\t\t");
-		for (j = 0; j < c; j++)
-			seq_printf(m, "0x%-8x,", mat[r*i + j]);
-		seq_printf(m, "\n");
-	}
-}
-
 static const char *
 vp_mode_to_str(enum komeda_atu_mode mode)
 {
@@ -81,10 +64,6 @@ static void dump_vp_state(struct seq_file *m, const char *vp_name,
 	seq_printf(m, "\t\tCAC: %s\n", bool_to_onoff(st->cac_enabled));
 	seq_printf(m, "\t\tCLE: %s\n", bool_to_onoff(st->clamp_enabled));
 	seq_printf(m, "\t\tRPJ: %s\n", bool_to_onoff(st->vp_type != ATU_VP_TYPE_NONE));
-	dump_matrix(m, "M1:", st->m1.data, 4, 4);
-	dump_matrix(m, "M2:", st->m2.data, 4, 4);
-	dump_matrix(m, "A:", st->A.data, 3, 3);
-	dump_matrix(m, "B:", st->B.data, 3, 3);
 }
 
 static void
