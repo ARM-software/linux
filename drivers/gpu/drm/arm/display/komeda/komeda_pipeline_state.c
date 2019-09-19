@@ -99,13 +99,13 @@ komeda_pipeline_get_state_and_set_crtc(struct komeda_pipeline *pipe,
 static bool komeda_component_is_new_active(struct komeda_component *c,
 					   struct drm_atomic_state *state)
 {
-	struct komeda_pipeline_state *ppl_old_st;
+	struct komeda_pipeline_state *pipe_old_st;
 
-	ppl_old_st = komeda_pipeline_get_old_state(c->pipeline, state);
-	if (IS_ERR(ppl_old_st))
+	pipe_old_st = komeda_pipeline_get_old_state(c->pipeline, state);
+	if (IS_ERR(pipe_old_st))
 		return true;
 
-	if (has_bit(c->id, ppl_old_st->active_comps))
+	if (has_bit(c->id, pipe_old_st->active_comps))
 		return false;
 
 	return true;

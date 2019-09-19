@@ -194,15 +194,15 @@ static void commit_axi_property(const struct d71_property *p,
 	malidp_write32_mask(reg, offset, mask, val);
 }
 
-static void commit_axi_cache(struct komeda_pipeline *ppl,
+static void commit_axi_cache(struct komeda_pipeline *pipe,
 			     const struct d71_property *p, u32 val)
 {
 	struct komeda_layer *layer;
 
 	if (p->p_id == LW_AWCACHE)
-		layer = ppl->wb_layer;
+		layer = pipe->wb_layer;
 	else
-		layer = ppl->layers[p->p_id - L0_ARCACHE];
+		layer = pipe->layers[p->p_id - L0_ARCACHE];
 
 	if (!layer)
 		return;

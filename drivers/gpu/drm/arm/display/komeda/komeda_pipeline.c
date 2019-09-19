@@ -266,11 +266,11 @@ static void komeda_component_dump(struct komeda_component *c)
 	if (!c)
 		return;
 
-	DRM_INFO("	%s: ID %d-0x%08lx.\n",
+	DRM_DEBUG("	%s: ID %d-0x%08lx.\n",
 		  c->name, c->id, BIT(c->id));
-	DRM_INFO("		max_active_inputs:%d, supported_inputs: 0x%08x.\n",
+	DRM_DEBUG("		max_active_inputs:%d, supported_inputs: 0x%08x.\n",
 		  c->max_active_inputs, c->supported_inputs);
-	DRM_INFO("		max_active_outputs:%d, supported_outputs: 0x%08x.\n",
+	DRM_DEBUG("		max_active_outputs:%d, supported_outputs: 0x%08x.\n",
 		  c->max_active_outputs, c->supported_outputs);
 }
 
