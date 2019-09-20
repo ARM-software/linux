@@ -284,6 +284,15 @@ void komeda_crtc_get_color_config(struct drm_crtc_state *crtc_st,
 				  u32 *color_depths, u32 *color_formats);
 unsigned long komeda_crtc_get_aclk(struct komeda_crtc_state *kcrtc_st);
 
+static inline struct drm_property_blob *
+komeda_drm_blob_get(struct drm_property_blob *blob)
+{
+	if (!blob)
+		return NULL;
+
+	return drm_property_blob_get(blob);
+}
+
 int komeda_kms_setup_crtcs(struct komeda_kms_dev *kms, struct komeda_dev *mdev);
 
 int komeda_kms_add_crtcs(struct komeda_kms_dev *kms, struct komeda_dev *mdev);

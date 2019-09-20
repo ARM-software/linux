@@ -120,7 +120,8 @@ komeda_atu_atomic_duplicate_state(struct drm_private_obj *obj)
 	komeda_color_duplicate_state(&st->color_st, &old->color_st);
 
 	komeda_component_state_reset(&st->base);
-
+	st->left.plane = NULL;
+	st->right.plane = NULL;
 	__drm_atomic_helper_private_obj_duplicate_state(obj, &st->base.obj);
 
 	return &st->base.obj;
