@@ -208,7 +208,7 @@ komeda_plane_atomic_duplicate_state(struct drm_plane *plane)
 	new->viewport_trans = komeda_drm_blob_get(old->viewport_trans);
 	new->layer_project = komeda_drm_blob_get(old->layer_project);
 	new->layer_quad = komeda_drm_blob_get(old->layer_quad);
-	INIT_LIST_HEAD(new->zlist_node.next);
+	INIT_LIST_HEAD(&new->zlist_node);
 
 	return &new->base;
 }
