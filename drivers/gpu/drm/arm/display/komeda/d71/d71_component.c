@@ -277,6 +277,7 @@ static void d71_layer_update(struct komeda_component *c,
 	u32 ctrl_mask = L_EN | L_ROT(L_ROT_R270) | L_HFLIP | L_VFLIP | L_TBU_EN;
 	u32 ctrl = L_EN | to_rot_ctrl(st->rot);
 
+	malidp_write32(reg, LAYER_PALPHA, D71_PALPHA_DEF_MAP);
 	d71_layer_update_fb(c, kfb, st->addr);
 
 	malidp_write32(reg, AD_CONTROL, to_ad_ctrl(fb->modifier));
@@ -525,8 +526,6 @@ static int d71_layer_init(struct d71_dev *d71,
 	set_range(&layer->hsize_in, 4, layer->line_sz);
 	set_range(&layer->vsize_in, 4, d71->max_vsize);
 
-	malidp_write32(reg, LAYER_PALPHA, D71_PALPHA_DEF_MAP);
-
 	layer->supported_rots = DRM_MODE_ROTATE_MASK | DRM_MODE_REFLECT_MASK;
 
 	if (komeda_product_match(d71->mdev, MALIDP_D77_PRODUCT_ID))
@@ -649,6 +648,14 @@ static void d77_atu_update(struct komeda_component *c,
 				  vp1_reg, d71->glb_sc_coeff_addr[1]);
 	} else {
 		malidp_write32_mask(vp1_reg, BLK_CONTROL, ATU_VP_EN, 0);
+	}
+
+	if (plane_st->fb->format->is_yuv) {
+		malidp_write_group(atu_reg, LAYER_YUV_RGB_COEFF0,
+				   KOMEDA_N_YUV2RGB_COEFFS,
+				   komeda_select_yuv2rgb_coeffs(
+					plane_st->color_encoding,
+					plane_st->color_range));
 	}
 
 	v = HV_SIZE(st->hsize, st->vsize);
