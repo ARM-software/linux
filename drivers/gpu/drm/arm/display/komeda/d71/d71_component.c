@@ -792,6 +792,9 @@ static int d77_atu_init(struct d71_dev *d71, struct block_header *blk,
 		return -EINVAL;
 	}
 
+	/* ATU is global resources can be shared between pipelines */
+	c->global = true;
+
 	atu = to_atu(c);
 
 	set_range(&atu->h_size, 64, max_atu_ln_sz);

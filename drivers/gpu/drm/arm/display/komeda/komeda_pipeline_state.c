@@ -96,12 +96,13 @@ komeda_pipeline_get_state_and_set_crtc(struct komeda_pipeline *pipe,
 	return st;
 }
 
-static bool komeda_component_is_new_active(struct komeda_component *c,
+static bool komeda_component_is_new_active(struct komeda_pipeline *pipe,
+					   struct komeda_component *c,
 					   struct drm_atomic_state *state)
 {
 	struct komeda_pipeline_state *pipe_old_st;
 
-	pipe_old_st = komeda_pipeline_get_old_state(c->pipeline, state);
+	pipe_old_st = komeda_pipeline_get_old_state(pipe, state);
 	if (IS_ERR(pipe_old_st))
 		return true;
 
@@ -116,8 +117,6 @@ komeda_component_get_state(struct komeda_component *c,
 			   struct drm_atomic_state *state)
 {
 	struct drm_private_state *priv_st;
-
-	WARN_ON(!drm_modeset_is_locked(&c->pipeline->obj.lock));
 
 	priv_st = drm_atomic_get_private_obj_state(state, &c->obj);
 	if (IS_ERR(priv_st))
@@ -181,12 +180,17 @@ komeda_component_get_state_and_set_user(struct komeda_component *c,
 					void *user,
 					struct drm_crtc *crtc)
 {
+	struct komeda_pipeline *pipe;
 	struct komeda_pipeline_state *pipe_st;
 	struct komeda_component_state *st;
 
+	/* If component is global always enable it on master, if not have to
+	 * enable it on the pipeline that the component belongs to.
+	 */
+	pipe = c->global ? to_kcrtc(crtc)->master : c->pipeline;
+
 	/* First check if the pipeline is available */
-	pipe_st = komeda_pipeline_get_state_and_set_crtc(c->pipeline,
-							 state, crtc);
+	pipe_st = komeda_pipeline_get_state_and_set_crtc(pipe, state, crtc);
 	if (IS_ERR(pipe_st))
 		return ERR_CAST(pipe_st);
 
@@ -452,9 +456,11 @@ komeda_validate_plane_color(struct komeda_component *c,
 			    struct komeda_color_state *color_st,
 			    struct drm_plane_state *plane_st)
 {
+	struct komeda_pipeline *pipe;
 	int err;
 
-	if (komeda_component_is_new_active(c, plane_st->state))
+	pipe = c->global ? to_kcrtc(plane_st->crtc)->master : c->pipeline;
+	if (komeda_component_is_new_active(pipe, c, plane_st->state))
 		plane_st->color_mgmt_changed = true;
 
 	if (!plane_st->color_mgmt_changed)

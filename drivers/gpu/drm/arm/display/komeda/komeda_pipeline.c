@@ -367,7 +367,7 @@ komeda_pipeline_get_slave(struct komeda_pipeline *master)
 		comp = &master->improc->base;
 		avail_inputs = KOMEDA_PIPELINE_IMPROCS;
 	} else {
-		comp = &master->compiz->base;
+		comp = master->cbar ? master->cbar : &master->compiz->base;
 		avail_inputs = KOMEDA_PIPELINE_COMPIZS;
 	}
 
