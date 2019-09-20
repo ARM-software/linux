@@ -22,8 +22,8 @@
 				vsync-len = <2>;
 			};
 
-			timing1: timing@1 {
-				/* 1280x720@60 framebuffer */
+			/* 1280x720@60 framebuffer */
+			/*timing1: timing@1 {
 				clock-frequency = <74250000>;
 				hactive = <1280>;
 				vactive = <720>;
@@ -33,7 +33,7 @@
 				vfront-porch = <5>;
 				vback-porch = <20>;
 				vsync-len = <5>;
-			};
+			};*/
 		};
 
 		port {
@@ -62,8 +62,8 @@
 				vsync-len = <2>;
 			};
 
-			timing3: timing@1 {
-				/* 1280x720@60 framebuffer */
+			/* 1280x720@60 framebuffer */
+			/*timing3: timing@1 {
 				clock-frequency = <74250000>;
 				hactive = <1280>;
 				vactive = <720>;
@@ -73,7 +73,7 @@
 				vfront-porch = <5>;
 				vback-porch = <20>;
 				vsync-len = <5>;
-			};
+			};*/
 		};
 
 		port {
