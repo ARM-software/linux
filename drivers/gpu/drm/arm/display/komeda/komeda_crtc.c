@@ -867,7 +867,7 @@ static int komeda_crtc_atomic_set_property(struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int create_coprocessor_property(struct komeda_crtc *kcrtc)
@@ -1025,6 +1025,8 @@ int komeda_kms_setup_crtcs(struct komeda_kms_dev *kms,
 		DRM_INFO("CRTC-%d: master(pipe-%d) slave(%s) sbs(%s).\n",
 			 kms->n_crtcs, master->id, str,
 			 crtc->side_by_side ? "On" : "Off");
+
+		spin_lock_init(&crtc->s_buff.spinlock);
 
 		kms->n_crtcs++;
 
