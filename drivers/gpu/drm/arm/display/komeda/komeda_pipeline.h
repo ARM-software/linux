@@ -408,7 +408,6 @@ struct komeda_atu_vp_state {
 	bool pr_enabled		: 1;
 	bool cac_enabled	: 1;
 	bool clamp_enabled	: 1;
-	bool matrix_changed	: 1;
 
 	dma_addr_t addr;
 
