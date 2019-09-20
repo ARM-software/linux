@@ -414,10 +414,8 @@ komeda_atu_vp_validate(struct komeda_atu *atu,
 		else
 			m1 = NULL;
 
-		if (m1) {
+		if (m1)
 			memcpy(v_st->m1.data, m1, sizeof(v_st->m1.data));
-			v_st->matrix_changed = true;
-		}
 	}
 
 	return 0;

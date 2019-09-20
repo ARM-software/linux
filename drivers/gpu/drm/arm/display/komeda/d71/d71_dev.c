@@ -432,7 +432,7 @@ static void d77_atu_vp_matrix_latch(u32 __iomem *reg,
 	u32 offset_a = ATU_VP_MATRIX_A_COEFF0;
 	u32 offset_b = ATU_VP_MATRIX_B_COEFF0;
 
-	if (v_st->vp_type == ATU_VP_TYPE_NONE || !v_st->matrix_changed)
+	if (v_st->vp_type == ATU_VP_TYPE_NONE)
 		return;
 
 	for (i = 0; i < 9; i++, offset_a += 4, offset_b += 4) {
