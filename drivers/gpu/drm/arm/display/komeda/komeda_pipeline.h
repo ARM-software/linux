@@ -117,6 +117,12 @@ struct komeda_component {
 	u32 hw_id;
 
 	/**
+	 * @global:if set means this component is not belong to a specific pipeline,
+	 * but a global resources which can be shared between pipelines.
+	 */
+	bool global;
+
+	/**
 	 * @max_active_inputs:
 	 * @max_active_outputs:
 	 *

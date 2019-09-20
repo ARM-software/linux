@@ -368,16 +368,20 @@ static u32 get_possible_crtcs(struct komeda_kms_dev *kms,
 
 static void
 komeda_set_crtc_plane_mask(struct komeda_kms_dev *kms,
-			   struct komeda_pipeline *pipe,
+			   struct komeda_component *c,
 			   struct drm_plane *plane)
 {
 	struct komeda_crtc *kcrtc;
 	int i;
 
+	/* global always use as master */
+	if (c->global)
+		return;
+
 	for (i = 0; i < kms->n_crtcs; i++) {
 		kcrtc = &kms->crtcs[i];
 
-		if (pipe == kcrtc->slave)
+		if (c->pipeline == kcrtc->slave)
 			kcrtc->slave_planes |= BIT(drm_plane_index(plane));
 	}
 }
@@ -552,7 +556,7 @@ static int komeda_plane_add(struct komeda_kms_dev *kms,
 	if (err)
 		goto cleanup;
 
-	komeda_set_crtc_plane_mask(kms, master_comp->pipeline, plane);
+	komeda_set_crtc_plane_mask(kms, master_comp, plane);
 
 	/* below is the normal layer properties */
 	if (!layer)
