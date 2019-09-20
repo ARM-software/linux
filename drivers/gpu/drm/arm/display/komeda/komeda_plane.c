@@ -197,7 +197,18 @@ komeda_plane_atomic_duplicate_state(struct drm_plane *plane)
 
 	old = to_kplane_st(plane->state);
 
+	new->viewport_clamp = old->viewport_clamp;
+	new->layer_split = old->layer_split;
 	new->channel_scaling = old->channel_scaling;
+
+	new->spline_coeff_r = komeda_drm_blob_get(old->spline_coeff_r);
+	new->spline_coeff_g = komeda_drm_blob_get(old->spline_coeff_g);
+	new->spline_coeff_b = komeda_drm_blob_get(old->spline_coeff_b);
+	new->vp_outrect = komeda_drm_blob_get(old->vp_outrect);
+	new->viewport_trans = komeda_drm_blob_get(old->viewport_trans);
+	new->layer_project = komeda_drm_blob_get(old->layer_project);
+	new->layer_quad = komeda_drm_blob_get(old->layer_quad);
+	INIT_LIST_HEAD(new->zlist_node.next);
 
 	return &new->base;
 }
