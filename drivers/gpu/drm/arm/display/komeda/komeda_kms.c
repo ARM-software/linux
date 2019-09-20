@@ -118,15 +118,37 @@ static const struct drm_mode_config_helper_funcs komeda_mode_config_helpers = {
 static int komeda_plane_state_list_add(struct drm_plane_state *plane_st,
 				       struct list_head *zorder_list)
 {
+	struct komeda_plane *kplane = to_kplane(plane_st->plane);
 	struct komeda_plane_state *new = to_kplane_st(plane_st);
 	struct komeda_plane_state *node, *last;
+	struct drm_plane_state *buddy_st;
 
+	/* if it's atu */
+	if (new->vp_outrect) {
+		buddy_st = drm_atomic_get_new_plane_state(plane_st->state,
+							  &kplane->atu_vp_buddy->base);
+		if (!buddy_st || list_empty(&to_kplane_st(buddy_st)->zlist_node))
+			goto add_to_list;
+		/* atu buddy is already added into zorder_list */
+		if (buddy_st->zpos != new->base.zpos) {
+			/* ATU VP0 and VP1 should use same zpos */
+			DRM_DEBUG_ATOMIC("ATU PLANE: %s and PLANE: %s has different zpos: %d, %d.\n",
+					new->base.plane->name, buddy_st->plane->name,
+					new->base.zpos, buddy_st->zpos);
+			return -EINVAL;
+		}
+		/* buddy is already added, skip current one */
+		new->base.normalized_zpos = 0xff;
+		return 0;
+	}
+
+add_to_list:
 	last = list_empty(zorder_list) ?
 	       NULL : list_last_entry(zorder_list, typeof(*last), zlist_node);
 
-	/* Considering the list sequence is zpos increasing, so if list is empty
-	 * or the zpos of new node bigger than the last node in list, no need
-	 * loop and just insert the new one to the tail of the list.
+	/* if list is empty or new node zpos is bigger than the last node
+	 * in the list, we can insert new node to the tail directly.
+	 * because the zpos in this list are arranged in positive order.
 	 */
 	if (!last || (new->base.zpos > last->base.zpos)) {
 		list_add_tail(&new->zlist_node, zorder_list);
@@ -204,10 +226,10 @@ static int komeda_crtc_normalize_zpos(struct drm_crtc *crtc,
 				 plane_st->zpos, plane_st->normalized_zpos);
 
 		/* calculate max slave zorder */
-		if (has_bit(drm_plane_index(plane), kcrtc->slave_planes))
-			kcrtc_st->max_slave_zorder =
-				max(plane_st->normalized_zpos,
-				    kcrtc_st->max_slave_zorder);
+		if (has_bit(drm_plane_index(plane), kcrtc->slave_planes) &&
+		   (!kplane_st->vp_outrect) &&
+		   (plane_st->normalized_zpos > kcrtc_st->max_slave_zorder))
+			kcrtc_st->max_slave_zorder = plane_st->normalized_zpos;
 	}
 
 	crtc_st->zpos_changed = true;
