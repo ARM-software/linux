@@ -1982,9 +1982,9 @@ static void d71_pipeline_flush(struct komeda_pipeline *pipe,
 		malidp_write32_mask(dou_addr, BLK_IRQ_MASK,
 					DOU_IRQ_PL3 | DOU_IRQ_PL2,
 					DOU_IRQ_PL3 | DOU_IRQ_PL2);
+	} else {
+		malidp_write32(d71->gcu_addr, reg_offset, GCU_CONFIG_CVAL);
 	}
-
-	malidp_write32(d71->gcu_addr, reg_offset, GCU_CONFIG_CVAL);
 }
 
 static void d71_lpu_dump(struct d71_pipeline *pipe, struct seq_file *sf)
