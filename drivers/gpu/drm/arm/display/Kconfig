@@ -19,6 +19,13 @@ config DRM_KOMEDA_ERROR_PRINT
 	help
 	  Choose this option to enable error printing.
 
+config COPROC_SERVER
+	tristate "Co-processor server driver"
+	depends on DRM_KOMEDA
+	---help---
+	   This driver provides an interface between display driver and
+	   the third party co-processor driver (co-processor client).
+
 config ASSERTIVE_DISPLAY_TEST_MODULE
 	tristate "ARM Assertive display test module driver"
 	select IIO
