@@ -202,9 +202,6 @@ struct komeda_crtc_state {
 	 */
 	u32 active_pipes;
 
-	/** @clock_ratio: ratio of (aclk << 32)/pxlclk */
-	u64 clock_ratio;
-
 	/** @max_slave_zorder: the maximum of slave zorder */
 	u32 max_slave_zorder;
 

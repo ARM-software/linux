@@ -45,21 +45,6 @@ void komeda_crtc_get_color_config(struct drm_crtc_state *crtc_st,
 	*color_formats = conn_color_formats;
 }
 
-static void komeda_crtc_update_clock_ratio(struct komeda_crtc_state *kcrtc_st)
-{
-	u64 pxlclk, aclk;
-
-	if (!kcrtc_st->base.active) {
-		kcrtc_st->clock_ratio = 0;
-		return;
-	}
-
-	pxlclk = kcrtc_st->base.adjusted_mode.crtc_clock * 1000;
-	aclk = komeda_crtc_get_aclk(kcrtc_st);
-
-	kcrtc_st->clock_ratio = div64_u64(aclk << 32, pxlclk);
-}
-
 /* if en_inv is true, save inv_cur_mat into cur_mat */
 static bool
 get_current_pose(struct komeda_sensor_buff *sb_buff,
@@ -279,9 +264,6 @@ komeda_crtc_atomic_check(struct drm_crtc *crtc,
 	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(state);
 	int err;
-
-	if (drm_atomic_crtc_needs_modeset(state))
-		komeda_crtc_update_clock_ratio(kcrtc_st);
 
 	if (state->active) {
 		err = komeda_build_display_data_flow(kcrtc, kcrtc_st);
@@ -759,7 +741,6 @@ komeda_crtc_atomic_duplicate_state(struct drm_crtc *crtc)
 	__drm_atomic_helper_crtc_duplicate_state(crtc, &new->base);
 
 	new->affected_pipes = old->active_pipes;
-	new->clock_ratio = old->clock_ratio;
 	new->max_slave_zorder = old->max_slave_zorder;
 	new->en_protected_mode = old->en_protected_mode;
 	new->en_coproc = old->en_coproc;
