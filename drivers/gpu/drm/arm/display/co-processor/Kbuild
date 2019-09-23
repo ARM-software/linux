@@ -1,2 +1,3 @@
 obj-$(CONFIG_COPROC_SERVER) += coproc_srv.o
+obj-$(CONFIG_COPROC_TEST_CLIENT) += test_coproc_client.o
 ccflags-y += -I$(src)/../include
