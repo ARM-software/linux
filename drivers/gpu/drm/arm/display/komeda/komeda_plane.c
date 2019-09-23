@@ -8,6 +8,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_print.h>
+#include <drm/drm_file.h>
 #include "komeda_dev.h"
 #include "komeda_kms.h"
 #include "komeda_framebuffer.h"
@@ -61,8 +62,12 @@ int komeda_plane_init_data_flow(struct drm_plane_state *st,
 
 	dflow->en_atu = !!kplane_st->vp_outrect;
 	dflow->pixel_blend_mode = st->pixel_blend_mode;
-	komeda_complete_data_flow_cfg(pipe, dflow, fb);
 	dflow->channel_scaling = kplane_st->channel_scaling;
+
+	if (kplane->force_layer_split)
+		dflow->en_split = true;
+
+	komeda_complete_data_flow_cfg(pipe, dflow, fb);
 
 	return 0;
 }
@@ -360,6 +365,32 @@ komeda_plane_format_mod_supported(struct drm_plane *plane,
 					   format, modifier, 0);
 }
 
+#ifdef CONFIG_DEBUG_FS
+static int
+komeda_plane_debugfs_init(struct drm_plane *plane)
+{
+	struct komeda_plane *kplane = to_kplane(plane);
+	struct dentry *dir;
+	char name[32];
+
+	if (!kplane->layer || !kplane->layer->right)
+		return 0;
+
+	snprintf(name, sizeof(name), "plane-%d", drm_plane_index(plane));
+
+	dir = debugfs_create_dir(name, plane->dev->primary->debugfs_root);
+	if (!dir) {
+		DRM_DEBUG_ATOMIC("Cannot create debugfs dir for %s\n", name);
+		return 0;
+	}
+
+	debugfs_create_bool("force_layer_split", 0644, dir,
+			    &kplane->force_layer_split);
+
+	return 0;
+}
+#endif /*CONFIG_DEBUG_FS*/
+
 static const struct drm_plane_funcs komeda_plane_funcs = {
 	.update_plane		= drm_atomic_helper_update_plane,
 	.disable_plane		= drm_atomic_helper_disable_plane,
@@ -370,6 +401,9 @@ static const struct drm_plane_funcs komeda_plane_funcs = {
 	.atomic_get_property	= komeda_plane_atomic_get_property,
 	.atomic_set_property	= komeda_plane_atomic_set_property,
 	.format_mod_supported	= komeda_plane_format_mod_supported,
+#ifdef CONFIG_DEBUG_FS
+	.late_register		= komeda_plane_debugfs_init,
+#endif /*CONFIG_DEBUG_FS*/
 };
 
 /* for komeda, which is pipeline can be share between crtcs */
@@ -515,6 +549,7 @@ static int komeda_plane_add(struct komeda_kms_dev *kms,
 	plane = &kplane->base;
 	kplane->layer = layer;
 	kplane->atu  = atu;
+	kplane->force_layer_split = false;
 
 	master_comp = layer ? &layer->base : &atu->base;
 	layer_type = layer ? layer->layer_type : atu->layer_type;
