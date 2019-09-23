@@ -223,7 +223,6 @@ komeda_plane_atomic_duplicate_state(struct drm_plane *plane)
 	old = to_kplane_st(plane->state);
 
 	new->viewport_clamp = old->viewport_clamp;
-	new->layer_split = old->layer_split;
 	new->channel_scaling = old->channel_scaling;
 
 	new->spline_coeff_r = komeda_drm_blob_get(old->spline_coeff_r);
