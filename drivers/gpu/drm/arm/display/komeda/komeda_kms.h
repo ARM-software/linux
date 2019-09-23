@@ -80,9 +80,6 @@ struct komeda_plane_state {
 
 	bool viewport_clamp;
 
-	/** @layer_split: on/off layer_split */
-	u8 layer_split : 1;
-
 	/** @spline_coeff_r_changed: the value in "spline_coeff_r" changed or not */
 	u8 spline_coeff_r_changed : 1,
 	/** @spline_coeff_g_changed: the value in "spline_coeff_r" changed or not */
