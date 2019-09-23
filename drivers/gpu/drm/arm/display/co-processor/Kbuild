@@ -1,0 +1,2 @@
+obj-$(CONFIG_COPROC_SERVER) += coproc_srv.o
+ccflags-y += -I$(src)/../include
