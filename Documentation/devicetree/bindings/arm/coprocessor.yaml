@@ -1,0 +1,39 @@
+title: Arm Komeda Co-Processor
+
+maintainers:
+  - James Qian Wang <james.qian.wang@arm.com>
+
+properties:
+  compatible:
+    enum:
+      - arm,coprocessor_client
+
+  reg:
+    maxItems: 1
+
+  port:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - port
+
+additionalProperties: false
+
+examples:
+  co-processors {
+    compatible = "simple-bus";
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    cp0: co-processor@0 {
+      compatible = "arm,coprocessor_client";
+      reg = <0>;
+      port {
+        cp0_in: endpoint {
+          remote-endpoint = <&dp0_out1>;
+        };
+      };
+    };
+  };

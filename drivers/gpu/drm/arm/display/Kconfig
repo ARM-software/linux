@@ -26,6 +26,14 @@ config COPROC_SERVER
 	   This driver provides an interface between display driver and
 	   the third party co-processor driver (co-processor client).
 
+config COPROC_TEST_CLIENT
+	tristate "Co-processor test client driver"
+	depends on OF
+	depends on COPROC_SERVER
+	---help---
+	   This test driver provides a demo for communicating with server
+	   coprocessor driver.
+
 config ASSERTIVE_DISPLAY_TEST_MODULE
 	tristate "ARM Assertive display test module driver"
 	select IIO
