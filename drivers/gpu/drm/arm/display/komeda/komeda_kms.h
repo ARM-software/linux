@@ -24,6 +24,15 @@
 struct komeda_plane {
 	/** @base: &drm_plane */
 	struct drm_plane base;
+
+	/**
+	 * @force_layer_split:
+	 *
+	 * debug flag, if true, force enable layer_split when this plane
+	 * has been enabled.
+	 */
+	bool force_layer_split;
+
 	/**
 	 * @layer:
 	 *
