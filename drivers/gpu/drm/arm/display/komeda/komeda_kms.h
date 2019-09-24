@@ -217,9 +217,13 @@ struct komeda_crtc_state {
 	u32 assertiveness;
 	u32 strength_limit;
 	u16 drc;
-	u32 assertive_changed : 1,
-	     strength_changed : 1,
-	          drc_changed : 1;
+	union {
+		u32 assertive_changed : 1,
+		     strength_changed : 1,
+			  drc_changed : 1;
+		u32 cfg_changed;
+	};
+
 	/** @pl3: pl3 irq*/
 	u32 pl3;
 };
