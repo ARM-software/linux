@@ -83,6 +83,7 @@ int komeda_plane_prepare(struct drm_plane *plane,
 	struct komeda_plane_state *kplane_st = to_kplane_st(state);
 	struct komeda_data_flow_cfg *dflow = &kplane_st->dflow;
 	struct drm_crtc_state *crtc_st;
+	struct drm_plane_state *old;
 	int err;
 
 	if (!state->crtc || !state->fb)
@@ -97,6 +98,17 @@ int komeda_plane_prepare(struct drm_plane *plane,
 	/* crtc is inactive, skip the resource assignment */
 	if (!crtc_st->active)
 		return 0;
+
+	/* komeda only updates komeda state when crtc/plane is active, so once
+	 * the user do the update during the inactive period, we may lose the
+	 * changed flag when do the real komeda update in the active period,
+	 * and lose the drm state updating that during the inactive period.
+	 * To avoid such problem, force dirty all the changed flags when switch
+	 * a plane from disable to enable.
+	 */
+	old = drm_atomic_get_old_plane_state(state->state, plane);
+	if (!old->crtc)
+		state->color_mgmt_changed = true;
 
 	err = komeda_plane_init_data_flow(state, to_kcrtc_st(crtc_st), dflow);
 	if (err)

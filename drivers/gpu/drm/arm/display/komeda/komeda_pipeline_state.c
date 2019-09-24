@@ -96,22 +96,6 @@ komeda_pipeline_get_state_and_set_crtc(struct komeda_pipeline *pipe,
 	return st;
 }
 
-static bool komeda_component_is_new_active(struct komeda_pipeline *pipe,
-					   struct komeda_component *c,
-					   struct drm_atomic_state *state)
-{
-	struct komeda_pipeline_state *pipe_old_st;
-
-	pipe_old_st = komeda_pipeline_get_old_state(pipe, state);
-	if (IS_ERR(pipe_old_st))
-		return true;
-
-	if (has_bit(c->id, pipe_old_st->active_comps))
-		return false;
-
-	return true;
-}
-
 static struct komeda_component_state *
 komeda_component_get_state(struct komeda_component *c,
 			   struct drm_atomic_state *state)
@@ -456,12 +440,7 @@ komeda_validate_plane_color(struct komeda_component *c,
 			    struct komeda_color_state *color_st,
 			    struct drm_plane_state *plane_st)
 {
-	struct komeda_pipeline *pipe;
 	int err;
-
-	pipe = c->global ? to_kcrtc(plane_st->crtc)->master : c->pipeline;
-	if (komeda_component_is_new_active(pipe, c, plane_st->state))
-		plane_st->color_mgmt_changed = true;
 
 	if (!plane_st->color_mgmt_changed)
 		return 0;
