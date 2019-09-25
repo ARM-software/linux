@@ -28,16 +28,6 @@ int komeda_plane_init_data_flow(struct drm_plane_state *st,
 
 	memset(dflow, 0, sizeof(*dflow));
 
-	dflow->blending_zorder = st->normalized_zpos;
-	if (pipe == to_kcrtc(st->crtc)->master || kplane_st->vp_outrect)
-		dflow->blending_zorder -= kcrtc_st->max_slave_zorder;
-	if (dflow->blending_zorder < 0) {
-		DRM_DEBUG_ATOMIC("%s zorder:%d < max_slave_zorder: %d.\n",
-				 st->plane->name, st->normalized_zpos,
-				 kcrtc_st->max_slave_zorder);
-		return -EINVAL;
-	}
-
 	dflow->pixel_blend_mode = st->pixel_blend_mode;
 	dflow->layer_alpha = st->alpha >> 8;
 
@@ -64,10 +54,11 @@ int komeda_plane_init_data_flow(struct drm_plane_state *st,
 	dflow->pixel_blend_mode = st->pixel_blend_mode;
 	dflow->channel_scaling = kplane_st->channel_scaling;
 
+	komeda_complete_data_flow_cfg(pipe, dflow, fb);
+
+	/* debug flag, force en_split after comlete data flow cfg */
 	if (kplane->force_layer_split)
 		dflow->en_split = true;
-
-	komeda_complete_data_flow_cfg(pipe, dflow, fb);
 
 	return 0;
 }
@@ -155,6 +146,16 @@ komeda_plane_atomic_check(struct drm_plane *plane,
 
 	kcrtc = to_kcrtc(crtc_st->crtc);
 	kcrtc_st = to_kcrtc_st(crtc_st);
+
+	dflow->blending_zorder = state->normalized_zpos;
+	if (dflow->en_atu || layer->base.pipeline == kcrtc->master)
+		dflow->blending_zorder -= kcrtc_st->max_slave_zorder;
+	if (dflow->blending_zorder < 0) {
+		DRM_DEBUG_ATOMIC("%s zorder:%d < max_slave_zorder: %d.\n",
+				 state->plane->name, state->normalized_zpos,
+				 kcrtc_st->max_slave_zorder);
+		return -EINVAL;
+	}
 
 	if (kcrtc->side_by_side)
 		err = komeda_build_layer_sbs_data_flow(layer,
