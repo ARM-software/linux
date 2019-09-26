@@ -148,6 +148,12 @@ komeda_crtc_prepare(struct komeda_crtc *kcrtc)
 		DRM_ERROR("failed to enable pxl clk for pipe%d.\n", master->id);
 
 	if (kcrtc_st->en_coproc) {
+		err = komeda_coproc_enable(master, mode);
+		if (err) {
+			DRM_ERROR("failed to enable co-processor for pipe%d.\n", master->id);
+			kcrtc_st->en_coproc = false;
+		}
+
 		err = komeda_ad_enable(master, &kcrtc_st->base.adjusted_mode);
 		if (err) {
 			DRM_ERROR("failed to enable AD for pipe%d.\n", master->id);
@@ -186,7 +192,9 @@ komeda_crtc_unprepare(struct komeda_crtc *kcrtc)
 	}
 
 	mdev->dpmode = new_mode;
+
 	komeda_ad_disable(master);
+	komeda_coproc_disable(master);
 
 	clk_disable_unprepare(master->pxlclk);
 	if (new_mode == KOMEDA_MODE_INACTIVE)

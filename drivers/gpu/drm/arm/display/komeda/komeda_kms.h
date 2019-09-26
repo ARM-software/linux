@@ -219,6 +219,7 @@ struct komeda_crtc_state {
 
 	bool en_coproc;
 	bool en_protected_mode;
+	struct drm_property_blob *hdr_data_blob;
 	u32 assertiveness;
 	u32 strength_limit;
 	u16 drc;
@@ -226,7 +227,8 @@ struct komeda_crtc_state {
 		struct {
 			u32 assertive_changed : 1,
 			     strength_changed : 1,
-				  drc_changed : 1;
+				  drc_changed : 1,
+		        hdr_data_blob_changed : 1;
 		};
 		u32 cfg_changed;
 	};

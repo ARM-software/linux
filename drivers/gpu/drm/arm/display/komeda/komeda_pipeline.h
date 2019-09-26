@@ -11,9 +11,10 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include "komeda_color_mgmt.h"
-#include "malidp_utils.h"
-#include "malidp_math.h"
 #include "komeda_xr.h"
+#include "malidp_math.h"
+#include "malidp_utils.h"
+#include "coproc.h"
 
 #define KOMEDA_MAX_PIPELINES		2
 #define KOMEDA_PIPELINE_MAX_LAYERS	4
@@ -569,6 +570,8 @@ struct komeda_pipeline {
 	struct komeda_improc *improc;
 	/** @ctrlr: timing controller */
 	struct komeda_timing_ctrlr *ctrlr;
+	/** @co_client: co_client */
+	struct coproc_client *co_client;
 	/** @ad: assertive display */
 	struct ad_coprocessor *ad;
 	/** @funcs: chip private pipeline functions */
@@ -721,6 +724,11 @@ int komeda_pipeline_setup_atu(struct komeda_pipeline *pipe,
 int komeda_atu_set_vp(struct komeda_atu *atu,
 		      struct komeda_plane_state *kplane_st,
 		      struct komeda_data_flow_cfg *dflow);
+
+int komeda_coproc_enable(struct komeda_pipeline *pipe,
+			 struct drm_display_mode *mode);
+void komeda_coproc_disable(struct komeda_pipeline *pipe);
+void komeda_coproc_frame_data(struct komeda_pipeline *pipe);
 
 int komeda_ad_enable(struct komeda_pipeline *pipe,
 		     struct drm_display_mode *mode);
