@@ -8,6 +8,7 @@
 #include <drm/drm_print.h>
 #include <linux/clk.h>
 #include "komeda_dev.h"
+#include "komeda_drm.h"
 #include "komeda_kms.h"
 #include "komeda_pipeline.h"
 #include "komeda_framebuffer.h"
@@ -2112,6 +2113,8 @@ void komeda_pipeline_update(struct komeda_pipeline *pipe,
 	DRM_DEBUG_ATOMIC("PIPE%d: active_comps: 0x%x, changed: 0x%x.\n",
 			 pipe->id, new->active_comps, changed_comps);
 
+	komeda_coproc_frame_data(pipe);
+
 	if (has_bit(KOMEDA_COMPONENT_COPROC, changed_comps)) {
 		komeda_ad_update_state(ad, new);
 
@@ -2128,6 +2131,56 @@ void komeda_pipeline_update(struct komeda_pipeline *pipe,
 			c->funcs->update(c, priv_to_comp_st(c->obj.state));
 		else
 			c->funcs->disable(c);
+	}
+}
+
+int komeda_coproc_enable(struct komeda_pipeline *pipe,
+			 struct drm_display_mode *mode)
+{
+	struct drm_mode_modeinfo m;
+
+	if (!pipe->co_client)
+		return 0;
+
+	m.clock = mode->clock;
+	m.hdisplay = mode->hdisplay;
+	m.hsync_start = mode->hsync_start;
+	m.hsync_end = mode->hsync_end;
+	m.htotal = mode->htotal;
+	m.hskew = mode->hskew;
+	m.vdisplay = mode->vdisplay;
+	m.vsync_start = mode->vsync_start;
+	m.vsync_end = mode->vsync_end;
+	m.vtotal = mode->vtotal;
+	m.vscan = mode->vscan;
+	m.vrefresh = mode->vrefresh;
+	m.flags = mode->flags;
+	m.type = mode->type;
+	sprintf(m.name, "%s", mode->name);
+
+	coproc_modeset_notify(pipe->co_client, &m);
+	coproc_dpms_notify(pipe->co_client, DRM_MODE_DPMS_ON);
+
+	return 0;
+}
+
+void komeda_coproc_disable(struct komeda_pipeline *pipe)
+{
+	if (!pipe->co_client)
+		return;
+	coproc_dpms_notify(pipe->co_client, DRM_MODE_DPMS_OFF);
+}
+
+void komeda_coproc_frame_data(struct komeda_pipeline *pipe)
+{
+	struct komeda_pipeline_state *st = priv_to_pipe_st(pipe->obj.state);
+	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(st->crtc->state);
+
+	if (kcrtc_st->hdr_data_blob_changed) {
+		struct komeda_hdr_metadata *hdr_data = NULL;
+		if (kcrtc_st->hdr_data_blob)
+			hdr_data = kcrtc_st->hdr_data_blob->data;
+		coproc_frame_data(pipe->co_client, hdr_data, sizeof(*hdr_data));
 	}
 }
 
