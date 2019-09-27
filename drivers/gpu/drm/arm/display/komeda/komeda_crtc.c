@@ -67,6 +67,18 @@ komeda_crtc_atomic_check(struct drm_crtc *crtc,
 	int err;
 
 	if (state->active) {
+		/* Komeda doesn't update komeda state if crtc is inactive, but
+		 * if user updates crtc_state during this inactive period.
+		 * these states will be accumulated in crtc_state only, but have
+		 * not been passed to komeda.
+		 * So force dirty all the crtc changed flags for passing such
+		 * crtc_state to komeda when crtc switched to active.
+		 */
+		if (state->active_changed) {
+			state->color_mgmt_changed = true;
+			kcrtc_st->cfg_changed = U32_MAX;
+		}
+
 		err = komeda_build_display_data_flow(kcrtc, kcrtc_st);
 		if (err)
 			return err;
