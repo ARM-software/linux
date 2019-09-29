@@ -1127,6 +1127,7 @@ komeda_atu_validate(struct komeda_atu *atu,
 	if (err)
 		return err;
 
+	dflow->blending_zorder = to_kplane_st(plane_st)->dflow.blending_zorder;
 	/* adjust view for containing two viewports */
 	dflow->out_x = dflow->in_x = 0;
 	dflow->out_y = dflow->in_y = 0;
