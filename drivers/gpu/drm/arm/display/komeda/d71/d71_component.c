@@ -528,7 +528,8 @@ static int d71_layer_init(struct d71_dev *d71,
 
 	layer->supported_rots = DRM_MODE_ROTATE_MASK | DRM_MODE_REFLECT_MASK;
 
-	if (komeda_product_match(d71->mdev, MALIDP_D77_PRODUCT_ID))
+	if (komeda_product_match(d71->mdev, MALIDP_D77_PRODUCT_ID) ||
+	    komeda_product_match(d71->mdev, MALIDP_D52_PRODUCT_ID))
 		layer->supports_r8_upscaling = true;
 
 	return 0;
@@ -1100,7 +1101,8 @@ static int d71_compiz_init(struct d71_dev *d71,
 
 	compiz = to_compiz(c);
 
-	if (komeda_product_match(d71->mdev, MALIDP_D77_PRODUCT_ID))
+	if (komeda_product_match(d71->mdev, MALIDP_D77_PRODUCT_ID) ||
+	    komeda_product_match(d71->mdev, MALIDP_D52_PRODUCT_ID))
 		compiz->support_channel_scaling = true;
 
 	set_range(&compiz->hsize, 64, get_blk_line_size(d71, reg));
