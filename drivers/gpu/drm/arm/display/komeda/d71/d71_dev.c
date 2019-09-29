@@ -555,7 +555,8 @@ static int d71_enum_resources(struct komeda_dev *mdev)
 
 	coeffs_size = GLB_LT_COEFF_NUM * sizeof(u32);
 	d71->it_mgr = komeda_coeffs_create_manager(coeffs_size);
-	if (komeda_product_match(mdev, MALIDP_D77_PRODUCT_ID)) {
+	if (komeda_product_match(mdev, MALIDP_D77_PRODUCT_ID) ||
+	    komeda_product_match(mdev, MALIDP_D52_PRODUCT_ID)) {
 		d71->ft_mgr = komeda_coeffs_create_manager(coeffs_size);
 		d71->it_s_mgr = komeda_coeffs_create_manager(coeffs_size);
 	} else {
@@ -678,7 +679,8 @@ static void d71_init_fmt_tbl(struct komeda_dev *mdev)
 	table->format_caps = d71_format_caps_table;
 	table->format_mod_supported = d71_format_mod_supported;
 
-	if (komeda_product_match(mdev, MALIDP_D77_PRODUCT_ID))
+	if (komeda_product_match(mdev, MALIDP_D77_PRODUCT_ID) ||
+	    komeda_product_match(mdev, MALIDP_D52_PRODUCT_ID))
 		table->n_formats = ARRAY_SIZE(d71_format_caps_table);
 	else
 		/* only mira support last R8 format */
@@ -810,6 +812,7 @@ d71_identify(u32 __iomem *reg_base, struct komeda_chip_info *chip)
 		funcs = &d71_chip_funcs;
 		break;
 	case MALIDP_D77_PRODUCT_ID:
+	case MALIDP_D52_PRODUCT_ID:
 		funcs = &d77_chip_funcs;
 		break;
 	default:

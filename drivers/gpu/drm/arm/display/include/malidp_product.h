@@ -19,8 +19,9 @@
 
 /* Mali-display product IDs */
 #define MALIDP_D71_PRODUCT_ID	0x0071
-#define MALIDP_D77_PRODUCT_ID	0x0072
 #define MALIDP_D32_PRODUCT_ID	0x0032
+#define MALIDP_D77_PRODUCT_ID	0x0072
+#define MALIDP_D52_PRODUCT_ID	0x0052
 
 union komeda_config_id {
 	struct {
