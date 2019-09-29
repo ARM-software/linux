@@ -152,28 +152,29 @@ skip_trans_matrix:
 bool komeda_pipeline_prepare_atu_job(struct komeda_pipeline *pipe)
 {
 	struct komeda_pipeline_state *pipe_st = priv_to_pipe_st(pipe->obj.state);
-	u32 i, active_atu = 0;
+	u32 active_atus = pipe_st->active_comps & KOMEDA_PIPELINE_ATUS;
+	u32 i;
 
-	if (!pipe->n_atus)
-		return false;
+	for (i = KOMEDA_COMPONENT_ATU0; i <= KOMEDA_COMPONENT_ATU3; i++) {
+		struct komeda_atu *atu;
+		struct komeda_component *c;
 
-	for (i = 0; i < pipe->n_atus; i++) {
-		struct komeda_atu *atu = pipe->atu[i];
-
-		if (!atu)
+		c  = komeda_pipeline_get_component(pipe, i);
+		if (!c)
 			continue;
+		atu = to_atu(c);
+
 		/* only active ATU has job in queue */
-		if (has_bit(atu->base.id, pipe_st->active_comps)) {
+		if (has_bit(atu->base.id, active_atus)) {
 			if (komeda_atu_create_rp_job(atu)) {
 				DRM_DEBUG_ATOMIC("Create async reprojection job failed!\n");
 				return false;
 			}
-			active_atu++;
 		} else
 			komeda_atu_clean_job(atu);
 	}
 
-	return !!active_atu;
+	return !!active_atus;
 }
 
 bool komeda_pipeline_has_atu_enabled(struct komeda_pipeline *pipe)
