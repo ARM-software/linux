@@ -89,16 +89,21 @@ struct komeda_plane_state {
 
 	bool viewport_clamp;
 
-	/** @spline_coeff_r_changed: the value in "spline_coeff_r" changed or not */
-	u8 spline_coeff_r_changed : 1,
-	/** @spline_coeff_g_changed: the value in "spline_coeff_r" changed or not */
-	   spline_coeff_g_changed : 1,
-	/** @spline_coeff_b_changed: the value in "spline_coeff_r" changed or not */
-	   spline_coeff_b_changed : 1,
-	/** @mat_coeff_changed: any matrix props value changed or not */
-		mat_coeff_changed : 1,
-	/** @vp_rect_changed: the value in "vp_outrect" changed or not */
-		  vp_rect_changed : 1;
+	union {
+		struct {
+			/** @spline_coeff_r_changed: the value in "spline_coeff_r" changed or not */
+			u32 spline_coeff_r_changed : 1,
+			/** @spline_coeff_g_changed: the value in "spline_coeff_r" changed or not */
+			    spline_coeff_g_changed : 1,
+			/** @spline_coeff_b_changed: the value in "spline_coeff_r" changed or not */
+			    spline_coeff_b_changed : 1,
+			/** @mat_coeff_changed: any matrix props value changed or not */
+				 mat_coeff_changed : 1,
+			/** @vp_rect_changed: the value in "vp_outrect" changed or not */
+				   vp_rect_changed : 1;
+		};
+		u32 atu_cfg_changed;
+	};
 
 	u32 channel_scaling;
 
@@ -218,9 +223,11 @@ struct komeda_crtc_state {
 	u32 strength_limit;
 	u16 drc;
 	union {
-		u32 assertive_changed : 1,
-		     strength_changed : 1,
-			  drc_changed : 1;
+		struct {
+			u32 assertive_changed : 1,
+			     strength_changed : 1,
+				  drc_changed : 1;
+		};
 		u32 cfg_changed;
 	};
 

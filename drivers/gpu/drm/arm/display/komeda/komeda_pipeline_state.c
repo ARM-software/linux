@@ -382,10 +382,9 @@ komeda_atu_vp_validate(struct komeda_atu *atu,
 	    kplane_st->spline_coeff_b_changed) {
 		/* Enable LDC if we have a green channel*/
 		v_st->lc_enabled = v_st->g_sp_table != NULL;
-		if (v_st->lc_enabled)
-			/* CAC needs all r/g/b channels to have data. */
-			v_st->cac_enabled = v_st->r_sp_table != NULL
-				&& v_st->b_sp_table != NULL;
+		v_st->cac_enabled = v_st->lc_enabled &&
+				    v_st->r_sp_table != NULL &&
+				    v_st->b_sp_table != NULL;
 	}
 
 	if (v_st->vp_type != ATU_VP_TYPE_NONE || v_st->lc_enabled)
