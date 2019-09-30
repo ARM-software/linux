@@ -98,8 +98,10 @@ int komeda_plane_prepare(struct drm_plane *plane,
 	 * a plane from disable to enable.
 	 */
 	old = drm_atomic_get_old_plane_state(state->state, plane);
-	if (!old->crtc)
+	if (!old->crtc) {
 		state->color_mgmt_changed = true;
+		kplane_st->atu_cfg_changed = U32_MAX;
+	}
 
 	err = komeda_plane_init_data_flow(state, to_kcrtc_st(crtc_st), dflow);
 	if (err)
