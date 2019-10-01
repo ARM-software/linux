@@ -319,6 +319,7 @@ komeda_crtc_atomic_enable(struct drm_crtc *crtc,
 	pm_runtime_get_sync(crtc->dev->dev);
 	komeda_crtc_prepare(to_kcrtc(crtc));
 	drm_crtc_vblank_on(crtc);
+	WARN_ON(drm_crtc_vblank_get(crtc));
 	komeda_crtc_do_flush(crtc, old);
 }
 
@@ -411,6 +412,7 @@ komeda_crtc_atomic_disable(struct drm_crtc *crtc,
 		komeda_crtc_flush_and_wait_for_flip_done(kcrtc, disable_done);
 	}
 
+	drm_crtc_vblank_put(crtc);
 	drm_crtc_vblank_off(crtc);
 	komeda_crtc_unprepare(kcrtc);
 	pm_runtime_put(crtc->dev->dev);
