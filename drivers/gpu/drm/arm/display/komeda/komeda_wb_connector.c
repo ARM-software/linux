@@ -118,12 +118,6 @@ static const struct drm_connector_helper_funcs komeda_wb_conn_helper_funcs = {
 	.mode_valid	= komeda_wb_connector_mode_valid,
 };
 
-static enum drm_connector_status
-komeda_wb_connector_detect(struct drm_connector *connector, bool force)
-{
-	return connector_status_connected;
-}
-
 static int
 komeda_wb_connector_fill_modes(struct drm_connector *connector,
 			       uint32_t maxX, uint32_t maxY)
@@ -248,7 +242,6 @@ komeda_wb_connector_late_register(struct drm_connector *connector)
 
 static const struct drm_connector_funcs komeda_wb_connector_funcs = {
 	.reset			= komeda_wb_connector_reset,
-	.detect			= komeda_wb_connector_detect,
 	.fill_modes		= komeda_wb_connector_fill_modes,
 	.destroy		= komeda_wb_connector_destroy,
 	.atomic_duplicate_state	= komeda_wb_connector_duplicate_state,
