@@ -39,6 +39,7 @@ struct coproc_client_callbacks {
 };
 
 /* --Host API-- */
+#ifdef CONFIG_COPROC_SERVER
 /*
  * notify function when modeset is done
  * @co_client: a pointer to client.
@@ -109,6 +110,47 @@ int coproc_prepare(struct coproc_client *co_client,
  */
 int coproc_query(struct coproc_client *co_client,
                  void *data_info, const size_t size);
+#else
+static inline
+int coproc_modeset_notify(struct coproc_client *co_client,
+			  const struct drm_mode_modeinfo *drminfo)
+{
+	return 0;
+}
+
+static inline
+int coproc_dpms_notify(struct coproc_client *co_client, const u8 state)
+{
+	return 0;
+}
+
+static inline
+struct coproc_client *of_find_coproc_client_by_node(struct device_node *nd)
+{
+	return NULL;
+}
+
+static inline
+int coproc_frame_data(struct coproc_client *co_client,
+		      const void *data, size_t size)
+{
+	return 0;
+}
+
+static inline
+int coproc_prepare(struct coproc_client *co_client,
+                   const void *data_info, const size_t size)
+{
+	return 0;
+}
+
+static inline
+int coproc_query(struct coproc_client *co_client,
+                 void *data_info, const size_t size)
+{
+	return 0;
+}
+#endif
 
 /* --co-processor client API-- */
 /*

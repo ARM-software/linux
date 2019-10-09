@@ -168,10 +168,9 @@ static int komeda_parse_pipe_dt(struct komeda_pipeline *pipe)
 	pipe->of_output_port =
 		of_graph_get_port_by_id(np, KOMEDA_OF_PORT_OUTPUT);
 
-#ifdef CONFIG_COPROC_SERVER
-	if (ppl->of_coproc_dev)
-		ppl->co_client = of_find_coproc_client_by_node(ppl->of_coproc_dev);
-#endif
+	if (pipe->of_coproc_dev)
+		pipe->co_client = of_find_coproc_client_by_node(
+							pipe->of_coproc_dev);
 
 	pipe->dual_link = pipe->of_output_links[0] && pipe->of_output_links[1];
 
