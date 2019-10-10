@@ -7,9 +7,9 @@
 #ifndef _KOMEDA_PIPELINE_H_
 #define _KOMEDA_PIPELINE_H_
 
-#include <linux/types.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include "ad_coprocessor_defs.h"
 #include "komeda_color_mgmt.h"
 #include "komeda_xr.h"
 #include "malidp_math.h"
@@ -669,7 +669,7 @@ struct komeda_crtc;
 
 void pipeline_composition_size(struct komeda_crtc_state *kcrtc_st,
 			       bool side_by_side,
-			       u16 *hsize, u16 *vsize);
+			       u16 *hsize, u16 *vsize, bool is_overlap);
 
 int komeda_build_layer_data_flow(struct komeda_layer *layer,
 				 struct komeda_plane_state *kplane_st,
@@ -725,6 +725,11 @@ int komeda_atu_set_vp(struct komeda_atu *atu,
 
 int komeda_ad_enable(struct komeda_pipeline *pipe,
 		     struct drm_display_mode *mode);
-
 void komeda_ad_disable(struct komeda_pipeline *pipe);
+
+int komeda_ad_query(struct komeda_pipeline *pipe,
+		    struct ad_caps *adcaps);
+int komeda_ad_prepare(struct komeda_pipeline *pipe,
+		      bool en_merge_mode,
+		      bool is_master);
 #endif /* _KOMEDA_PIPELINE_H_*/

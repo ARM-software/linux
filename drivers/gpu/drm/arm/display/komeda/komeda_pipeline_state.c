@@ -878,12 +878,15 @@ static int komeda_coproc_validate(struct komeda_pipeline *pipe,
 
 void pipeline_composition_size(struct komeda_crtc_state *kcrtc_st,
 			       bool side_by_side,
-			       u16 *hsize, u16 *vsize)
+			       u16 *hsize, u16 *vsize, bool is_overlap)
 {
+	struct komeda_crtc *kcrtc = to_kcrtc(kcrtc_st->base.crtc);
 	struct drm_display_mode *m = &kcrtc_st->base.adjusted_mode;
+	u16 overlap = is_overlap ? kcrtc->sbs_overlap : 0;
 
 	if (hsize)
-		*hsize = side_by_side ? m->hdisplay / 2 : m->hdisplay;
+		*hsize = side_by_side ?
+			(overlap + (m->hdisplay / 2)) : m->hdisplay;
 	if (vsize)
 		*vsize = m->vdisplay;
 }
@@ -927,7 +930,7 @@ komeda_compiz_set_input(struct komeda_compiz *compiz,
 	int idx = dflow->blending_zorder;
 
 	pipeline_composition_size(kcrtc_st, to_kcrtc(crtc)->side_by_side,
-				  &compiz_w, &compiz_h);
+				  &compiz_w, &compiz_h, true);
 	/* check display rect */
 	if ((dflow->out_x + dflow->out_w > compiz_w) ||
 	    (dflow->out_y + dflow->out_h > compiz_h) ||
@@ -987,7 +990,7 @@ komeda_compiz_validate(struct komeda_compiz *compiz,
 	st = to_compiz_st(c_st);
 
 	pipeline_composition_size(state, to_kcrtc(crtc)->side_by_side,
-				  &st->hsize, &st->vsize);
+				  &st->hsize, &st->vsize, true);
 
 	komeda_component_set_output(&dflow->input, &compiz->base, 0);
 
@@ -1635,12 +1638,13 @@ komeda_split_sbs_master_data_flow(struct komeda_crtc_state *kcrtc_st,
 				  struct komeda_data_flow_cfg **m_dflow,
 				  struct komeda_data_flow_cfg **s_dflow)
 {
+	struct komeda_crtc *kcrtc = to_kcrtc(kcrtc_st->base.crtc);
 	struct komeda_data_flow_cfg *master = *m_dflow;
 	struct komeda_data_flow_cfg *slave = *s_dflow;
 	u32 disp_end = master->out_x + master->out_w;
 	u16 boundary;
 
-	pipeline_composition_size(kcrtc_st, true, &boundary, NULL);
+	pipeline_composition_size(kcrtc_st, true, &boundary, NULL, false);
 
 	if (disp_end <= boundary) {
 		/* the master viewport only located in master side, no need
@@ -1651,10 +1655,12 @@ komeda_split_sbs_master_data_flow(struct komeda_crtc_state *kcrtc_st,
 		/* the master viewport across two pipelines, split it */
 		bool flip_h = has_flip_h(master->rot);
 		bool r90  = drm_rotation_90_or_270(master->rot);
+
 		u32 src_x = master->in_x;
 		u32 src_y = master->in_y;
 		u32 src_w = master->in_w;
 		u32 src_h = master->in_h;
+		u32 master_valid_w, slave_valid_w;
 
 		if (master->en_scaling || master->en_img_enhancement) {
 			DRM_DEBUG_ATOMIC("sbs doesn't support to split a scaling image.\n");
@@ -1668,6 +1674,13 @@ komeda_split_sbs_master_data_flow(struct komeda_crtc_state *kcrtc_st,
 		master->out_w = boundary - master->out_x;
 		slave->out_w  = disp_end - boundary;
 		slave->out_x  = 0;
+
+		/* When overlap is needed, ensure we don't fetch outside of the
+		 * layer when adding the overlap */
+		master_valid_w = master->out_w;
+		slave_valid_w  = slave->out_w;
+		master->out_w += min(kcrtc->sbs_overlap, slave_valid_w);
+		slave->out_w += min(kcrtc->sbs_overlap, master_valid_w);
 
 		if (r90) {
 			master->in_h = master->out_w;
@@ -1703,7 +1716,7 @@ komeda_split_sbs_slave_data_flow(struct komeda_crtc_state *kcrtc_st,
 {
 	u16 boundary;
 
-	pipeline_composition_size(kcrtc_st, true, &boundary, NULL);
+	pipeline_composition_size(kcrtc_st, true, &boundary, NULL, false);
 
 	if (slave->out_x < boundary) {
 		DRM_DEBUG_ATOMIC("SBS Slave plane is only allowed to configure the right part frame.\n");
@@ -2113,7 +2126,7 @@ komeda_ad_update_state(struct ad_coprocessor *ad,
 		if (kcrtc_st->hdr_data_blob) {
 			u16 width, height;
 
-			pipeline_composition_size(kcrtc_st, false, &width, &height);
+			pipeline_composition_size(kcrtc_st, false, &width, &height, false);
 
 			drm_hdr_metadata_to_coproc(kcrtc_st->hdr_data_blob, &framedata);
 
@@ -2183,4 +2196,29 @@ void komeda_ad_disable(struct komeda_pipeline *pipe)
 {
 	if (pipe->ad)
 		pipe->ad->funcs->disable(pipe->ad);
+}
+
+int komeda_ad_query(struct komeda_pipeline *pipe, struct ad_caps *ad_caps)
+{
+	struct ad_coprocessor *ad = pipe->ad;
+
+	if (!ad || !ad->funcs->coproc_query)
+		return 0;
+
+	return ad->funcs->coproc_query(ad, ad_caps, sizeof(*ad_caps));
+}
+
+int komeda_ad_prepare(struct komeda_pipeline *pipe,
+		      bool en_merge_mode, bool is_master)
+{
+	struct ad_control ad_control;
+	struct ad_coprocessor *ad = pipe->ad;
+
+	if (!ad || !ad->funcs->coproc_prepare)
+		return 0;
+
+	ad_control.enable_merge_mode = en_merge_mode;
+	ad_control.set_master = is_master;
+
+	return ad->funcs->coproc_prepare(ad, &ad_control, sizeof(ad_control));
 }
