@@ -996,6 +996,7 @@ int mali_aeu_device_init(struct mali_aeu_device *adev,
 	adev->vdev.v4l2_dev	= &adev->v4l2_dev;
 	adev->vdev.fops		= &mali_aeu_fops;
 	adev->vdev.ioctl_ops	= &mali_aeu_ioctl_ops;
+	adev->vdev.device_caps	= V4L2_CAP_VIDEO_M2M | V4L2_CAP_STREAMING;
 	adev->vdev.minor	= -1;
 
 	adev->dev = &pdev->dev;
