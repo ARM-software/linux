@@ -148,11 +148,45 @@ komeda_crtc_prepare(struct komeda_crtc *kcrtc)
 		DRM_ERROR("failed to enable pxl clk for pipe%d.\n", master->id);
 
 	if (kcrtc_st->en_coproc) {
-		err = komeda_ad_enable(master, &kcrtc_st->base.adjusted_mode);
+		err = komeda_ad_enable(master, mode);
 		if (err) {
-			DRM_ERROR("failed to enable AD for pipe%d.\n", master->id);
+			DRM_ERROR("failed to enable AD for pipe%d.\n",
+				  master->id);
 			kcrtc_st->en_coproc = false;
+			goto unlock;
 		}
+	}
+
+	if (kcrtc_st->en_coproc && kcrtc->side_by_side) {
+		struct ad_caps ad_caps;
+		int master_sbs_overlap;
+
+		err = komeda_ad_enable(kcrtc->slave, mode);
+		if (err) {
+			DRM_ERROR("failed to enable AD for pipe%d.\n",
+				  kcrtc->slave->id);
+			kcrtc_st->en_coproc = false;
+			goto unlock;
+		}
+
+		err = komeda_ad_query(master, &ad_caps);
+		if (err) {
+			DRM_ERROR("failed to query AD for pipe%d.\n",
+				  master->id);
+			goto unlock;
+		}
+
+		master_sbs_overlap = ad_caps.n_overlap;
+
+		err = komeda_ad_query(kcrtc->slave, &ad_caps);
+		if (err) {
+			DRM_ERROR("failed to query AD for pipe%d.\n",
+				  kcrtc->slave->id);
+			goto unlock;
+		}
+
+		WARN_ON(master_sbs_overlap != ad_caps.n_overlap);
+		kcrtc->sbs_overlap = master_sbs_overlap;
 	}
 
 unlock:
@@ -188,6 +222,8 @@ komeda_crtc_unprepare(struct komeda_crtc *kcrtc)
 	mdev->dpmode = new_mode;
 
 	komeda_ad_disable(master);
+	if (kcrtc->side_by_side)
+		komeda_ad_disable(kcrtc->slave);
 
 	clk_disable_unprepare(master->pxlclk);
 	if (new_mode == KOMEDA_MODE_INACTIVE)
@@ -857,8 +893,10 @@ int komeda_kms_setup_crtcs(struct komeda_kms_dev *kms,
 
 		kms->n_crtcs++;
 
-		if (mdev->side_by_side)
-			break;
+		if (mdev->side_by_side) {
+			komeda_ad_prepare(crtc->master, true, true);
+			komeda_ad_prepare(crtc->slave, true, false);
+		}
 	}
 
 	return 0;

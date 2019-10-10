@@ -48,6 +48,18 @@ struct ad_list {
 	struct list_head head;
 };
 
+struct ad_caps {
+	/* the overlap pixel number for ad merge mode. */
+	int n_overlap;
+};
+
+struct ad_control {
+	/* the flag to enable ad merge mode. */
+	bool enable_merge_mode;
+	/* the flag to check if the ad client is the master.*/
+	bool set_master;
+};
+
 static inline void init_ad_list(struct ad_list *list)
 {
 	INIT_LIST_HEAD(&list->head);

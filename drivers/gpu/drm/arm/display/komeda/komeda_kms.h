@@ -179,6 +179,9 @@ struct komeda_crtc {
 	/** @side_by_side: if the master and slave works on side by side mode */
 	bool side_by_side;
 
+	/** @sbs_overlap: amount of overlap in side by side mode */
+	u32 sbs_overlap;
+
 	/** @slave_planes: komeda slave planes mask */
 	u32 slave_planes;
 
