@@ -304,16 +304,17 @@ static void komeda_kms_mode_config_init(struct komeda_kms_dev *kms,
 					struct komeda_dev *mdev)
 {
 	struct drm_mode_config *config = &kms->base.mode_config;
+	struct komeda_layer *layer = mdev->pipelines[0]->layers[0];
 
 	drm_mode_config_init(&kms->base);
 
 	komeda_kms_setup_crtcs(kms, mdev);
 
 	/* Get value from dev */
-	config->min_width	= 0;
-	config->min_height	= 0;
-	config->max_width	= 4096;
-	config->max_height	= 4096;
+	config->min_width	= layer->hsize_in.start;
+	config->min_height	= layer->vsize_in.start;
+	config->max_width	= 8192;
+	config->max_height	= 8192;
 	config->allow_fb_modifiers = true;
 
 	config->funcs = &komeda_mode_config_funcs;
