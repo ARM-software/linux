@@ -123,6 +123,14 @@ struct komeda_wb_connector {
 	/** @base: &drm_writeback_connector */
 	struct drm_writeback_connector base;
 
+	/**
+	 * @force_scaling_split:
+	 *
+	 * Debug flag, if true, force enable split for the scaling enabled
+	 * writeback job.
+	 */
+	bool force_scaling_split;
+
 	/** @wb_layer: represents associated writeback pipeline of komeda */
 	struct komeda_layer *wb_layer;
 

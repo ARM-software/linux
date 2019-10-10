@@ -14,6 +14,7 @@ komeda_wb_init_data_flow(struct komeda_layer *wb_layer,
 			 struct komeda_data_flow_cfg *dflow)
 {
 	struct drm_framebuffer *fb = conn_st->writeback_job->fb;
+	struct komeda_wb_connector *wb_conn;
 
 	memset(dflow, 0, sizeof(*dflow));
 
@@ -28,6 +29,10 @@ komeda_wb_init_data_flow(struct komeda_layer *wb_layer,
 	dflow->rot = DRM_MODE_ROTATE_0;
 
 	komeda_complete_data_flow_cfg(wb_layer->base.pipeline, dflow, fb);
+
+	wb_conn = _drm_conn_to_kconn(conn_st->connector);
+	if (wb_conn->force_scaling_split && dflow->en_scaling)
+		dflow->en_split = true;
 
 	return 0;
 }
@@ -215,6 +220,30 @@ komeda_wb_connector_destroy_state(struct drm_connector *connector,
 	kfree(to_kconn_st(state));
 }
 
+#ifdef CONFIG_DEBUG_FS
+static int
+komeda_wb_connector_debugfs_init(struct drm_connector *connector)
+{
+	struct komeda_wb_connector *wb_conn = _drm_conn_to_kconn(connector);
+
+	debugfs_create_bool("force_scaling_split", 0644,
+			    connector->debugfs_entry,
+			    &wb_conn->force_scaling_split);
+
+	return 0;
+}
+#endif /*CONFIG_DEBUG_FS*/
+
+static int
+komeda_wb_connector_late_register(struct drm_connector *connector)
+{
+#ifdef CONFIG_DEBUG_FS
+	komeda_wb_connector_debugfs_init(connector);
+#endif /*CONFIG_DEBUG_FS*/
+
+	return 0;
+}
+
 static const struct drm_connector_funcs komeda_wb_connector_funcs = {
 	.reset			= komeda_wb_connector_reset,
 	.detect			= komeda_wb_connector_detect,
@@ -224,6 +253,7 @@ static const struct drm_connector_funcs komeda_wb_connector_funcs = {
 	.atomic_destroy_state	= komeda_wb_connector_destroy_state,
 	.atomic_set_property	= komeda_wb_connector_set_property,
 	.atomic_get_property	= komeda_wb_connector_get_property,
+	.late_register		= komeda_wb_connector_late_register,
 };
 
 static const char * const color_encoding_name[] = {
@@ -313,6 +343,7 @@ static int komeda_wb_connector_add(struct komeda_kms_dev *kms,
 		return -ENOMEM;
 
 	kwb_conn->wb_layer = kcrtc->master->wb_layer;
+	kwb_conn->force_scaling_split = false;
 	kwb_conn->expected_pipes = BIT(kcrtc->master->id);
 	if (kcrtc->side_by_side)
 		kwb_conn->expected_pipes |= BIT(kcrtc->slave->id);
