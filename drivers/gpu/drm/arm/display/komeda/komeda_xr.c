@@ -155,6 +155,9 @@ bool komeda_pipeline_prepare_atu_job(struct komeda_pipeline *pipe)
 	u32 active_atus = pipe_st->active_comps & KOMEDA_PIPELINE_ATUS;
 	u32 i;
 
+	if (pipe->n_atus == 0)
+		return false;
+
 	for (i = KOMEDA_COMPONENT_ATU0; i <= KOMEDA_COMPONENT_ATU3; i++) {
 		struct komeda_atu *atu;
 		struct komeda_component *c;
