@@ -14,6 +14,8 @@
 #define LOW_16		1
 #define HIGH_AND_LOW	2
 
+#if defined(CONFIG_DEBUG_FS)
+
 struct perf_desc {
 	char *name;
 	u32 flag;
@@ -85,6 +87,12 @@ static int d77_perf_counters_show(struct seq_file *sf, void *x)
 	u32 v;
 	int i;
 
+	if (!perf->perf_mask)
+		return 0;
+
+	seq_printf(sf, "active_count: %llu\n", perf->active_count);
+	seq_printf(sf, "timestamp: %lld\n", perf->timestamp);
+
 	for (i = 0; i < ARRAY_SIZE(pf_desc); i++) {
 		if (!has_bit(i, perf->perf_mask))
 			continue;
@@ -122,7 +130,6 @@ static const struct file_operations perf_counters_fops = {
 	.release = single_release,
 };
 
-#if defined(CONFIG_DEBUG_FS)
 int d77_setup_perf_counters(struct d71_pipeline *pipe)
 {
 	struct dentry *d, *root;
@@ -149,7 +156,7 @@ int d77_setup_perf_counters(struct d71_pipeline *pipe)
 		return -ENOMEM;
 
 	perf_num = malidp_read32(pipe->lpu_perf, PERF_INFO);
-	pipe->perf->perf_valid_mask = (1 << perf_num) - 1;
+	pipe->perf->perf_valid_mask = GENMASK_ULL(perf_num, 0);
 
 	return 0;
 }
