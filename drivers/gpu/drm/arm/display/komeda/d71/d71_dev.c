@@ -72,6 +72,7 @@ static u64 get_lpu_event(struct d71_pipeline *d71_pipeline)
 		u32 __iomem *reg = d71_pipeline->lpu_perf;
 		int i;
 
+		pf->timestamp = ktime_get();
 		for (i = 0; i < MAX_PERF_COUNTERS; i++) {
 			if (!has_bit(i, pf->perf_mask))
 				continue;

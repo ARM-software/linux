@@ -1963,7 +1963,12 @@ static void d71_gcu_dump(struct d71_dev *d71, struct seq_file *sf)
 
 static void d77_pipeline_enable_perf(struct d71_pipeline *pipe)
 {
-	if (!pipe->perf || !pipe->perf->perf_mask)
+	if (!pipe->perf)
+		return;
+
+	pipe->perf->active_count++;
+
+	if (!pipe->perf->perf_mask)
 		return;
 
 	pipe->perf->perf_mask &= pipe->perf->perf_valid_mask;
