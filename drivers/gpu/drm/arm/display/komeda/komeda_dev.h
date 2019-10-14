@@ -69,6 +69,16 @@
 #define KOMEDA_WARN_EVENTS	\
 	(KOMEDA_ERR_CSCE | KOMEDA_EVENT_FULL | KOMEDA_EVENT_EMPTY)
 
+#define KOMEDA_INFO_EVENTS ( 0 \
+			    | KOMEDA_EVENT_VSYNC \
+			    | KOMEDA_EVENT_FLIP \
+			    | KOMEDA_EVENT_EOW \
+			    | KOMEDA_EVENT_MODE \
+			    | KOMEDA_EVENT_PL3 \
+			    | KOMEDA_EVENT_FRAME_END \
+			    | KOMEDA_EVENT_ASYNC_RP \
+			   )
+
 /* pipeline DT ports */
 enum {
 	KOMEDA_OF_PORT_OUTPUT		= 0,
@@ -232,6 +242,10 @@ struct komeda_dev {
 	u16 err_verbosity;
 	/* Print a single line per error per frame with error events. */
 #define KOMEDA_DEV_PRINT_ERR_EVENTS BIT(0)
+	/* Print a single line per warning per frame with error events. */
+#define KOMEDA_DEV_PRINT_WARN_EVENTS BIT(1)
+	/* Print a single line per info event per frame with error events. */
+#define KOMEDA_DEV_PRINT_INFO_EVENTS BIT(2)
 	/* Dump DRM state on an error or warning event. */
 #define KOMEDA_DEV_PRINT_DUMP_STATE_ON_EVENT BIT(8)
 };
