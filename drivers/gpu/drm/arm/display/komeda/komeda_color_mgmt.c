@@ -8,6 +8,7 @@
 
 #include "malidp_utils.h"
 #include "komeda_color_mgmt.h"
+#include "komeda_drm.h"
 
 /* 10bit precision YUV2RGB matrix */
 static const s32 yuv2rgb_bt601_narrow[KOMEDA_N_YUV2RGB_COEFFS] = {
@@ -195,6 +196,33 @@ void drm_ctm_to_coeffs(struct drm_property_blob *ctm_blob, u32 *coeffs)
 
 		coeffs[i] = clamp_val(v, 1 - (1LL << 34), (1LL << 34) - 1) >> 20;
 	}
+}
+
+void drm_hdr_metadata_to_coproc(struct drm_property_blob *metadata_blob,
+			        struct komeda_hdr_metadata *hdr_framedata)
+{
+	struct hdr_metadata_infoframe *metadata;
+
+	if (!metadata_blob || !metadata_blob->data || !hdr_framedata)
+		return;
+
+	metadata = metadata_blob->data;
+
+	hdr_framedata->eotf = metadata->eotf;
+
+	hdr_framedata->display_primaries_red.x   = metadata->display_primaries[0].x;
+	hdr_framedata->display_primaries_red.y   = metadata->display_primaries[0].y;
+	hdr_framedata->display_primaries_green.x = metadata->display_primaries[1].x;
+	hdr_framedata->display_primaries_green.y = metadata->display_primaries[1].y;
+	hdr_framedata->display_primaries_blue.x  = metadata->display_primaries[2].x;
+	hdr_framedata->display_primaries_blue.y  = metadata->display_primaries[2].y;
+	hdr_framedata->white_point.x = metadata->white_point.x;
+	hdr_framedata->white_point.y = metadata->white_point.y;
+
+	hdr_framedata->max_content_light_level = metadata->max_cll;
+	hdr_framedata->max_display_mastering_lum = metadata->max_display_mastering_luminance;
+	hdr_framedata->min_display_mastering_lum = metadata->min_display_mastering_luminance;
+	hdr_framedata->max_frame_average_light_level = metadata->max_fall;
 }
 
 void komeda_color_duplicate_state(struct komeda_color_state *new,

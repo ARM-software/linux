@@ -196,6 +196,7 @@ struct komeda_crtc {
 	struct drm_property *assertiveness_property;
 	struct drm_property *strength_limit_property;
 	struct drm_property *drc_property;
+	struct drm_property *hdr_data_property;
 	/* ATU sensor buffer properties */
 	struct drm_property *sensor_buf_property;
 	struct komeda_sensor_buff s_buff;
