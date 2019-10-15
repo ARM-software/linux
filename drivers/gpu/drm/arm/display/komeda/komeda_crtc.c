@@ -606,7 +606,10 @@ static int komeda_crtc_atomic_get_property(struct drm_crtc *crtc,
 		*val = kcrtc_st->strength_limit;
 	else if (property == kcrtc->drc_property)
 		*val = kcrtc_st->drc;
-	else if (property == kcrtc->sensor_buf_property) {
+	else if (property == kcrtc->hdr_data_property) {
+		b = kcrtc_st->hdr_data_blob;
+		*val = (b) ? b->base.id : 0;
+	} else if (property == kcrtc->sensor_buf_property) {
 		b = kcrtc->s_buff.sensor_buf_info_blob;
 		*val = (b) ? b->base.id : 0;
 	} else {
@@ -645,6 +648,13 @@ static int komeda_crtc_atomic_set_property(struct drm_crtc *crtc,
 			kcrtc_st->drc = val;
 			kcrtc_st->drc_changed = true;
 		}
+	} else if (property == kcrtc->hdr_data_property) {
+		ret = drm_property_replace_blob_from_id(crtc->dev,
+					&kcrtc_st->hdr_data_blob,
+					val,
+					sizeof(struct hdr_metadata_infoframe),
+					sizeof(struct hdr_metadata_infoframe), &replaced);
+		kcrtc_st->hdr_data_blob_changed = replaced;
 	} else if (property == kcrtc->sensor_buf_property) {
 		komeda_sensor_buff_put(&kcrtc->s_buff);
 		ret = drm_property_replace_blob_from_id(crtc->dev,
@@ -768,6 +778,26 @@ static int create_ad_drc_property(struct komeda_crtc *kcrtc)
 	return 0;
 }
 
+static int create_ad_hdr_property(struct komeda_crtc *kcrtc)
+{
+	struct drm_crtc *crtc = &kcrtc->base;
+	struct drm_property *prop;
+
+	if (!kcrtc->master->ad->funcs->frame_data)
+		return 0;
+
+	prop = drm_property_create(crtc->dev,
+			DRM_MODE_PROP_ATOMIC | DRM_MODE_PROP_BLOB,
+			"hdr_framedata", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	kcrtc->hdr_data_property = prop;
+	drm_object_attach_property(&crtc->base, prop, 0);
+
+	return 0;
+}
+
 static int
 komeda_crtc_create_ad_properties(struct komeda_crtc *kcrtc)
 {
@@ -785,6 +815,10 @@ komeda_crtc_create_ad_properties(struct komeda_crtc *kcrtc)
 		return ret;
 
 	ret = create_ad_drc_property(kcrtc);
+	if (ret)
+		return ret;
+
+	ret = create_ad_hdr_property(kcrtc);
 	if (ret)
 		return ret;
 

@@ -2088,16 +2088,37 @@ komeda_ad_update_state(struct ad_coprocessor *ad,
 		       struct komeda_pipeline_state *st)
 {
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(st->crtc->state);
+	const struct ad_coprocessor_funcs *funcs = ad->funcs;
 
-	if (kcrtc_st->assertive_changed)
-		ad->funcs->assertiveness_set(ad, kcrtc_st->assertiveness);
+	if (funcs->assertiveness_set && kcrtc_st->assertive_changed)
+		funcs->assertiveness_set(ad, kcrtc_st->assertiveness);
 
-	if (kcrtc_st->strength_changed)
-		ad->funcs->strength_set(ad, kcrtc_st->strength_limit);
+	if (funcs->strength_set && kcrtc_st->strength_changed)
+		funcs->strength_set(ad, kcrtc_st->strength_limit);
 
-	if (kcrtc_st->drc_changed)
-		ad->funcs->drc_set(ad, kcrtc_st->drc);
+	if (funcs->drc_set && kcrtc_st->drc_changed)
+		funcs->drc_set(ad, kcrtc_st->drc);
 
+	if (funcs->frame_data && kcrtc_st->hdr_data_blob_changed) {
+		struct komeda_hdr_metadata framedata, *hdr_data = NULL;
+
+		if (kcrtc_st->hdr_data_blob) {
+			u16 width, height;
+
+			pipeline_composition_size(kcrtc_st, false, &width, &height);
+
+			drm_hdr_metadata_to_coproc(kcrtc_st->hdr_data_blob, &framedata);
+
+			framedata.roi.left = 0;
+			framedata.roi.top  = 0;
+			framedata.roi.width = width;
+			framedata.roi.height = height;
+
+			hdr_data = &framedata;
+		}
+
+		funcs->frame_data(ad, hdr_data, sizeof(*hdr_data));
+	}
 }
 
 void komeda_pipeline_update(struct komeda_pipeline *pipe,
@@ -2106,7 +2127,6 @@ void komeda_pipeline_update(struct komeda_pipeline *pipe,
 	struct komeda_pipeline_state *new = priv_to_pipe_st(pipe->obj.state);
 	struct komeda_pipeline_state *old;
 	struct komeda_component *c;
-	struct ad_coprocessor *ad = pipe->ad;
 	u32 id, changed_comps = 0;
 
 	old = komeda_pipeline_get_old_state(pipe, old_state);
@@ -2117,7 +2137,7 @@ void komeda_pipeline_update(struct komeda_pipeline *pipe,
 			 pipe->id, new->active_comps, changed_comps);
 
 	if (has_bit(KOMEDA_COMPONENT_COPROC, changed_comps)) {
-		komeda_ad_update_state(ad, new);
+		komeda_ad_update_state(pipe->ad, new);
 
 		/* coproc is an external device but not a komeda component,
 		 * remove it before komeda component update.
