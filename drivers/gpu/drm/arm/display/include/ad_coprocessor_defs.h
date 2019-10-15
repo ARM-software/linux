@@ -27,6 +27,15 @@ struct ad_coprocessor_funcs {
 	int (*strength_set)(struct ad_coprocessor *ad, u32 strength_limit);
 	/* set dynamic-range compression to AD. (optional) */
 	int (*drc_set)(struct ad_coprocessor *ad, u16 drc);
+	/* set frame_data. (optional) */
+	int (*frame_data)(struct ad_coprocessor *ad,
+			  const void *data, size_t size);
+	/* query the coproc data info. (optional) */
+	int (*coproc_query)(struct ad_coprocessor *ad,
+			    void *data, const size_t size);
+	/* set the coproc data info. (optional) */
+	int (*coproc_prepare)(struct ad_coprocessor *ad,
+			      const void *data, const size_t size);
 };
 
 struct ad_coprocessor {
