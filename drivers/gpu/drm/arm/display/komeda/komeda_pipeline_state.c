@@ -635,15 +635,27 @@ static bool scaling_ratio_valid(u32 size_in, u32 size_out,
 static int
 komeda_scaler_check_cfg(struct komeda_scaler *scaler,
 			struct komeda_crtc_state *kcrtc_st,
-			struct komeda_data_flow_cfg *dflow)
+			struct komeda_data_flow_cfg *dflow,
+			u32 rot)
 {
+	struct komeda_pipeline *pipe;
 	u32 hsize_in, vsize_in, hsize_out, vsize_out;
 	u32 max_upscaling;
+
+	if (!scaler) {
+		DRM_DEBUG_ATOMIC("No scaler available");
+		return -ENODEV;
+	}
+
+	pipe = scaler->base.pipeline;
 
 	hsize_in = dflow->in_w;
 	vsize_in = dflow->in_h;
 	hsize_out = dflow->out_w;
 	vsize_out = dflow->out_h;
+
+	if (drm_rotation_90_or_270(rot))
+		swap(hsize_in, vsize_in);
 
 	if (!in_range(&scaler->hsize, hsize_in) ||
 	    !in_range(&scaler->hsize, hsize_out)) {
@@ -660,7 +672,7 @@ komeda_scaler_check_cfg(struct komeda_scaler *scaler,
 	/* If input comes from compiz that means the scaling is for writeback
 	 * and scaler can not do upscaling for writeback
 	 */
-	if (has_bit(dflow->input.component->id, KOMEDA_PIPELINE_COMPIZS))
+	if (dflow->input.component == &pipe->compiz->base)
 		max_upscaling = 1;
 	else
 		max_upscaling = scaler->max_upscaling;
@@ -678,7 +690,6 @@ komeda_scaler_check_cfg(struct komeda_scaler *scaler,
 	}
 
 	if (hsize_in > hsize_out || vsize_in > vsize_out) {
-		struct komeda_pipeline *pipe = scaler->base.pipeline;
 		int err;
 
 		err = pipe->funcs->downscaling_clk_check(pipe,
@@ -709,12 +720,8 @@ komeda_scaler_validate(void *user,
 
 	scaler = komeda_component_get_avail_scaler(dflow->input.component,
 						   drm_st);
-	if (!scaler) {
-		DRM_DEBUG_ATOMIC("No scaler available");
-		return -EINVAL;
-	}
 
-	err = komeda_scaler_check_cfg(scaler, kcrtc_st, dflow);
+	err = komeda_scaler_check_cfg(scaler, kcrtc_st, dflow, DRM_MODE_ROTATE_0);
 	if (err)
 		return err;
 
@@ -1310,6 +1317,7 @@ komeda_timing_ctrlr_validate(struct komeda_timing_ctrlr *ctrlr,
 }
 
 void komeda_complete_data_flow_cfg(struct komeda_pipeline *pipe,
+				   struct komeda_crtc_state *kcrtc_st,
 				   struct komeda_data_flow_cfg *dflow,
 				   struct drm_framebuffer *fb)
 {
@@ -1344,12 +1352,12 @@ void komeda_complete_data_flow_cfg(struct komeda_pipeline *pipe,
 	dflow->en_img_enhancement = dflow->out_w > 2 * w ||
 				    dflow->out_h > 2 * h;
 
-	/* try to enable split if scaling exceed the scaler's acceptable
-	 * input/output range.
+	/* try to enable split (enable two scalers) if one scaler can not fit
+	 * the data flow requirement
 	 */
-	if (dflow->en_scaling && scaler)
-		dflow->en_split = !in_range(&scaler->hsize, dflow->in_w) ||
-				  !in_range(&scaler->hsize, dflow->out_w);
+	if ((dflow->en_scaling || dflow->en_img_enhancement) &&
+	    komeda_scaler_check_cfg(scaler, kcrtc_st, dflow, dflow->rot))
+		dflow->en_split = true;
 }
 
 static bool merger_is_available(struct komeda_pipeline *pipe,

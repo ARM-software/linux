@@ -13,6 +13,7 @@ komeda_wb_init_data_flow(struct komeda_layer *wb_layer,
 			 struct komeda_crtc_state *kcrtc_st,
 			 struct komeda_data_flow_cfg *dflow)
 {
+	struct komeda_pipeline *pipe = wb_layer->base.pipeline;
 	struct drm_framebuffer *fb = conn_st->writeback_job->fb;
 	struct komeda_wb_connector *wb_conn;
 
@@ -23,12 +24,12 @@ komeda_wb_init_data_flow(struct komeda_layer *wb_layer,
 
 	/* the write back data comes from the compiz */
 	pipeline_composition_size(kcrtc_st, false, &dflow->in_w, &dflow->in_h);
-	dflow->input.component = &wb_layer->base.pipeline->compiz->base;
+	dflow->input.component = &pipe->compiz->base;
 	/* compiz doesn't output alpha */
 	dflow->pixel_blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 	dflow->rot = DRM_MODE_ROTATE_0;
 
-	komeda_complete_data_flow_cfg(wb_layer->base.pipeline, dflow, fb);
+	komeda_complete_data_flow_cfg(pipe, kcrtc_st, dflow, fb);
 
 	wb_conn = _drm_conn_to_kconn(conn_st->connector);
 	if (wb_conn->force_scaling_split && dflow->en_scaling)

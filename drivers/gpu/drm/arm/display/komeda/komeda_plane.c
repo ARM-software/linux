@@ -54,7 +54,7 @@ int komeda_plane_init_data_flow(struct drm_plane_state *st,
 	dflow->pixel_blend_mode = st->pixel_blend_mode;
 	dflow->channel_scaling = kplane_st->channel_scaling;
 
-	komeda_complete_data_flow_cfg(pipe, dflow, fb);
+	komeda_complete_data_flow_cfg(pipe, kcrtc_st, dflow, fb);
 
 	/* debug flag, force en_split after comlete data flow cfg */
 	if (kplane->force_layer_split)
