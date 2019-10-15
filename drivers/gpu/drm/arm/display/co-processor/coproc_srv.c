@@ -1,25 +1,14 @@
-/*
- *
- * (C) COPYRIGHT 2019 ARM Limited. All rights reserved.
- *
- * This program is free software and is provided to you under the terms of the
- * GNU General Public License version 2 as published by the Free Software
- * Foundation, and any use by you of this program is subject to the terms
- * of such GNU licence.
- *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
- *
- */
-#include <linux/i2c.h>
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/version.h>
+#include <linux/component.h>
+#include <drm/drm_device.h>
 #include <uapi/drm/drm_mode.h>
 
+#include "ad_coprocessor_defs.h"
 #include "coproc.h"
 
 static struct {
@@ -29,8 +18,9 @@ static struct {
 } coproc_srv;
 
 struct coproc_client {
+	struct ad_coprocessor base;
+	struct ad_coprocessor_funcs funcs;
 	struct list_head list;
-	struct device *dev;
 	struct coproc_client_callbacks *client_callbacks;
 	void *private;
 };
@@ -77,50 +67,64 @@ int coproc_frame_data(struct coproc_client *co_client, const void *data,
 }
 EXPORT_SYMBOL_GPL(coproc_frame_data);
 
-struct coproc_client *of_find_coproc_client_by_node(struct device_node *nd)
+static int coproc_client_bind(struct device *dev,
+			      struct device *master, void *data)
 {
+	struct drm_device *drm = data;
+	struct ad_list *ad_head = drm->dev_private;
 	struct coproc_client *co_client = NULL, *c;
-	struct device *dev;
-	struct i2c_client *i2c;
-	struct platform_device *pdev;
-
-	i2c = of_find_i2c_device_by_node(nd);
-	pdev = of_find_device_by_node(nd);
-	if (i2c)
-		dev = &i2c->dev;
-	else if (pdev)
-		dev = &pdev->dev;
-	else {
-		pr_err("%s: could not find a co-processor device matching the dt node\n",
-			__func__);
-		return NULL;
-	}
 
 	mutex_lock(&coproc_srv.mutex);
 	list_for_each_entry(c, &coproc_srv.client_list, list) {
-		if (c->dev == dev) {
+		if (c->base.dev == dev) {
 			co_client = c;
 			break;
 		}
 	}
 	mutex_unlock(&coproc_srv.mutex);
 
-	return co_client;
+	if (co_client)
+		list_add_tail(&co_client->base.ad_node, &ad_head->head);
+	else
+		WARN(1, "Could not find the coproc-client in list.\n");
+
+	return 0;
 }
-EXPORT_SYMBOL_GPL(of_find_coproc_client_by_node);
+
+static void coproc_client_unbind(struct device *dev,
+				 struct device *master, void *data)
+{
+	struct drm_device *drm = data;
+	struct ad_list *ad_head = drm->dev_private;
+	struct ad_coprocessor *ad;
+
+	list_for_each_entry(ad, &ad_head->head, ad_node) {
+		if (ad->dev == dev) {
+			list_del_init(&ad->ad_node);
+			break;
+		}
+	}
+}
+
+static const struct component_ops coproc_client_component_ops = {
+	.bind   = coproc_client_bind,
+	.unbind = coproc_client_unbind,
+};
 
 /** Called from coprocessor client driver **/
-struct coproc_client *coproc_register_client(struct device *dev,
-		struct coproc_client_callbacks *client_cb)
+struct coproc_client *
+coproc_register_client(struct device *dev,
+		       struct coproc_client_callbacks *client_cb)
 {
 	struct coproc_client *co_client;
+	struct ad_coprocessor_funcs *ad_funcs;
 
-	if (!dev)
+	if (!dev || !client_cb)
 		return ERR_PTR(EINVAL);
 
 	mutex_lock(&coproc_srv.mutex);
 	list_for_each_entry(co_client, &coproc_srv.client_list, list) {
-		if (co_client->dev == dev) {
+		if (co_client->base.dev == dev) {
 			mutex_unlock(&coproc_srv.mutex);
 			pr_warning("client device has already been registered\n");
 			return co_client;
@@ -132,13 +136,25 @@ struct coproc_client *coproc_register_client(struct device *dev,
 	if (!co_client)
 		return NULL;
 
-	co_client->dev = dev;
 	INIT_LIST_HEAD(&co_client->list);
 	co_client->client_callbacks = client_cb;
 
 	mutex_lock(&coproc_srv.mutex);
 	list_add_tail(&co_client->list, &coproc_srv.client_list);
 	mutex_unlock(&coproc_srv.mutex);
+
+	/* set ad_coprocessor funcs */
+	ad_funcs = &co_client->funcs;
+
+	//TODO initialize ad funcs
+
+	co_client->base.dev = dev;
+	co_client->base.funcs = ad_funcs;
+
+	INIT_LIST_HEAD(&co_client->base.ad_node);
+
+	component_add(dev, &coproc_client_component_ops);
+
 	return co_client;
 }
 EXPORT_SYMBOL_GPL(coproc_register_client);
@@ -149,9 +165,14 @@ void coproc_unregister_client(struct coproc_client *co_client)
 
 	mutex_lock(&coproc_srv.mutex);
 	list_for_each_entry(c, &coproc_srv.client_list, list) {
-		if (c->dev == co_client->dev) {
-			list_del(&c->list);
-			kfree(co_client);
+		if (c->base.dev == co_client->base.dev) {
+			list_del_init(&c->list);
+			component_del(c->base.dev, &coproc_client_component_ops);
+			if (!list_empty(&co_client->base.ad_node))
+				pr_warning("co_client is still referenced by others, can not unregister the client.\n");
+			else
+				kfree(co_client);
+
 			break;
 		}
 	}
