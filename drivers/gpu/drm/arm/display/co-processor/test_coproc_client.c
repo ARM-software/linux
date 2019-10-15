@@ -241,7 +241,7 @@ static int coproc_client_probe(struct platform_device *pdev)
 
 	coproc_set_drvdata(client, tcc);
 
-	dev_info(tcc->dev, "test coprocessor client is loaded.\n");
+	dev_info(tcc->dev, "test coprocessor client-%d is loaded.\n", reg);
 	return 0;
 
 tcc_debugfs_err:

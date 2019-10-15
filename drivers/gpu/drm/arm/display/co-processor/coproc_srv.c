@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
@@ -6,8 +7,6 @@
 #include <linux/version.h>
 #include <linux/component.h>
 #include <drm/drm_device.h>
-#include <uapi/drm/drm_mode.h>
-
 #include "ad_coprocessor_defs.h"
 #include "coproc.h"
 
@@ -25,47 +24,82 @@ struct coproc_client {
 	void *private;
 };
 
-/** Called from display driver **/
-int coproc_modeset_notify(struct coproc_client *co_client,
-		const struct drm_mode_modeinfo *drminfo)
-{
-	if (co_client == NULL)
-		return -ENODEV;
+#define ad_to_co_client(p) container_of(p, struct coproc_client, base)
 
-	if (co_client->client_callbacks &&
-			co_client->client_callbacks->modeset_cb)
-		co_client->client_callbacks->modeset_cb(co_client, drminfo);
+static int coproc_mode_set(struct ad_coprocessor *ad,
+			   struct drm_display_mode *mode)
+{
+	struct coproc_client *co_client = ad_to_co_client(ad);
+	struct drm_mode_modeinfo m;
+
+	m.clock = mode->crtc_clock;
+	m.hdisplay = mode->crtc_hdisplay;
+	m.vdisplay = mode->crtc_vdisplay;
+	m.hsync_start = mode->crtc_hsync_start;
+	m.hsync_end = mode->crtc_hsync_end;
+	m.htotal = mode->crtc_htotal;
+	m.hskew = mode->crtc_hskew;
+	m.vsync_start = mode->crtc_vsync_start;
+	m.vsync_end = mode->crtc_vsync_end;
+	m.vtotal = mode->crtc_vtotal;
+	m.vscan = mode->vscan;
+	m.vrefresh = mode->vrefresh;
+	m.flags = mode->flags;
+	m.type = mode->type;
+	sprintf(m.name, "%s", mode->name);
+
+	co_client->client_callbacks->modeset_cb(co_client, &m);
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(coproc_modeset_notify);
 
-int coproc_dpms_notify(struct coproc_client *co_client, const u8 status)
+static int coproc_enable(struct ad_coprocessor *ad)
 {
-	if (co_client == NULL)
-		return -ENODEV;
+	struct coproc_client *co_client = ad_to_co_client(ad);
 
-	if (co_client->client_callbacks &&
-			co_client->client_callbacks->dpms_cb)
-		co_client->client_callbacks->dpms_cb(co_client, status);
+	co_client->client_callbacks->dpms_cb(co_client, DRM_MODE_DPMS_ON);
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(coproc_dpms_notify);
 
-int coproc_frame_data(struct coproc_client *co_client, const void *data,
-			size_t size)
+static int coproc_disable(struct ad_coprocessor *ad)
 {
-	if (co_client == NULL)
-		return -ENODEV;
+	struct coproc_client *co_client = ad_to_co_client(ad);
 
-	if (co_client->client_callbacks &&
-		co_client->client_callbacks->frame_data_cb)
-		co_client->client_callbacks->frame_data_cb(co_client, data, size);
+	co_client->client_callbacks->dpms_cb(co_client, DRM_MODE_DPMS_OFF);
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(coproc_frame_data);
+
+static int coproc_frame_data(struct ad_coprocessor *ad,
+			     const void *data, size_t size)
+{
+	struct coproc_client *co_client = ad_to_co_client(ad);
+
+	co_client->client_callbacks->frame_data_cb(co_client, data, size);
+
+	return 0;
+}
+
+static int coproc_prepare(struct ad_coprocessor *ad,
+			  const void *data_info, const size_t size)
+{
+	struct coproc_client *co_client = ad_to_co_client(ad);
+
+	co_client->client_callbacks->coproc_prepare(co_client, data_info, size);
+
+	return 0;
+}
+
+static int coproc_query(struct ad_coprocessor *ad,
+			void *data_info, const size_t size)
+{
+	struct coproc_client *co_client = ad_to_co_client(ad);
+
+	co_client->client_callbacks->coproc_query(co_client, data_info, size);
+
+	return 0;
+}
 
 static int coproc_client_bind(struct device *dev,
 			      struct device *master, void *data)
@@ -145,8 +179,18 @@ coproc_register_client(struct device *dev,
 
 	/* set ad_coprocessor funcs */
 	ad_funcs = &co_client->funcs;
-
-	//TODO initialize ad funcs
+	if (client_cb->modeset_cb)
+		ad_funcs->mode_set = coproc_mode_set;
+	if (client_cb->dpms_cb) {
+		ad_funcs->enable = coproc_enable;
+		ad_funcs->disable = coproc_disable;
+	}
+	if (client_cb->frame_data_cb)
+		ad_funcs->frame_data = coproc_frame_data;
+	if (client_cb->coproc_query)
+		ad_funcs->coproc_query = coproc_query;
+	if (client_cb->coproc_prepare)
+		ad_funcs->coproc_prepare = coproc_prepare;
 
 	co_client->base.dev = dev;
 	co_client->base.funcs = ad_funcs;
@@ -194,33 +238,6 @@ void *coproc_get_drvdata(struct coproc_client *co_client)
 	return co_client->private;
 }
 EXPORT_SYMBOL_GPL(coproc_get_drvdata);
-
-int coproc_prepare(struct coproc_client *co_client,
-				const void *data_info, const size_t size)
-{
-
-	if (WARN_ON(co_client == NULL))
-		return -ENODEV;
-
-	if (co_client->client_callbacks &&
-		co_client->client_callbacks->coproc_prepare)
-		co_client->client_callbacks->coproc_prepare(co_client, data_info, size);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(coproc_prepare);
-
-int coproc_query(struct coproc_client *co_client,
-				void *data_info, const size_t size)
-{
-	if (WARN_ON(co_client == NULL))
-		return -ENODEV;
-
-	if (co_client->client_callbacks &&
-		co_client->client_callbacks->coproc_query)
-		co_client->client_callbacks->coproc_query(co_client, data_info, size);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(coproc_query);
 
 static int __init coproc_srv_init(void)
 {
