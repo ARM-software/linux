@@ -855,6 +855,9 @@ static int komeda_coproc_validate(struct komeda_pipeline *pipe,
 	if (!pipe->ad)
 		return 0;
 
+	if (pipe != kcrtc->master && !kcrtc->side_by_side)
+		return 0;
+
 	pipe_st = komeda_pipeline_get_state_and_set_crtc(pipe,
 			kcrtc_st->base.state, &kcrtc->base);
 	if (IS_ERR(pipe_st))
