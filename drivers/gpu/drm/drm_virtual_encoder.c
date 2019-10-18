@@ -180,12 +180,30 @@ static void drm_vencoder_mode_set(struct drm_encoder *encoder,
 	/* nothing needed */
 }
 
+static int drm_vencoder_mode_valid(struct drm_encoder *encoder,
+				  const struct drm_display_mode *mode)
+{
+	struct drm_virt_priv *priv = encoder_to_drm_virt_priv(encoder);
+	uint16_t vfp;
+
+	vfp = mode->vsync_start - mode->vdisplay;
+	if (priv->supports_vrr &&
+	    (vfp < priv->vfp_range[0] || vfp > priv->vfp_range[1])) {
+		DRM_DEBUG_ATOMIC("Vfp(%u) not in supported range[%u, %u]\n",
+				 vfp, priv->vfp_range[0], priv->vfp_range[1]);
+		return MODE_VBLANK_WIDE;
+	}
+
+	return MODE_OK;
+}
+
 static const struct drm_encoder_helper_funcs drm_vencoder_helper_funcs = {
 	.dpms		= drm_vencoder_dpms,
 	.mode_fixup	= drm_vencoder_mode_fixup,
 	.prepare	= drm_vencoder_prepare,
 	.commit		= drm_vencoder_commit,
 	.mode_set	= drm_vencoder_mode_set,
+	.mode_valid	= drm_vencoder_mode_valid,
 };
 
 static int drm_vencoder_bind(struct device *dev, struct device *master,
