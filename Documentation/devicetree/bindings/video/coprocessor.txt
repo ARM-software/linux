@@ -1,0 +1,32 @@
+* Co-processor client driver
+
+This node is for a co-processor device which could get data from Mali-DP.
+
+Requried properties:
+- compatible: Should be "arm,coprocessor_client".
+- reg: the order based at offset 0.
+
+The device node should contain one 'port' child node with one child 'endpoint'
+node, according to the bindings defined in Documentation/devicetree/bindings/
+media/video-interfaces.txt.
+The endpoint has the following required properties:
+ - remote-endpoint: The phandle of the 'coprocessor' endpoint of the attached coprocessor master device.
+
+co-processor should be on a simple-bus and its #address-cells is 1 and #size-cells is 0.
+
+Example:
+co-processors {
+	compatible = "simple-bus";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	cp0: co-processor@0 {
+		compatible = "arm,coprocessor_client";
+		reg = <0>;
+		port {
+			cp0_in: endpoint {
+				remote-endpoint = <&dp0_out1>;
+			};
+		};
+	};
+};
