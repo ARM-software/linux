@@ -1,0 +1,45 @@
+* ARM Assertiveness Display version 3  (mali-ad3)
+
+Required properties:
+- compatible: Should be "arm,ad-v3".
+- reg: Physical base address and length of the registers in the system
+- clocks: should contain a phandle + clock-specifier pair for each clock
+entry in clock-names.
+- clock-names: should contain:
+      * "aclk": AXI interface clock
+- firmware_name: The name of ad3 firmware file,
+which can be put in the kernel default firmware path /lib/firmware.
+- io-channels: List of phandle and IIO specifier pairs,one pair for each
+IIO input to the device.
+Note: for ad3, there's only one IIO pair to match the light input from
+IIO ambient light spicifier.
+- backlight: phandle of the backlight device attached to AD3.
+Note: this is required if the platform uses the backlight device as
+the backlight control.
+- led_trigger: the ad3 trigger assigned to the LED as the default trigger.
+Note: this is required if the platform uses the LED as the backlight control.
+
+Optional properties:
+- io-channel-names: List of IIO input name strings sorted in the same order
+as the io-channels property.
+Note: ad3 can use io-channel-names to match IIO input names with the IIO ambient
+light spicifier.
+
+Example:
+
+/{
+        ...
+
+        ad0: ad@d00000 {
+                compatible = "arm,ad-v3";
+                clocks = <&dpu_aclk>;
+                clock-names = "aclk";
+                reg = <0xd00000 0x584>;
+                firmware_name = "ad.bin";
+                io-channels = <&als 0>;
+                io-channel-names = "als0";
+                led_trigger = "AD3";
+	};
+
+	...
+};
