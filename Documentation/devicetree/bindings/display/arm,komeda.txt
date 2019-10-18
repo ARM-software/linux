@@ -7,13 +7,19 @@ Required properties:
 - clocks: A list of phandle + clock-specifier pairs, one for each entry
     in 'clock-names'
 - clock-names: A list of clock names. It should contain:
-      - "aclk": for the main processor clock
+    - "aclk": for the main processor clock
 - #address-cells: Must be 1
 - #size-cells: Must be 0
 - iommus: configure the stream id to IOMMU, Must be configured if want to
     enable iommu in display. for how to configure this node please reference
-        devicetree/bindings/iommu/arm,smmu-v3.txt,
-        devicetree/bindings/iommu/iommu.txt
+      devicetree/bindings/iommu/arm,smmu-v3.txt,
+      devicetree/bindings/iommu/iommu.txt
+- side_by_side_master[optional]:
+    only availiable when side_by_side is needed, to specific the master
+    pipeline to the side_by_side, NOTE the master is the output pipeline.
+    Two endpoints will be enabled if side_by_side_master is set.
+    Allowed values: <0>, <1>
+    The default value is 0.
 
 Required properties for sub-node: pipeline@nq
 Each device contains one or two pipeline sub-nodes (at least one), each
@@ -22,17 +28,65 @@ pipeline node should provide properties:
 - clocks: A list of phandle + clock-specifier pairs, one for each entry
     in 'clock-names'
 - clock-names: should contain:
-      - "pxclk": pixel clock
+    - "pxclk": pixel clock
 
-- port: each pipeline connect to an encoder input port. The connection is
-    modeled using the OF graph bindings specified in
-    Documentation/devicetree/bindings/graph.txt
+- port: each pipeline contains one or two output ports, for binding to the
+    connected external transmitter or coprocessor.
+    A specific port contains:
+    - reg: <0>, <1>, for indicating the types of connected device, 0 is
+        for transmitter, 1 is for coprocessor.
+    - remote-endpoint: The phandle of the 'input' endpoint of the attached
+        video transmitter device or the attached co-processor client.
 
 Optional properties:
   - memory-region: phandle to a node describing memory (see
     Documentation/devicetree/bindings/reserved-memory/reserved-memory.txt)
     to be used for the framebuffer; if not present, the framebuffer may
     be located anywhere in memory.
+
+  - lpu_raxi_aoutstdcapb:
+    AXI outstanding transcations capability during active region.
+    range [4 -> 64], default 32.
+
+  - lpu_raxi_boutstdcapb:
+    AXI outstanding transcations capability during blanking region.
+    range [4 -> 64], default 32.
+
+  - lpu_raxi_ben: Outstanding capability during blanking regsion enable flag.
+    Allowed: <0>, <1>, default: 0
+
+  - lpu_raxi_burstlen: AXI read burst length in bytes.
+    Allowed: <4>, <8>, <16>, <32>,  default: 16
+
+  - lpu_raxi_arqos: AXI reading QoS. range [0 -> 15]. default: 15.
+
+  - lpu_raxi_ord: AXI transcations generation mode.
+    Allowed: <0>, <1>,  default: 0
+
+  - lpu_waxi_outstdcapb: AXI outstanding write transcations capability.
+    range [1 -> 16], default 16.
+
+  - lpu_waxi_burstlen: AXI write burst length in bytes.
+    Allowed: <4>, <8>, <16>, <32>,  default: 16
+
+  - lpu_waxi_awqos: AXI writing QoS. range [0 -> 15]. default: 15.
+
+  - lpu_waxi_ord: AXI transcations generation mode for writing.
+    Allowed: <0>, <1>,  default: 0
+
+  - lpu_l0_arcache: Layer0 AXI read transaction memory (cache) type.
+    range [0->15], default 3.
+  - lpu_l1_arcache: Layer1 AXI read transaction memory (cache) type.
+    range [0->15], default 3.
+  - lpu_l2_arcache: Layer2 AXI read transaction memory (cache) type.
+    range [0->15], default 3.
+  - lpu_l3_arcache: Layer3 AXI read transaction memory (cache) type.
+    range [0->15], default 3.
+  - lpu_lw_awcache: Write-back AXI write transaction memory (cache) type.
+    range [0->15], default 3.
+
+  - lpu_tbu_doutstdcapb: DTI outstanding transcations capability.
+    range [0 -> 16], default 8
 
 Example:
 / {
@@ -50,14 +104,49 @@ Example:
 			<&smmu 4>, <&smmu 5>, <&smmu 6>, <&smmu 7>,
 			<&smmu 8>, <&smmu 9>;
 
+		side_by_side_master = <0>;
 		dp0_pipe0: pipeline@0 {
+			reg = <0>;
 			clocks = <&fpgaosc2>;
 			clock-names = "pxclk";
-			reg = <0>;
 
-			port {
-				dp0_pipe0_out: endpoint {
-					remote-endpoint = <&db_dvi0_in>;
+			lpu_raxi_aoutstdcapb = <32>;
+			lpu_raxi_boutstdcapb = <32>;
+			lpu_raxi_ben = <0>;
+			lpu_raxi_burstlen = <16>;
+			lpu_raxi_arqos = <15>;
+			lpu_raxi_ord = <0>;
+			lpu_waxi_outstdcapb = <16>;
+			lpu_waxi_burstlen = <16>;
+			lpu_waxi_awqos = <15>;
+			lpu_waxi_ord = <0>;
+			lpu_l0_arcache = <3>;
+			lpu_l1_arcache = <3>;
+			lpu_l2_arcache = <3>;
+			lpu_l3_arcache = <3>;
+			lpu_lw_arcache = <3>;
+			lpu_tbu_doutstdcapb = <8>;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					#address-cells = <1>;
+					#szie-cells = <0>;
+					reg = <0>;
+					dp_pl0_link0: endpoint@0 {
+						reg = <0>;
+					};
+					dp_pl0_link1: endpoint@1 {
+						reg = <1>;
+					};
+				};
+				port@1 {
+					reg = <1>;
+					dp_pl0_out1: endpoint {
+						remote-endpoint = <&cp0_in>;
+					};
 				};
 			};
 		};
@@ -67,12 +156,33 @@ Example:
 			clock-names = "pxclk";
 			reg = <1>;
 
-			port {
-				dp0_pipe1_out: endpoint {
-					remote-endpoint = <&db_dvi1_in>;
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
 				};
 			};
 		};
 	};
+
+	co-processors {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cp0: co-processor@0 {
+			compatible = "arm,coprocessor_client";
+			reg = <0>;
+			port {
+				cp0_in: endpoint {
+					remote-endpoint = <&dp_pl0_out1>;
+				};
+			};
+		};
+		/* cp1 .... */
+	};
+
 	...
 };
