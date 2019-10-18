@@ -20,14 +20,13 @@ komeda-y := \
 	komeda_wb_connector.o \
 	komeda_private_obj.o \
 	komeda_math.o \
-	komeda_debugfs.o
+	komeda_debugfs.o \
+	komeda_event.o
 
 komeda-y += \
 	d71/d71_dev.o \
 	d71/d71_component.o \
 	d71/d71_axi.o \
 	d71/d77_debugfs.o
-
-komeda-$(CONFIG_DRM_KOMEDA_ERROR_PRINT) += komeda_event.o
 
 obj-$(CONFIG_DRM_KOMEDA) += komeda.o
