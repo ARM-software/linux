@@ -69,6 +69,16 @@
 #define KOMEDA_WARN_EVENTS	\
 	(KOMEDA_ERR_CSCE | KOMEDA_EVENT_FULL | KOMEDA_EVENT_EMPTY)
 
+#define KOMEDA_INFO_EVENTS ( 0 \
+			    | KOMEDA_EVENT_VSYNC \
+			    | KOMEDA_EVENT_FLIP \
+			    | KOMEDA_EVENT_EOW \
+			    | KOMEDA_EVENT_MODE \
+			    | KOMEDA_EVENT_PL3 \
+			    | KOMEDA_EVENT_FRAME_END \
+			    | KOMEDA_EVENT_ASYNC_RP \
+			   )
+
 /* pipeline DT ports */
 enum {
 	KOMEDA_OF_PORT_OUTPUT		= 0,
@@ -223,6 +233,23 @@ struct komeda_dev {
 
 	/** @debugfs_root: root directory of komeda debugfs */
 	struct dentry *debugfs_root;
+	/**
+	 * @err_verbosity: bitmask for how much extra info to print on error
+	 *
+	 * See KOMEDA_DEV_* macros for details. Low byte contains the debug
+	 * level categories, the high byte contains extra debug options.
+	 */
+	u16 err_verbosity;
+	/* Print a single line per error per frame with error events. */
+#define KOMEDA_DEV_PRINT_ERR_EVENTS BIT(0)
+	/* Print a single line per warning per frame with error events. */
+#define KOMEDA_DEV_PRINT_WARN_EVENTS BIT(1)
+	/* Print a single line per info event per frame with error events. */
+#define KOMEDA_DEV_PRINT_INFO_EVENTS BIT(2)
+	/* Dump DRM state on an error or warning event. */
+#define KOMEDA_DEV_PRINT_DUMP_STATE_ON_EVENT BIT(8)
+	/* Disable rate limiting of event prints (normally one per commit) */
+#define KOMEDA_DEV_PRINT_DISABLE_RATELIMIT BIT(12)
 };
 
 static inline bool
@@ -245,11 +272,8 @@ struct komeda_dev *dev_to_mdev(struct device *dev);
 int komeda_dev_resume(struct komeda_dev *mdev);
 int komeda_dev_suspend(struct komeda_dev *mdev);
 
-#ifdef CONFIG_DRM_KOMEDA_ERROR_PRINT
-void komeda_print_events(struct komeda_events *evts);
-#else
-static inline void komeda_print_events(struct komeda_events *evts) {}
-#endif
+void komeda_print_events(struct komeda_events *evts, struct drm_device *dev);
+
 void komeda_dev_init_ad(struct komeda_dev *mdev);
 
 #endif /*_KOMEDA_DEV_H_*/

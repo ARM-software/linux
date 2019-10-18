@@ -59,6 +59,8 @@ static void komeda_debugfs_init(struct komeda_dev *mdev)
 {
 	debugfs_create_file("register", 0444, mdev->debugfs_root,
 			    mdev, &komeda_register_fops);
+	debugfs_create_x16("err_verbosity", 0664, mdev->debugfs_root,
+			   &mdev->err_verbosity);
 }
 #endif
 
@@ -328,6 +330,8 @@ int komeda_dev_init(struct komeda_dev *mdev, struct device *dev)
 		DRM_ERROR("create sysfs group failed.\n");
 		goto err_cleanup;
 	}
+
+	mdev->err_verbosity = KOMEDA_DEV_PRINT_ERR_EVENTS;
 
 #ifdef CONFIG_DEBUG_FS
 	komeda_debugfs_init(mdev);
