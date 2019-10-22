@@ -36,8 +36,8 @@ int komeda_color_validate(struct komeda_color_manager *mgr,
 			  struct drm_property_blob *igamma_blob,
 			  struct drm_property_blob *fgamma_blob);
 
-void drm_lut_to_igamma_coeffs(struct drm_property_blob *lut_blob, u32 *coeffs);
-void drm_lut_to_fgamma_coeffs(struct drm_property_blob *lut_blob, u32 *coeffs);
+void drm_lut_to_coeffs(struct drm_property_blob *lut_blob,
+		       u32 *coeffs, bool igamma);
 void drm_ctm_to_coeffs(struct drm_property_blob *ctm_blob, u32 *coeffs);
 
 struct komeda_hdr_metadata;
