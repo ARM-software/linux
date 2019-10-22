@@ -1265,7 +1265,7 @@ komeda_improc_validate(struct komeda_improc *improc,
 	}
 
 	if (crtc_st->color_mgmt_changed) {
-		drm_lut_to_fgamma_coeffs(crtc_st->gamma_lut, st->fgamma_coeffs);
+		drm_lut_to_coeffs(crtc_st->gamma_lut, st->fgamma_coeffs, false);
 		drm_ctm_to_coeffs(crtc_st->ctm, st->ctm_coeffs);
 	}
 

@@ -128,7 +128,7 @@ struct gamma_curve_segment {
 	u32 end;
 };
 
-static struct gamma_curve_sector sector_tbl[] = {
+static struct gamma_curve_sector fgamma_sector_tbl[] = {
 	{ 0,    4,  4   },
 	{ 16,   4,  4   },
 	{ 32,   4,  8   },
@@ -143,17 +143,21 @@ static struct gamma_curve_sector igamma_sector_tbl[] = {
 	{0, 64, 64},
 };
 
-static void
-drm_lut_to_coeffs(struct drm_property_blob *lut_blob, u32 *coeffs,
-		  struct gamma_curve_sector *sector_tbl, u32 num_sectors)
+void drm_lut_to_coeffs(struct drm_property_blob *lut_blob,
+		       u32 *coeffs, bool igamma)
 {
+	struct gamma_curve_sector *sector_tbl;
 	struct drm_color_lut *lut;
-	u32 i, j, in, num = 0;
+	u32 i, j, in, num = 0, num_sectors;
 
 	if (!lut_blob)
 		return;
 
 	lut = lut_blob->data;
+
+	sector_tbl = igamma ? igamma_sector_tbl : fgamma_sector_tbl;
+	num_sectors = igamma ? ARRAY_SIZE(igamma_sector_tbl) :
+			       ARRAY_SIZE(fgamma_sector_tbl);
 
 	for (i = 0; i < num_sectors; i++) {
 		for (j = 0; j < sector_tbl[i].num_of_segments; j++) {
@@ -166,18 +170,6 @@ drm_lut_to_coeffs(struct drm_property_blob *lut_blob, u32 *coeffs,
 	}
 
 	coeffs[num] = BIT(KOMEDA_COLOR_PRECISION);
-}
-
-void drm_lut_to_igamma_coeffs(struct drm_property_blob *lut_blob, u32 *coeffs)
-{
-	drm_lut_to_coeffs(lut_blob, coeffs,
-			  igamma_sector_tbl, ARRAY_SIZE(igamma_sector_tbl));
-}
-
-void drm_lut_to_fgamma_coeffs(struct drm_property_blob *lut_blob, u32 *coeffs)
-{
-	drm_lut_to_coeffs(lut_blob, coeffs,
-			  sector_tbl, ARRAY_SIZE(sector_tbl));
 }
 
 void drm_ctm_to_coeffs(struct drm_property_blob *ctm_blob, u32 *coeffs)
@@ -248,7 +240,7 @@ int komeda_color_validate(struct komeda_color_manager *mgr,
 	komeda_color_cleanup_state(st);
 
 	if (igamma_blob) {
-		drm_lut_to_igamma_coeffs(igamma_blob, coeffs);
+		drm_lut_to_coeffs(igamma_blob, coeffs, true);
 		st->igamma = komeda_coeffs_request(mgr->igamma_mgr, coeffs);
 		if (!st->igamma) {
 			DRM_DEBUG_ATOMIC("request igamma table failed.\n");
@@ -257,7 +249,7 @@ int komeda_color_validate(struct komeda_color_manager *mgr,
 	}
 
 	if (fgamma_blob) {
-		drm_lut_to_fgamma_coeffs(fgamma_blob, coeffs);
+		drm_lut_to_coeffs(fgamma_blob, coeffs, false);
 		st->fgamma = komeda_coeffs_request(mgr->fgamma_mgr, coeffs);
 		if (!st->fgamma) {
 			DRM_DEBUG_ATOMIC("request fgamma table failed.\n");
