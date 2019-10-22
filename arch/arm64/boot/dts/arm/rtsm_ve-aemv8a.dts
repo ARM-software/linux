@@ -107,6 +107,15 @@
 			     <0 63 4>;
 	};
 
+	panel {
+		compatible = "arm,rtsm-display";
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&clcd_pads>;
+			};
+		};
+	};
+
 	smb@8000000 {
 		compatible = "simple-bus";
 

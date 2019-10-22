@@ -1,0 +1,84 @@
+
+/*
+ * arm Ltd. Virtual encoder (2018-2019)
+ */
+
+	vencoder1 {
+		compatible = "drm,virtual-encoder";
+		/* command_mode="true"; */
+		status = "okay";
+		display-timings {
+			native-mode = <&timing0>;
+			timing0: timing@0 {
+				/* 640x480@60 framebuffer */
+				clock-frequency = <25175000>;
+				hactive = <640>;
+				vactive = <480>;
+				hfront-porch = <16>;
+				hback-porch = <48>;
+				hsync-len = <96>;
+				vfront-porch = <10>;
+				vback-porch = <33>;
+				vsync-len = <2>;
+			};
+
+			/* 1280x720@60 framebuffer */
+			/*timing1: timing@1 {
+				clock-frequency = <74250000>;
+				hactive = <1280>;
+				vactive = <720>;
+				hfront-porch = <110>;
+				hback-porch = <220>;
+				hsync-len = <40>;
+				vfront-porch = <5>;
+				vback-porch = <20>;
+				vsync-len = <5>;
+			};*/
+		};
+
+		port {
+			vencoder_in1: endpoint {
+			};
+		};
+
+	};
+
+	vencoder2 {
+		compatible = "drm,virtual-encoder";
+		/* command_mode="true"; */
+		status = "okay";
+		display-timings {
+			native-mode = <&timing2>;
+			timing2: timing@0 {
+				/* 640x480@60 framebuffer */
+				clock-frequency = <25175000>;
+				hactive = <640>;
+				vactive = <480>;
+				hfront-porch = <16>;
+				hback-porch = <48>;
+				hsync-len = <96>;
+				vfront-porch = <10>;
+				vback-porch = <33>;
+				vsync-len = <2>;
+			};
+
+			/* 1280x720@60 framebuffer */
+			/*timing3: timing@1 {
+				clock-frequency = <74250000>;
+				hactive = <1280>;
+				vactive = <720>;
+				hfront-porch = <110>;
+				hback-porch = <220>;
+				hsync-len = <40>;
+				vfront-porch = <5>;
+				vback-porch = <20>;
+				vsync-len = <5>;
+			};*/
+		};
+
+		port {
+			vencoder_in2: endpoint {
+			};
+		};
+
+	};

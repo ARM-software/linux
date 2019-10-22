@@ -1,7 +1,7 @@
 /*
  * ARM Juno development platform with single Virtex 7 logic tile
  * and HDMI daughterboard.
- * Configured for a bitfile containing a Mali-Cetus.
+ * Configured for a bitfile containing a Mali-D71.
  */
 
 #include "juno-r1.dts"
@@ -37,8 +37,21 @@
 	/include/ "v2c-hdmi.dtsi"
 };
 
+&smmu {
+	status = "okay";
+	#iommu-cells = <1>;
+};
+
 /* Configure DP0 with daughterboard transmitters */
 &dp0 {
+	iommus = <&smmu 0>, <&smmu 1>, <&smmu 2>, <&smmu 3>,
+		 <&smmu 4>, <&smmu 5>, <&smmu 6>, <&smmu 7>,
+		 <&smmu 8>, <&smmu 9>;
+	status = "okay";
+};
+
+&aeu {
+	iommus = <&smmu 10>, <&smmu 11>;
 	status = "okay";
 };
 
