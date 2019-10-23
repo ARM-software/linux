@@ -90,16 +90,6 @@
 		mask = <0x7>;
 	};
 
-	gpu_fpga: mali@c010000 {
-		reg = <0xc010000 0x4000>;
-		compatible = "arm,malit6xx", "arm,mali";
-		interrupts = <0>, <0>, <0>;
-		interrupt-names = "JOB", "MMU", "GPU";
-		clocks = <&fpgaosc0>;
-		clock-names = "clk_mali";
-		status = "disabled";
-	};
-
 	smmu_fpga0: smmu@c070000 {
 		compatible = "arm,mmu-400";
 		reg = <0xc070000 0x10000>;
