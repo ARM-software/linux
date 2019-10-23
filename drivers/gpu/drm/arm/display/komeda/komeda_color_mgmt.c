@@ -182,12 +182,9 @@ void drm_ctm_to_coeffs(struct drm_property_blob *ctm_blob, u32 *coeffs)
 
 	ctm = ctm_blob->data;
 
-	for (i = 0; i < KOMEDA_N_CTM_COEFFS; ++i) {
-		/* Convert from S31.32 to Q3.12. */
-		s64 v = ctm->matrix[i];
+	for (i = 0; i < KOMEDA_N_CTM_COEFFS; i++)
+		coeffs[i] = drm_color_ctm_s31_32_to_qm_n(ctm->matrix[i], 3, 12);
 
-		coeffs[i] = clamp_val(v, 1 - (1LL << 34), (1LL << 34) - 1) >> 20;
-	}
 }
 
 void drm_hdr_metadata_to_coproc(struct drm_property_blob *metadata_blob,
