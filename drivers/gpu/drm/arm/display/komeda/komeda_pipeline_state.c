@@ -1225,7 +1225,7 @@ komeda_improc_validate(struct komeda_improc *improc,
 	struct komeda_improc_state *st;
 
 	c_st = komeda_component_get_state_and_set_user(&improc->base,
-			kcrtc_st->base.state, crtc, crtc);
+			crtc_st->state, crtc, crtc);
 	if (IS_ERR(c_st))
 		return PTR_ERR(c_st);
 
@@ -1264,10 +1264,9 @@ komeda_improc_validate(struct komeda_improc *improc,
 		st->color_format = BIT(__fls(avail_formats));
 	}
 
-	if (kcrtc_st->base.color_mgmt_changed) {
-		drm_lut_to_fgamma_coeffs(kcrtc_st->base.gamma_lut,
-					 st->fgamma_coeffs);
-		drm_ctm_to_coeffs(kcrtc_st->base.ctm, st->ctm_coeffs);
+	if (crtc_st->color_mgmt_changed) {
+		drm_lut_to_fgamma_coeffs(crtc_st->gamma_lut, st->fgamma_coeffs);
+		drm_ctm_to_coeffs(crtc_st->ctm, st->ctm_coeffs);
 	}
 
 	komeda_component_add_input(&st->base, &m_dflow->input, 0);
@@ -1283,26 +1282,25 @@ komeda_timing_ctrlr_validate(struct komeda_timing_ctrlr *ctrlr,
 			     struct komeda_crtc_state *kcrtc_st,
 			     struct komeda_data_flow_cfg *dflow)
 {
+	struct drm_crtc_state *crtc_st = &kcrtc_st->base;
 	struct drm_crtc *crtc = kcrtc_st->base.crtc;
+	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
 	struct komeda_timing_ctrlr_state *st;
 	struct komeda_component_state *c_st;
-	struct drm_crtc_state *crtc_st = &kcrtc_st->base;
-	struct komeda_crtc *kcrtc = to_kcrtc(crtc);
 	struct drm_connector *conn;
 	struct drm_connector_state *conn_st;
 	int i;
 
 	c_st = komeda_component_get_state_and_set_user(&ctrlr->base,
-			kcrtc_st->base.state, crtc, crtc);
+			crtc_st->state, crtc, crtc);
 	if (IS_ERR(c_st))
 		return PTR_ERR(c_st);
 
 	st = to_ctrlr_st(c_st);
 
 	if (!is_writeback_only(crtc_st)) {
-
 		for_each_new_connector_in_state(crtc_st->state, conn, conn_st, i) {
-			if (conn_st->crtc != kcrtc->base.state->crtc)
+			if (conn_st->crtc != crtc)
 				continue;
 
 			if (&kcrtc->wb_conn->base.base == conn) {
