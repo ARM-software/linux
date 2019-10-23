@@ -54,10 +54,18 @@ struct ad_caps {
 };
 
 struct ad_control {
+	/* the flag to check if the enable_merge_mode flag is set.*/
+	bool has_mode_set;
 	/* the flag to enable ad merge mode. */
 	bool enable_merge_mode;
+	/* the flag to check if the set_master flag is set.*/
+	bool has_master_set;
 	/* the flag to check if the ad client is the master.*/
 	bool set_master;
+	/* the flag to check if the irdx_darkenh flag is set.*/
+	bool has_irdx_darkenh;
+	/* the manual dark enhancement to set.*/
+	u16 irdx_darkenh;
 };
 
 static inline void init_ad_list(struct ad_list *list)

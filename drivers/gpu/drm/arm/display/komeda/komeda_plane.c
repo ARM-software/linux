@@ -138,6 +138,7 @@ komeda_plane_atomic_check(struct drm_plane *plane,
 	struct drm_crtc_state *crtc_st;
 	struct komeda_crtc *kcrtc;
 	struct komeda_crtc_state *kcrtc_st;
+	bool is_fullscreen;
 	int err;
 
 	/* No layer assigned means the plane is disabled, skip it */
@@ -148,6 +149,15 @@ komeda_plane_atomic_check(struct drm_plane *plane,
 
 	kcrtc = to_kcrtc(crtc_st->crtc);
 	kcrtc_st = to_kcrtc_st(crtc_st);
+
+	if (state->fb->format->is_yuv)
+		kcrtc_st->yuv_plane_mask |= drm_plane_mask(plane);
+
+	is_fullscreen = abs(state->crtc_w - kcrtc->base.mode.hdisplay) <= 16 &&
+		        abs(state->crtc_h - kcrtc->base.mode.vdisplay) <= 16;
+
+	if (is_fullscreen)
+		kcrtc_st->fullscreen_plane_mask |= drm_plane_mask(plane);
 
 	dflow->blending_zorder = state->normalized_zpos;
 	if (dflow->en_atu || layer->base.pipeline == kcrtc->master)

@@ -2102,6 +2102,30 @@ bool komeda_pipeline_disable(struct komeda_pipeline *pipe,
 	return old->active_comps ? true : false;
 }
 
+static int komeda_ad_set_dark_value(struct ad_coprocessor *ad,
+				    struct komeda_pipeline_state *st)
+{
+	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(st->crtc->state);
+	struct ad_control ad_control;
+
+	memset(&ad_control, 0, sizeof(ad_control));
+
+	/* Set the special value for the manual dark enhancement value of iridix,
+	 * the value 0x1000 is for no fullscreen yuv layer,
+	 * the value 0x3000 is for fullscreen yuv layer and fullscreen rgb layer,
+	 * otherwise, the value is 0x6000.
+	 */
+	if (!(kcrtc_st->yuv_plane_mask & kcrtc_st->fullscreen_plane_mask))
+		ad_control.irdx_darkenh = 0x1000;
+	else if (kcrtc_st->fullscreen_plane_mask & (~kcrtc_st->yuv_plane_mask))
+		ad_control.irdx_darkenh = 0x3000;
+	else
+		ad_control.irdx_darkenh = 0x6000;
+
+	ad_control.has_irdx_darkenh = true;
+	return ad->funcs->coproc_prepare(ad, &ad_control, sizeof(ad_control));
+}
+
 static void
 komeda_ad_update_state(struct ad_coprocessor *ad,
 		       struct komeda_pipeline_state *st)
@@ -2138,6 +2162,9 @@ komeda_ad_update_state(struct ad_coprocessor *ad,
 
 		funcs->frame_data(ad, hdr_data, sizeof(*hdr_data));
 	}
+
+	if (funcs->coproc_prepare)
+		komeda_ad_set_dark_value(ad, st);
 }
 
 void komeda_pipeline_update(struct komeda_pipeline *pipe,
@@ -2215,8 +2242,12 @@ int komeda_ad_prepare(struct komeda_pipeline *pipe,
 	if (!ad || !ad->funcs->coproc_prepare)
 		return 0;
 
+	memset(&ad_control, 0, sizeof(ad_control));
+
 	ad_control.enable_merge_mode = en_merge_mode;
+	ad_control.has_mode_set = true;
 	ad_control.set_master = is_master;
+	ad_control.has_master_set = true;
 
 	return ad->funcs->coproc_prepare(ad, &ad_control, sizeof(ad_control));
 }
