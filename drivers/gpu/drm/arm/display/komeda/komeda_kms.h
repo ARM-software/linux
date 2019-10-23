@@ -229,6 +229,9 @@ struct komeda_crtc_state {
 	/** @max_slave_zorder: the maximum of slave zorder */
 	u32 max_slave_zorder;
 
+	u32 yuv_plane_mask;
+	u32 fullscreen_plane_mask;
+
 	bool en_coproc;
 	bool en_protected_mode;
 	struct drm_property_blob *hdr_data_blob;
