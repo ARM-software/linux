@@ -1938,7 +1938,7 @@ static void d71_gcu_dump(struct d71_dev *d71, struct seq_file *sf)
 {
 	u32 v[5];
 
-	seq_printf(sf, "\n------ GCU ------\n");
+	seq_puts(sf, "\n------ GCU ------\n");
 
 	get_values_from_reg(d71->gcu_addr, 0, 3, v);
 	seq_printf(sf, "GLB_ARCH_ID:\t\t0x%X\n", v[0]);

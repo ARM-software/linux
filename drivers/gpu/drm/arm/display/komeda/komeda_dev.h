@@ -269,11 +269,10 @@ void komeda_dev_fini(struct komeda_dev *mdev);
 
 struct komeda_dev *dev_to_mdev(struct device *dev);
 
-int komeda_dev_resume(struct komeda_dev *mdev);
-int komeda_dev_suspend(struct komeda_dev *mdev);
-
 void komeda_print_events(struct komeda_events *evts, struct drm_device *dev);
 
 void komeda_dev_init_ad(struct komeda_dev *mdev);
 
+int komeda_dev_resume(struct komeda_dev *mdev);
+int komeda_dev_suspend(struct komeda_dev *mdev);
 #endif /*_KOMEDA_DEV_H_*/
