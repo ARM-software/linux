@@ -31,6 +31,8 @@ struct drm_plane;
 
 uint32_t drm_color_lut_extract(uint32_t user_input, uint32_t bit_precision);
 u64 drm_color_lut_extract_ext(u64 user_input, u32 bit_precision);
+uint64_t drm_color_ctm_s31_32_to_qm_n(uint64_t user_input,
+				      uint32_t m, uint32_t n);
 
 void drm_crtc_enable_color_mgmt(struct drm_crtc *crtc,
 				uint degamma_lut_size,
