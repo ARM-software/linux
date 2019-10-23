@@ -5,6 +5,7 @@
  */
 
 #include "juno-r2.dts"
+#include "juno-bifrost.dtsi"
 
 / {
 	aliases {
