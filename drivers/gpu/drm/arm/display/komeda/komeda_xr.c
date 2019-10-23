@@ -51,6 +51,21 @@ void komeda_atu_clean_job(struct komeda_atu *atu)
 		komeda_atu_job_put(job);
 }
 
+static void xr_layer_viewport_adjust(struct komeda_atu_vp_calc *calc)
+{
+	struct round_exception extra_data;
+
+	if (calc->vp_type == ATU_VP_TYPE_PROJ) {
+		calc->m1.data[0] = float32_sub(FLOAT32_0 ,calc->m1.data[0], &extra_data);
+		calc->m1.data[5] = float32_sub(FLOAT32_0 ,calc->m1.data[5], &extra_data);
+		calc->m1.data[11] = float32_sub(FLOAT32_0 ,calc->m1.data[11], &extra_data);
+	} else if (calc->vp_type == ATU_VP_TYPE_QUAD) {
+		calc->m1.data[5] = float32_sub(FLOAT32_0 ,calc->m1.data[5], &extra_data);
+		calc->m1.data[7] = float32_sub(FLOAT32_0 ,calc->m1.data[7], &extra_data);
+		calc->m2.data[5] = float32_sub(FLOAT32_0 ,calc->m2.data[5], &extra_data);
+	}
+}
+
 int komeda_atu_create_rp_job(struct komeda_atu *atu)
 {
 	struct komeda_atu_async_rp_job *job = NULL;
@@ -72,6 +87,11 @@ int komeda_atu_create_rp_job(struct komeda_atu *atu)
 	job->right.vp_type = state->right.vp_type;
 	job->right.m1 = state->right.m1;
 	job->right.m2 = state->right.m2;
+
+	/* fix atu layer rotate in wrong direction problem */
+	xr_layer_viewport_adjust(&job->left);
+	xr_layer_viewport_adjust(&job->right);
+
 	/* only one job should be queued */
 	komeda_atu_clean_job(atu);
 	spin_lock_irqsave(&atu->job_lock, flags);
