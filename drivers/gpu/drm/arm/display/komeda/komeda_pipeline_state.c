@@ -440,7 +440,13 @@ komeda_validate_plane_color(struct komeda_component *c,
 			    struct komeda_color_state *color_st,
 			    struct drm_plane_state *plane_st)
 {
+	struct komeda_component_state *old_st;
 	int err;
+
+	/* Force updating the color state if user(plane) changed */
+	old_st = komeda_component_get_old_state(c, plane_st->state);
+	if (plane_st->plane != old_st->plane)
+		plane_st->color_mgmt_changed = true;
 
 	if (!plane_st->color_mgmt_changed)
 		return 0;
