@@ -468,6 +468,7 @@ struct komeda_data_flow_cfg {
 	   en_img_enhancement : 1,
 	   en_split : 1,
 	   is_yuv : 1,
+	   is_wb : 1,
 	   en_atu : 1,
 	   en_r8_upscaling : 1,
 	   right_part : 1; /* right part of display image if split enabled */
