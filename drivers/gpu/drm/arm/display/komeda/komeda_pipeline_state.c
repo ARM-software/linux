@@ -675,13 +675,8 @@ komeda_scaler_check_cfg(struct komeda_scaler *scaler,
 		return -EINVAL;
 	}
 
-	/* If input comes from compiz that means the scaling is for writeback
-	 * and scaler can not do upscaling for writeback
-	 */
-	if (dflow->input.component == &pipe->compiz->base)
-		max_upscaling = 1;
-	else
-		max_upscaling = scaler->max_upscaling;
+	/* Scaler can not do upscaling for writeback. */
+	max_upscaling = dflow->is_wb ? 1 : scaler->max_upscaling;
 
 	if (!scaling_ratio_valid(hsize_in, hsize_out, max_upscaling,
 				 scaler->max_downscaling)) {

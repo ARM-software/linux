@@ -19,6 +19,8 @@ komeda_wb_init_data_flow(struct komeda_layer *wb_layer,
 
 	memset(dflow, 0, sizeof(*dflow));
 
+	dflow->is_wb = true;
+
 	dflow->out_w = fb->width;
 	dflow->out_h = fb->height;
 
