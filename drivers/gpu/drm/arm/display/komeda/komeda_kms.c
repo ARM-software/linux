@@ -24,15 +24,6 @@
 
 DEFINE_DRM_GEM_CMA_FOPS(komeda_cma_fops);
 
-static void komeda_kms_release(struct drm_device *dev)
-{
-	drm_dev_fini(dev);
-	/*
-	 * No need to kfree(dev) since we're stored in an aggregate struct
-	 * that's managed separately.
-	 */
-}
-
 static int komeda_gem_cma_dumb_create(struct drm_file *file,
 				      struct drm_device *dev,
 				      struct drm_mode_create_dumb *args)
@@ -72,7 +63,6 @@ static irqreturn_t komeda_kms_irq_handler(int irq, void *data)
 static struct drm_driver komeda_kms_driver = {
 	.driver_features = DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC,
 	.lastclose			= drm_fb_helper_lastclose,
-	.release			= komeda_kms_release,
 	.gem_free_object_unlocked	= drm_gem_cma_free_object,
 	.gem_vm_ops			= &drm_gem_cma_vm_ops,
 	.dumb_create			= komeda_gem_cma_dumb_create,
@@ -353,15 +343,19 @@ static void komeda_kms_mode_config_init(struct komeda_kms_dev *kms,
 	komeda_kms_create_plane_properties(kms, mdev);
 }
 
-int komeda_kms_init(struct komeda_kms_dev *kms, struct komeda_dev *mdev)
+struct komeda_kms_dev *komeda_kms_attach(struct komeda_dev *mdev)
 {
+	struct komeda_kms_dev *kms = kzalloc(sizeof(*kms), GFP_KERNEL);
 	struct drm_device *drm;
 	int err;
+
+	if (!kms)
+		return ERR_PTR(-ENOMEM);
 
 	drm = &kms->base;
 	err = drm_dev_init(drm, &komeda_kms_driver, mdev->dev);
 	if (err)
-		return err;
+		goto free_kms;
 
 	drm->dev_private = mdev;
 
@@ -412,7 +406,7 @@ int komeda_kms_init(struct komeda_kms_dev *kms, struct komeda_dev *mdev)
 	if (err)
 		goto free_interrupts;
 
-	return 0;
+	return kms;
 
 free_interrupts:
 	drm_kms_helper_poll_fini(drm);
@@ -424,10 +418,12 @@ cleanup_mode_config:
 	komeda_kms_cleanup_private_objs(kms);
 	drm->dev_private = NULL;
 	drm_dev_put(drm);
-	return err;
+free_kms:
+	kfree(kms);
+	return ERR_PTR(err);
 }
 
-void komeda_kms_fini(struct komeda_kms_dev *kms)
+void komeda_kms_detach(struct komeda_kms_dev *kms)
 {
 	struct drm_device *drm = &kms->base;
 	struct komeda_dev *mdev = drm->dev_private;
